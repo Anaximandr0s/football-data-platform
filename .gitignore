@@ -35,3 +35,7 @@ app/web3d/dist/
 .DS_Store
 .idea/
 .vscode/
+
+# raw downloaded datasets (SkillCorner tracking is ~100 MB per match: never commit)
+data/raw/*
+!data/raw/.gitkeep

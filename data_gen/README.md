@@ -1,6 +1,16 @@
 # data_gen (Phase 1-2 · Person A)
-- `ingest_foot.py`: roster (Faker), tracking (22 × 5400 = 118 800 rows), ~1 600 events. Fixed seed (`RANDOM_SEED`).
-- `producer_foot.py --match m001 --speed 30`: replays into Kafka (`localhost:29092`), key = `player_id`.
-- Realism rules: speed ≤ ~36 km/h, limited acceleration, positions clipped to 105 × 68 m.
-- `tests/`: same seed ⇒ same output; speed and bounds respected.
-Output goes to `data/generated/` (git-ignored). Push a small sample to `data/sample/`.
+
+```bash
+pip install -r data_gen/requirements.txt
+python -m data_gen.ingest_foot --source sim --match m001 --seed 42     # -> data/generated/m001/*.parquet
+python -m data_gen.producer_foot --match m001 --speed 30               # replay into Kafka (x1..x60)
+python -m data_gen.producer_foot --match m001 --speed 60 --dry-run     # no Kafka needed
+python kafka/bronze_writer.py                                          # Kafka -> MinIO bronze
+pytest                                                                 # generator tests
+```
+Optional real match (see `docs/data-sources.md`):
+```bash
+python scripts/download_skillcorner.py 1925299
+python -m data_gen.ingest_foot --source skillcorner --match m002 --sc-id 1925299
+```
+Files: `sim.py` (simulator), `skillcorner.py` (real-data converter + pseudonymisation), `ingest_foot.py`, `producer_foot.py`, `common.py` (schemas).

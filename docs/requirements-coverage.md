@@ -2,8 +2,8 @@
 
 | Ref | Requirement | Type | Owner | Status | Proof |
 |---|---|---|---|---|---|
-| FOO-01 | Generate full match: 22 players, 1 pos/s, ≥1000 actions | OBL | A | ⬜ | |
-| FOO-02 | Kafka replay, speed ×1 to ×60 | OBL | A | ⬜ | |
+| FOO-01 | Generate full match: 22 players, 1 pos/s, ≥1000 actions | OBL | A | 🟨 | `data_gen/ingest_foot.py`, `pytest` (118 800 rows, 1 600 events) |
+| FOO-02 | Kafka replay, speed ×1 to ×60 | OBL | A | 🟨 | `data_gen/producer_foot.py` (dry-run tested, broker test pending) |
 | FOO-03 | Silver Iceberg tracking, grain player × second | OBL | A | ⬜ | |
 | FOO-04 | Gold per player: distance, sprints, max speed, actions by type | OBL | B | ⬜ | |
 | FOO-05 | Checks: in pitch, speed ≤ 40, 22 players/second | OBL | B | ⬜ | |
