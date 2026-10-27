@@ -1,0 +1,10 @@
+# Replace with the real GitHub usernames
+/data_gen/   @PERSON_A
+/kafka/      @PERSON_A
+/spark/      @PERSON_A
+/dbt/        @PERSON_B
+/soda/       @PERSON_B
+/dagster/    @PERSON_B
+/app/        @PERSON_B
+/docs/contrat_donnees.md  @PERSON_A @PERSON_B
+/docker-compose.yml       @PERSON_A @PERSON_B
