@@ -1,75 +1,72 @@
 # =============================================================================
-# Football data platform - single entry point:  docker compose up -d
-# Phase 0 = storage + streaming base. Later phases are marked below.
-# Every service has a memory limit (16 GB laptop budget, see docs/architecture.md)
+# Football data platform, Phase 0: object storage (MinIO) + event streaming (Kafka)
+#   Start:  docker compose up -d        Stop:  docker compose down
+# Later phases (Spark, Dagster, Streamlit...) are added HERE when someone starts them.
 # =============================================================================
 name: football-platform
 
-networks:
-  platform:
-    name: football-platform
+x-common: &common
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
 
 volumes:
   minio-data:
   kafka-data:
 
 services:
-  # ===========================================================================
-  # BLOCK A - Flux & Lakehouse (Person A)
-  # ===========================================================================
-
-  # --- Object storage: Bronze / Silver / Iceberg warehouse (S3 compatible) ---
+  # --- MinIO: S3-compatible storage (buckets = bronze / silver / gold) ---------
   minio:
-    image: minio/minio:latest
-    container_name: minio
+    <<: *common
+    image: ${MINIO_IMAGE}
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     ports:
-      - "${MINIO_API_PORT:-9000}:9000"
-      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+      - "127.0.0.1:${MINIO_API_PORT}:9000"
+      - "127.0.0.1:${MINIO_CONSOLE_PORT}:9001"
     volumes:
       - minio-data:/data
-    networks: [platform]
     mem_limit: 512m
-    healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+    healthcheck:   # first tool present in the image answers; last resort = TCP connect
+      test: ["CMD-SHELL", "curl -sf http://localhost:9000/minio/health/live || wget -q -O /dev/null http://localhost:9000/minio/health/live || bash -c 'exec 3<>/dev/tcp/localhost/9000'"]
       interval: 10s
       timeout: 5s
       retries: 10
-    restart: unless-stopped
 
-  # --- One-shot job: create the buckets, then exit ---
+  # One-shot: create the buckets listed in MINIO_BUCKETS, then exit (safe to re-run)
   minio-init:
-    image: minio/mc:latest
-    container_name: minio-init
+    image: ${MINIO_MC_IMAGE}
     depends_on:
-      minio:
-        condition: service_healthy
+      - minio
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
-      B_BRONZE: ${MINIO_BUCKET_BRONZE:-bronze}
-      B_SILVER: ${MINIO_BUCKET_SILVER:-silver}
-      B_WAREHOUSE: ${MINIO_BUCKET_WAREHOUSE:-warehouse}
-    entrypoint: >
-      /bin/sh -c "
-      mc alias set local http://minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD &&
-      mc mb --ignore-existing local/$$B_BRONZE local/$$B_SILVER local/$$B_WAREHOUSE &&
-      echo 'buckets ready'
-      "
-    networks: [platform]
+      BUCKETS: ${MINIO_BUCKETS}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        until mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD" >/dev/null 2>&1; do
+          echo "waiting for minio..."; sleep 2
+        done
+        for b in $$(echo "$$BUCKETS" | tr ',' ' '); do
+          mc mb --ignore-existing "local/$$b"
+        done
+        echo "buckets ready"
     mem_limit: 128m
-    restart: "no"
 
-  # --- Kafka in KRaft mode (no ZooKeeper), single node ---
+  # --- Kafka (KRaft, single node, no ZooKeeper) --------------------------------
+  #   containers use kafka:9092 | scripts on your laptop use localhost:29092
   kafka:
-    image: apache/kafka:3.8.0
-    container_name: kafka
+    <<: *common
+    image: ${KAFKA_IMAGE}
     hostname: kafka
     ports:
-      - "29092:29092"   # for Python scripts running on your laptop
+      - "127.0.0.1:29092:29092"
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
@@ -79,49 +76,51 @@ services:
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_LOG_DIRS: /var/lib/kafka/data      # on the volume: data survives restarts
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false" # topics exist only if listed in KAFKA_TOPICS
+      KAFKA_LOG_RETENTION_HOURS: 168
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"   # topics are created explicitly below
       KAFKA_HEAP_OPTS: "-Xms512m -Xmx512m"
     volumes:
       - kafka-data:/var/lib/kafka/data
-    networks: [platform]
     mem_limit: 1g
+    stop_grace_period: 30s
     healthcheck:
-      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
-      interval: 15s
-      timeout: 10s
-      retries: 10
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/9092"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
       start_period: 20s
-    restart: unless-stopped
 
-  # --- One-shot job: create the two topics, then exit ---
+  # One-shot: create every topic in KAFKA_TOPICS ("name:partitions,name:partitions")
   kafka-init:
-    image: apache/kafka:3.8.0
-    container_name: kafka-init
+    image: ${KAFKA_IMAGE}
     depends_on:
       kafka:
         condition: service_healthy
     environment:
-      T_TRACKING: ${KAFKA_TOPIC_TRACKING:-foot-tracking}
-      T_EVENTS: ${KAFKA_TOPIC_EVENTS:-foot-events}
-      PARTS: ${KAFKA_TRACKING_PARTITIONS:-3}
+      TOPICS: ${KAFKA_TOPICS}
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
-        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic $$T_TRACKING --partitions $$PARTS --replication-factor 1 &&
-        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic $$T_EVENTS --partitions 1 --replication-factor 1 &&
-        echo 'topics ready'
-    networks: [platform]
+        until /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list >/dev/null 2>&1; do
+          echo "waiting for kafka..."; sleep 2
+        done
+        for spec in $$(echo "$$TOPICS" | tr ',' ' '); do
+          name=$${spec%%:*}; parts=$${spec##*:}
+          /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists \
+            --topic "$$name" --partitions "$$parts" --replication-factor 1
+        done
+        echo "topics ready"
     mem_limit: 256m
-    restart: "no"
 
-  # --- Web UI to browse topics, messages and consumer groups ---
+  # --- Kafka UI: browse topics, messages, consumer groups ----------------------
   kafka-ui:
-    image: provectuslabs/kafka-ui:latest
-    container_name: kafka-ui
+    <<: *common
+    image: ${KAFKA_UI_IMAGE}
     depends_on:
       kafka:
         condition: service_healthy
@@ -130,20 +129,5 @@ services:
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
       DYNAMIC_CONFIG_ENABLED: "false"
     ports:
-      - "${KAFKA_UI_PORT:-8081}:8080"
-    networks: [platform]
+      - "127.0.0.1:${KAFKA_UI_PORT}:8080"
     mem_limit: 512m
-    restart: unless-stopped
-
-  # ===========================================================================
-  # PHASES TO ADD (uncomment / create as you reach them)
-  # ---------------------------------------------------------------------------
-  # Phase 3  bronze-writer   (A)  python consumer  Kafka -> MinIO bronze
-  # Phase 4  spark           (A)  Spark + Iceberg   mem_limit ~3g, local mode
-  # Phase 4  iceberg catalog (A)  REST catalog or JDBC on Postgres
-  # Phase 7  spark-streaming (A)  5-minute window job (optional FOO-08)
-  # Phase 8  dagster         (B)  webserver + daemon + postgres
-  # Phase 9  api             (B)  FastAPI WebSocket gateway  (app/api)
-  # Phase 9  streamlit       (B)  app/streamlit  (required FOO-06/07)
-  # Phase 9  web3d           (B)  Three.js live page (app/web3d)
-  # ===========================================================================
