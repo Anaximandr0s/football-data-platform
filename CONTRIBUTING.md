@@ -1,30 +1,10 @@
-# Working together
+# Contributing
 
-## Branches
-- `main`: always runs with `docker compose up -d`. Never push directly.
-- `feat/a-<topic>` (Person A) and `feat/b-<topic>` (Person B).
-- Open a PR, the **other person reviews**. This forces both of you to understand the whole platform.
-
-## Commits
-Small and frequent. Prefix: `feat:`, `fix:`, `docs:`, `chore:`, `test:`.
-
-## Ownership (avoid merge conflicts)
-- A owns: `data_gen/`, `kafka/`, `spark/`
-- B owns: `dbt/`, `soda/`, `dagster/`, `app/`
-- Shared (PR only): `docker-compose.yml`, `README.md`, `docs/contrat_donnees.md`, `.env.example`
-
-## Definition of done
-1. Runs with `docker compose` (or documented command in the folder README)
-2. Documented (folder README + requirement coverage updated with proof)
-3. Reviewed by the other person
-
-## Local setup
-```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements-dev.txt
-pre-commit install
-```
-
-## Rituals
-- 10 min sync at the start of each session: what I deliver / what I need from you.
-- 30 min knowledge swap before the defence: A explains Silver, B explains Gold + Dagster.
+- One branch per task (`feature/<what>`), merged by pull request, reviewed by the other person.
+- The data contract (`docs/contrat_donnees.md` and `SCHEMAS` in `ingestion/schemas.py`) changes only by pull request that
+  updates both and names the person to warn.
+- Before pushing: `make lint` and `make test` (and `make smoke` if you touched `docker-compose.yml`).
+- Never commit `.env`, `data/raw/`, `data/prepared/` or any Parquet or JSONL file.
+- Python packages go in `requirements.txt` (one file, one commented section per phase).
+- Update the docs in the same pull request as the change, and keep `docs/requirements-coverage.md` honest: a status needs a proof.
+- Adding a match: see `docs/data-sources.md`.
