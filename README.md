@@ -47,7 +47,7 @@ Needs Docker with Compose, Python 3.11+, `make` (optional) and about 1 GB of dis
 On Windows, read [`docs/windows.md`](docs/windows.md) first.
 
 ```bash
-git clone <repo-url> && cd football-data-platform
+git clone https://github.com/Anaximandr0s/football-data-platform.git && cd football-data-platform
 cp .env.example .env                      # then change MINIO_ROOT_PASSWORD
 python -m venv .venv && source .venv/bin/activate    # or: uv venv .venv
 pip install -r requirements.txt           # or: uv pip install -r requirements.txt
@@ -79,9 +79,6 @@ Other commands: `make help` · `make down` (keep data) · `make reset` (**delete
 `make counts` (messages per topic) · `make lint` · `make test`.
 
 Troubleshooting:
-- `permission denied ... docker.sock`: add yourself to the `docker` group, or run `make up DOCKER="sudo docker"`.
-- `ModuleNotFoundError`: activate the virtual environment (`source .venv/bin/activate`).
-- `SignatureDoesNotMatch` or `InvalidAccessKeyId` from MinIO: the password in `.env` differs from the one MinIO started with. Run `make up` (it recreates the container) or `make reset && make up`.
 - Replaying the same match twice doubles its rows in Kafka and bronze. This is expected: Silver deduplicates.
 - Windows: see [`docs/windows.md`](docs/windows.md).
 
