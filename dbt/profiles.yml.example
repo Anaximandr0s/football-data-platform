@@ -3,5 +3,5 @@ football:
   outputs:
     dev:
       type: duckdb
-      path: ../data/generated/football.duckdb
+      path: ../data/football.duckdb
       # extensions: [httpfs, iceberg]  # enable when reading from MinIO

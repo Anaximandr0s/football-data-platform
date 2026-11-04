@@ -1,0 +1,13 @@
+# One file for the whole project (Python 3.11+):
+#   python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
+
+# --- Ingestion: download, convert, replay to Kafka, bronze writer ---
+pandas>=3.1,<4
+pyarrow>=26,<27
+confluent-kafka>=2.16,<3
+boto3>=1.43,<2
+
+# --- Dev tools: lint, tests, hooks ---
+ruff>=0.17
+pytest>=9.2
+pre-commit>=4.7

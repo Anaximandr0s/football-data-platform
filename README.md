@@ -1,74 +1,120 @@
-# ⚽ Football Data Platform (Sujet 5 · Match de football)
+# Football Data Platform
 
-End-to-end data platform for a fictional club: follow a 90-minute match **live**
-(22 players, 1 position/second, ~1 600 game actions), then analyse it after the whistle.
+A data platform for a club that follows a match live and analyses it afterwards. A real match
+(22 players tracked every second, about 1,800 game actions) is replayed into Kafka at speed x1 to x60,
+stored in a bronze / silver / gold lakehouse and shown in a Streamlit app.
 
-> Team: **<Person A>** (Flux & Lakehouse) · **<Person B>** (Analytique & Produit)
-> Course: Projets fil rouge · 100 % open source · all data is synthetic
+> Team: **@Anaximandr0s** (ingestion, infrastructure) · **@abdejali** (Silver, Gold)
+> Course: Projets fil rouge · 100 % open source · data: [SkillCorner open data](https://github.com/SkillCorner/opendata) (MIT licence)
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-  G[ingest_foot.py<br/>simulated match] --> P[producer_foot.py<br/>replay x1-x60]
-  P --> K[(Kafka<br/>foot-tracking · foot-events)]
-  K --> BW[bronze-writer] --> BR[(MinIO Bronze)]
-  BR --> SP[Spark + Iceberg] --> SI[(Silver)]
-  SI --> DBT[dbt + DuckDB] --> GO[(Gold)]
-  SOD[Soda checks] -.-> GO
-  DAG[Dagster] -.orchestrates.-> SP & DBT & SOD
-  K --> SS[Spark Streaming<br/>5-min windows]
-  K --> API[FastAPI WebSocket] --> WEB[3D live page]
-  GO --> ST[Streamlit + mplsoccer]
+    SC[SkillCorner open data] -->|download_foot| RAW[data/raw]
+    RAW -->|ingest_foot| PAR[data/prepared<br/>Parquet]
+    PAR -->|producer_foot x1..x60| K[(Kafka<br/>5 topics)]
+    K -->|bronze_writer| BR[(MinIO bronze)]
+    BR -->|Spark + Iceberg| SI[(Silver)]
+    SI -->|dbt + DuckDB| GO[(Gold)]
+    K -->|Spark Structured Streaming<br/>5-min windows| ST[Streamlit + mplsoccer]
+    GO --> ST
+    DAG[Dagster] -.-> SI & GO
+    SODA[Soda checks] -.-> SI & GO
 ```
 
-Two paths: **batch** (Bronze → Silver → Gold, driven by Dagster) and **stream** (live display).
-Details: [`docs/architecture.md`](docs/architecture.md).
+Two paths: **batch** (bronze → silver → gold, run by Dagster) and **stream** (live display).
+Details: [`docs/architecture.md`](docs/architecture.md). The ingestion part: [`ingestion/README.md`](ingestion/README.md).
 
-## Quick start (< 5 commands)
+## Status
+
+| Phase | Content | State |
+|---|---|---|
+| Source | download and convert two real matches (m001, m002) | done |
+| Ingestion | replay into Kafka at x1..x60, 5 topics | done |
+| Bronze | MinIO, partitioned by match, counts verified | done |
+| Silver | Spark + Iceberg: cleaning, grain player x second | **to do** |
+| Gold + checks | dbt + DuckDB, Soda | to do |
+| Streaming stats (optional) | 5-minute windows | to do |
+| Orchestration | Dagster | to do |
+| Presentation | Streamlit + mplsoccer | to do |
+
+Requirement by requirement: [`docs/requirements-coverage.md`](docs/requirements-coverage.md).
+
+## Quick start
+
+Needs Docker with Compose, Python 3.11+, `make` (optional) and about 1 GB of disk.
+On Windows, read [`docs/windows.md`](docs/windows.md) first.
 
 ```bash
 git clone <repo-url> && cd football-data-platform
-cp .env.example .env            # then change MINIO_ROOT_PASSWORD
-docker compose up -d
-make smoke                      # checks MinIO, Kafka, topics, buckets
+cp .env.example .env                      # then change MINIO_ROOT_PASSWORD
+python -m venv .venv && source .venv/bin/activate    # or: uv venv .venv
+pip install -r requirements.txt           # or: uv pip install -r requirements.txt
+
+make up                                   # MinIO + Kafka + Kafka UI, buckets and topics created
+make ps
+make smoke                                # must end with ALL OK
+make lint
+make test
+make data MATCH=m001 SC_ID=1874553        # download (~100 MB) + convert match 1
+make data MATCH=m002 SC_ID=1925299        # same for match 2
+
+make bronze                               # terminal 1: Kafka -> MinIO bronze (leave running)
+make replay MATCH=m001                    # terminal 2: replay at x60, about 100 seconds
+make replay MATCH=m002
+make check MATCH=m001                     # bronze row counts must say OK
+make check MATCH=m002
 ```
 
 | Service | URL | Notes |
 |---|---|---|
-| MinIO console | http://localhost:9001 | user/password from `.env` |
+| MinIO console | http://localhost:9001 | user and password from `.env` |
+| MinIO S3 API | http://localhost:9000 | buckets `bronze`, `silver`, `gold` |
 | Kafka UI | http://localhost:8081 | topics, messages, consumer groups |
-| Kafka (from laptop) | `localhost:29092` | Python scripts |
-| Kafka (from containers) | `kafka:9092` | |
+| Kafka from your machine | `localhost:29092` | Python scripts and Spark outside Docker |
+| Kafka from containers | `kafka:9092` | |
 
-Stop: `make down` · Wipe everything: `make reset` · All commands: `make help`.
+Other commands: `make help` · `make down` (keep data) · `make reset` (**deletes all data**) ·
+`make counts` (messages per topic) · `make lint` · `make test`.
+
+Troubleshooting:
+- `permission denied ... docker.sock`: add yourself to the `docker` group, or run `make up DOCKER="sudo docker"`.
+- `ModuleNotFoundError`: activate the virtual environment (`source .venv/bin/activate`).
+- `SignatureDoesNotMatch` or `InvalidAccessKeyId` from MinIO: the password in `.env` differs from the one MinIO started with. Run `make up` (it recreates the container) or `make reset && make up`.
+- Replaying the same match twice doubles its rows in Kafka and bronze. This is expected: Silver deduplicates.
+- Windows: see [`docs/windows.md`](docs/windows.md).
 
 ## Repository layout
 
-| Folder | Phase | Owner | Content |
-|---|---|---|---|
-| `data_gen/` | 1-2 | A | match simulator, Kafka replay producer |
-| `kafka/` | 2 | A | topic conventions, consumer scripts |
-| `spark/` | 3-4, 7 | A | Bronze→Silver jobs, Iceberg, streaming job |
-| `dbt/` | 5 | B | Gold models, tests, docs |
-| `soda/` | 6 | B | data-quality checks |
-| `dagster/` | 8 | B | assets, schedules, sensors |
-| `app/streamlit/` | 9 | B | required Streamlit + mplsoccer app |
-| `app/web3d/` | 9 | B | 3D live page (Three.js) |
-| `app/api/` | 9 | B | WebSocket gateway Kafka → browser |
-| `docs/` | all | both | architecture, data contract, ADRs, report |
-| `scripts/` | all | both | smoke test and helpers |
+| Folder | Content | State |
+|---|---|---|
+| `ingestion/` | download, convert, replay into Kafka, bronze writer ([guide](ingestion/README.md)) | done |
+| `tests/<part>/` | Python tests, one folder per part (`tests/ingestion/` today) | ingestion done |
+| `scripts/` | `smoke_test.py`: health of the Docker stack | done |
+| `docs/` | contract, guides, ADRs | in progress |
+| `spark/` | Silver and streaming jobs | to do (teammate) |
+| `dbt/` | Gold models and dbt tests | to do |
+| `soda/` | data-quality checks | to do |
+| `dagster/` | orchestration | to do |
+| `app/` | Streamlit app (`app/streamlit/`), optional 3D page (`app/web3d/`) | to do |
 
-## Requirements coverage
+## Documentation
 
-See [`docs/requirements-coverage.md`](docs/requirements-coverage.md) (FOO-01 … FOO-09 with status and proof).
+- **Start here (Silver and Gold): [`docs/silver-guide.md`](docs/silver-guide.md)**
+- Ingestion guide (files, outputs, how to verify): [`ingestion/README.md`](ingestion/README.md)
+- Data contract (every table, column, rule): [`docs/contrat_donnees.md`](docs/contrat_donnees.md)
+- Where the data comes from and its limits: [`docs/data-sources.md`](docs/data-sources.md)
+- Architecture and decisions: [`docs/architecture.md`](docs/architecture.md), [`docs/adr/`](docs/adr/)
+- How we work: [`CONTRIBUTING.md`](CONTRIBUTING.md)
 
-## Working together
+## Possible extensions (not started)
 
-Read [`CONTRIBUTING.md`](CONTRIBUTING.md). The data contract between A and B is
-[`docs/contrat_donnees.md`](docs/contrat_donnees.md): change it only through a PR.
+- A live 3D page: positions, ball height and kit colours are already in the data.
+- Player-level comparison between matches (needs a persistent player id; today ids are match-local).
 
-## Open-source tools
+## Open-source tools and data
 
-MinIO (AGPLv3) · Apache Kafka (Apache-2.0) · Kafka UI (Apache-2.0) · Spark, Iceberg, Dagster, dbt-core,
-DuckDB, Soda Core, Streamlit, mplsoccer, Three.js (Apache-2.0 / MIT). Verify licences when adding tools.
+MinIO (AGPLv3) · Apache Kafka, Kafka UI (Apache-2.0) · Spark, Iceberg, Dagster, dbt-core, DuckDB,
+Soda Core, Streamlit, mplsoccer (Apache-2.0 / MIT). Verify licences when adding a tool.
+Tracking and event data: SkillCorner open data (MIT). Credit SkillCorner in the app and the report.

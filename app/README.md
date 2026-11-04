@@ -1,4 +1,4 @@
-# app (Phase 9 · Person B)
+# app
 | Folder | What | Required? |
 |---|---|---|
 | `streamlit/` | live pitch + score, heatmap, shot map, quality page, compare page (mplsoccer) | **Yes** (FOO-06/07) |

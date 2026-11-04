@@ -1,10 +1,13 @@
-# Replace with the real GitHub usernames
-/data_gen/   @PERSON_A
-/kafka/      @PERSON_A
-/spark/      @PERSON_A
-/dbt/        @PERSON_B
-/soda/       @PERSON_B
-/dagster/    @PERSON_B
-/app/        @PERSON_B
-/docs/contrat_donnees.md  @PERSON_A @PERSON_B
-/docker-compose.yml       @PERSON_A @PERSON_B
+# @MOHAMED: ingestion and infrastructure. @ABDEJALIL: Silver, Gold, app.
+/ingestion/                @MOHAMED
+/tests/ingestion/          @MOHAMED
+/scripts/                  @MOHAMED
+/spark/                    @ABDEJALIL
+/tests/spark/              @ABDEJALIL
+/dbt/                      @ABDEJALIL
+/soda/                     @MOHAMED
+/dagster/                  @MOHAMED
+/app/                      @ABDEJALIL
+/docs/contrat_donnees.md   @MOHAMED @ABDEJALIL
+/ingestion/schemas.py      @MOHAMED @ABDEJALIL
+/docker-compose.yml        @MOHAMED @ABDEJALIL
