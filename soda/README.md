@@ -1,4 +1,4 @@
-# soda (Phase 6 · Person B)
+# soda (Phase 6)
 Soda Core checks (`soda-core-duckdb`) in `checks/`:
 - `x between 0 and 105`, `y between 0 and 68`
 - `speed_kmh <= 40`
