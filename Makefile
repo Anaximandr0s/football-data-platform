@@ -1,7 +1,7 @@
 # Shortcuts (Linux/macOS/WSL). Without make, run the plain commands from README.md.
 # Docker needs sudo on your machine?  make up DOCKER="sudo docker"
 .DEFAULT_GOAL := help
-.PHONY: help up down reset ps logs topics counts smoke lint test data bronze replay check
+.PHONY: help up down reset ps logs topics counts smoke lint test data bronze replay check silver
 
 DOCKER ?= docker
 COMPOSE = $(DOCKER) compose
@@ -9,6 +9,7 @@ KAFKA_BIN = $(COMPOSE) exec -e KAFKA_HEAP_OPTS="-Xmx128m" kafka /opt/kafka/bin
 MATCH ?= m001
 SC_ID ?= 1874553
 SPEED ?= 60
+ARGS ?=
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  %-8s %s\n",$$1,$$2}'
@@ -56,3 +57,6 @@ replay: ## Replay a match into Kafka: make replay MATCH=m001 SPEED=60
 
 check: ## Compare bronze row counts with the prepared match
 	python -m ingestion.check_bronze --match $(MATCH)
+
+silver: ## Bronze -> Silver on the Spark cluster: make silver MATCH="m001 m002" [ARGS=--dry-run]
+	$(COMPOSE) --profile jobs run --rm silver --match $(MATCH) $(ARGS)
