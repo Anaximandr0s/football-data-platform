@@ -1,9 +1,10 @@
 # Gold guide (FOO-04, FOO-07, FOO-09)
 
-**Status: planned, nothing is implemented.** This guide is the specification for the Gold layer (dbt + DuckDB),
-written from [`architecture.md`](architecture.md), section 6 of [`silver-guide.md`](silver-guide.md), the Silver
-job ([`spark/silver/README.md`](../spark/silver/README.md)) and what was measured on m001. Where a choice is not
-settled it is listed in section 10: decide those first.
+**Status: implemented in [`dbt/`](../dbt/README.md)** (models, tests, Docker services, `make gold`); tested on Silver
+Parquet, not yet run on the MinIO stack (see the README of `dbt/`). This guide is the specification of the Gold layer
+(dbt + DuckDB), written from [`architecture.md`](architecture.md), section 6 of [`silver-guide.md`](silver-guide.md), the Silver
+job ([`spark/silver/README.md`](../spark/silver/README.md)) and what was measured on m001. The choices that were open
+are settled in section 10.
 
 ## 1. Role of Gold
 
@@ -40,7 +41,7 @@ Facts Gold must respect (all measured, see the Silver and data docs):
 - **Speed is a 1-second chord** (1 Hz sampling): peaks and distance are under-estimated. Label them approximate.
   `speed_kmh` is null on the first tracked second after a gap and on a player's first row: these rows add nothing to distance.
 - **Frame.** In Silver tracking, HOME attacks toward x = 105 and AWAY toward x = 0, in both halves. Events follow the
-  same frame only if decision 1 of section 10 is "per_team" (see the Silver README). Gold shot formulas below assume it.
+  same frame because Silver mirrors AWAY events (`per_team`, decided; see the Silver README).
 - **Shots.** A shot map is `type in ('shot', 'goal')`. The source gives no saved / blocked / off-target outcome.
 - **Names are real** and kit colours are in `silver.matches`; technical keys stay `H01` / `HOME`. Credit SkillCorner.
 
@@ -53,14 +54,17 @@ dbt-core + dbt-duckdb (the folder `dbt/` already has `dbt_project.yml` and `prof
 | A. Read Iceberg directly | DuckDB `httpfs` + `iceberg` extensions, `iceberg_scan` on the table folders in `s3://silver/warehouse/silver/<table>` (Hadoop catalog: metadata JSON + `version-hint.text`) | DuckDB support for a Hadoop catalog on MinIO must be tested first (spike of half a day) |
 | B. Parquet mirror (fallback named in `dbt/README.md`) | a small Spark step copies each Silver table to `s3://silver/export/<table>/` as Parquet; DuckDB reads those files | one more step to keep in sync, one more Dagster asset |
 
-Do the spike with A first; switch to B as soon as A needs more than the spike. Staging models hide the choice:
-`stg_tracking`, `stg_events`, `stg_ball`, `stg_players`, `stg_matches` are views that select from the source, so marts
-never change when the source changes. Put the S3 settings in `profiles.yml` (from `.env`, never committed).
+**Implemented:** A by default, B as the dbt variable `silver_reader: parquet` (it also feeds the tests). Staging models
+`stg_tracking`, `stg_events`, `stg_ball`, `stg_players`, `stg_matches` hide the choice (macro `silver_table`), so marts
+never change when the source changes; they are tables so Iceberg is scanned once per run. The S3 settings are in
+`dbt/profiles.yml`, read from environment variables (no secret in the file). A has not been run against MinIO yet:
+if DuckDB cannot read the Hadoop-catalog folders, switch to B and add a Parquet export step to Silver.
 
 ## 4. Gold tables
 
-Every model documents its grain and key in `schema.yml`. All use `match_id` so a match can be recomputed alone
-(`incremental`, `delete+insert` on `match_id`; a full refresh is cheap: two matches).
+Every model documents its grain and key in `schema.yml`. All carry `match_id`. **Implemented as full rebuilds** (`table`
+materialization, not `incremental`): two matches take seconds and a rebuild cannot leave a stale row; switch to
+`delete+insert` on `match_id` if the number of matches grows.
 
 ### 4.1 `gold_player_match_stats`: player x match (FOO-04)
 
@@ -93,9 +97,8 @@ select match_id, player_id,
        max(speed_kmh)                                         as max_speed_kmh
 from t group by 1, 2
 ```
-Pass success: profile first (`select outcome, count(*) from silver.events where type = 'pass' group by 1`); the data
-contract says `outcome` is copied from the source (e.g. `successful`). Define `passes_successful` from that list and
-write the list in `schema.yml` (`accepted_values`).
+Pass success: profiled on m001 and the second match, `outcome` is `successful`, `unsuccessful` or `offside` for passes, so
+`passes_successful` counts `outcome = 'successful'`.
 
 ### 4.2 `gold_team_match_stats`: team x match
 
@@ -121,7 +124,7 @@ Key (match_id, passer_id, receiver_id). From `silver.events` where `type = 'pass
 Key `event_id`. `silver.events` where `type in ('shot', 'goal')`: `match_id, ts, period, player_id, team_id, type,
 is_goal, x_start, y_start, x_end, y_end`, plus:
 
-- `attacking_goal_x` = 105 for HOME, 0 for AWAY (needs decision 1 = "per_team"), goal centre y = 34;
+- `attacking_goal_x` = 105 for HOME, 0 for AWAY (valid because Silver events use `per_team`), goal centre y = 34;
 - `distance_to_goal_m` = hypot(x_start - attacking_goal_x, y_start - 34);
 - `score_home_after`, `score_away_after`: running count of goals up to and including the row (window on `ts`), used by
   the live score and the shot timeline.
@@ -139,18 +142,20 @@ twin of the optional streaming job of FOO-08 (the streaming job builds `event_ti
 
 ```
 dbt/
-  dbt_project.yml          # exists: staging = view, marts = table (switch gold models to incremental)
-  profiles.yml.example     # exists: DuckDB file + commented extensions
-  packages.yml             # dbt_utils (unique_combination_of_columns)
-  models/staging/          # stg_tracking, stg_events, stg_ball, stg_players, stg_matches + sources.yml
+  dbt_project.yml          # vars (reader, zones, window, export); staging and marts are tables
+  profiles.yml             # committed, env-driven; targets dev (DuckDB only) and minio (httpfs + iceberg)
+  Dockerfile               # dbt-core + dbt-duckdb image of the `dbt` and `duckdb` services
+  macros/                  # silver_table (how Silver is read), export_gold (Parquet to s3://gold)
+  models/staging/          # stg_tracking, stg_events, stg_ball, stg_players, stg_matches + schema.yml
   models/marts/            # the 6 gold_* models + schema.yml (grain, tests, descriptions)
-  tests/                   # singular tests (section 6)
+  tests/                   # unique_combination (generic) + 5 assert_*.sql reconciliation tests
+  scripts/duckdb_query.py  # read-only SQL on the Gold file (make gold-sql)
 ```
 
-Tests in `schema.yml`: `not_null` and key uniqueness (`unique_combination_of_columns`) on every grain,
-`relationships` (player in `stg_players`, match in `stg_matches`), `accepted_values` on `type`, `team_id`, `outcome`.
-`dbt docs generate` gives the lineage for the report. Export the marts to `s3://gold/<table>/` as Parquet (DuckDB
-`COPY ... TO`, in a post-hook or a dbt-duckdb `external` model): decision 4.
+Tests in `schema.yml`: key uniqueness on every grain (own generic test `unique_combination`, so no `dbt_utils` package
+and no `dbt deps`), `not_null`, `relationships` (player in `stg_players`, match in `stg_matches`), `accepted_values`
+on `type`, `team_id`. The export to `s3://gold/<table>.parquet` is the `export_gold` macro (decision 4). Run with
+`make gold`; query with `make gold-sql`. Details: [`dbt/README.md`](../dbt/README.md).
 
 ## 6. Checks
 
@@ -195,21 +200,22 @@ needs a persistent player id (listed as a possible extension in the README).
 
 ## 9. Build order and definition of done
 
-1. Decide the points of section 10. 2. Spike: DuckDB reading Silver (option A or B). 3. Staging models and
-`sources.yml`. 4. `gold_player_match_stats` (FOO-04) and its reconciliation tests. 5. `gold_team_match_stats`,
-`gold_shots`, `gold_pass_network`. 6. `gold_zone_occupancy`, `gold_player_5min`. 7. Parquet export to `s3://gold`.
-8. Soda and Dagster wiring. 9. Update `docs/requirements-coverage.md` with a proof for each requirement.
+Done in `dbt/`: decisions (section 10) · staging models · the six Gold tables · reconciliation tests · Parquet export to
+`s3://gold` · Docker services and `make gold` / `make gold-sql`. To do: run it on the stack (`make up`, `make silver`,
+`make gold`) and keep the proof in `docs/requirements-coverage.md` · Soda checks on Silver and Gold (`soda/`) · Dagster
+wiring · the Streamlit pages that read these tables.
 
-Done = `dbt build` passes on m001 and m002, the m001 reconciliation table above holds, the Gold tables are in the
+Done = `dbt build` passes on m001 and m002 on the real stack, the m001 table of section 6 holds, the Gold tables are in the
 `gold` bucket, the docs say where the tables are and what their limits are.
 
-## 10. Open decisions (answer before building)
+## 10. Decisions
 
-| # | Decision | Proposal |
+| # | Decision | Outcome |
 |---|---|---|
-| 1 | Events direction in Silver: `guide` (literal) or `per_team` (mirror AWAY only). Shot maps and `gold_shots` depend on it | `per_team`: measured on m001, it puts events about 1 m from the player's own tracking position (the literal rule leaves 54 to 58 m for half of the groups) |
-| 2 | Read Silver: Iceberg directly (A) or Parquet mirror (B) | spike A, fall back to B |
-| 3 | Zone grid for `gold_zone_occupancy` | 6 x 4 cells in the Silver frame; for AWAY, mirror once more if a team-relative view is wanted |
-| 4 | Where Gold lives: DuckDB file only, or also Parquet in `s3://gold` | both (the architecture names the `gold` bucket) |
-| 5 | Definition of a successful pass | from the profiled `outcome` list of `silver.events` |
-| 6 | Sprint count: efforts (consecutive seconds = one) or sprint seconds | store both (4.1 does) |
+| 1 | Events direction in Silver | **`per_team`** (mirror AWAY events only); measured on m001 it puts events about 1 m from the player's tracking position |
+| 2 | Read Silver: Iceberg directly (A) or Parquet mirror (B) | **A by default, B behind `silver_reader: parquet`**; A still to be proven on MinIO |
+| 3 | Zone grid for `gold_zone_occupancy` | **6 x 4 cells** in the Silver frame (`zones_x`, `zones_y` in `dbt_project.yml`); mirror once more in the app for a team-relative view |
+| 4 | Where Gold lives | **both**: `data/football.duckdb` and Parquet in `s3://gold` |
+| 5 | Definition of a successful pass | **`outcome = 'successful'`** (values seen: successful, unsuccessful, offside) |
+| 6 | Sprint count: efforts or sprint seconds | **both** stored (4.1) |
+| 7 | Incremental or full rebuild | **full rebuild** (new, see section 4) |

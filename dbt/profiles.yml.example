@@ -1,7 +1,9 @@
+# The committed profiles.yml already reads everything from environment variables (see its header).
+# Copy this file to profiles.yml only if you want a private variant.
 football:
   target: dev
   outputs:
     dev:
       type: duckdb
       path: ../data/football.duckdb
-      # extensions: [httpfs, iceberg]  # enable when reading from MinIO
+      # extensions: [httpfs, iceberg]  # needed to read Silver from MinIO: use the `minio` target of profiles.yml

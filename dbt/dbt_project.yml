@@ -3,10 +3,29 @@ version: "0.1.0"
 profile: football
 model-paths: ["models"]
 test-paths: ["tests"]
+macro-paths: ["macros"]
+
+# Settings of the Gold layer. Override on the command line: dbt build --vars "{export_gold: true}"
+vars:
+  silver_reader: iceberg                  # iceberg = iceberg_scan on the Silver tables | parquet = read_parquet (fallback, tests)
+  silver_warehouse: s3://silver/warehouse # Iceberg warehouse written by spark/silver (s3a:// there, s3:// for DuckDB)
+  silver_namespace: silver
+  silver_parquet_root: s3://silver/export # only used when silver_reader = parquet: <root>/<table>/*.parquet
+  export_gold: false                      # true = copy every Gold table to <gold_export_root>/<table>.parquet
+  gold_export_root: s3://gold
+  pitch_length: 105.0
+  pitch_width: 68.0
+  zones_x: 6                              # zone grid of gold_zone_occupancy (columns x rows)
+  zones_y: 4
+  window_seconds: 300                     # gold_player_5min
+  max_speed_kmh: 40
 
 models:
   football:
     staging:
-      +materialized: view
+      +materialized: table                # Silver is scanned once, the marts read this copy
     marts:
       +materialized: table
+
+on-run-end:
+  - "{{ export_gold(results) }}"
