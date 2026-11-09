@@ -12,6 +12,11 @@ pyspark>=4.0,<4.1
 
 # --- Gold: dbt + DuckDB (the Docker image of `make gold` pins its own copy, see dbt/Dockerfile) ---
 dbt-duckdb>=1.11,<1.12
+duckdb>=2.0,<2.1   # same DuckDB as dbt/Dockerfile and soda/Dockerfile (one file format)
+
+# --- Dashboard: Streamlit + mplsoccer (the Docker image of `make app` pins its own copy, see app/streamlit/requirements.txt) ---
+streamlit>=1.50,<2
+mplsoccer>=1.4,<2
 
 # --- Dev tools: lint, tests, hooks ---
 ruff>=0.17

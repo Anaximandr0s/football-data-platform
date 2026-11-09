@@ -1,7 +1,7 @@
 # app
 | Folder | What | Required? |
 |---|---|---|
-| `streamlit/` | live pitch + score, heatmap, shot map, quality page, compare page (mplsoccer) | **Yes** (FOO-06/07) |
+| `streamlit/` | dashboard on Gold: heatmap, shot map, pass network, compare page, quality page (mplsoccer) ([guide](streamlit/README.md)); live pitch + score still to do | **Yes** (FOO-06/07) |
 | `api/` | FastAPI WebSocket gateway: Kafka (group `live-gateway`) → browser | Bonus |
 | `web3d/` | 3D live page (Three.js): moving players, ball, score, live stats panel | Bonus |
 

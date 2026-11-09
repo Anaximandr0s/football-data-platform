@@ -59,7 +59,7 @@ dbt build --vars "{silver_reader: parquet, silver_parquet_root: /path/to/silver_
 | `models/marts/` | the six Gold tables and their `schema.yml` |
 | `tests/` | `unique_combination` generic test and five `assert_*` reconciliation tests |
 | `scripts/duckdb_query.py` | read-only SQL on the Gold file (behind `make gold-sql`) |
-| `Dockerfile` | image shared by the `dbt` and `duckdb` services of `docker-compose.yml` |
+| `Dockerfile` | image shared by the `dbt` and `duckdb` services of `docker-compose.yml` (DuckDB pinned to 2.0, like the Soda and dashboard images) |
 
 Tests of the SQL on a tiny hand-made Silver: `tests/dbt/` (`python -m pytest tests/dbt`).
 

@@ -6,7 +6,7 @@ select
     p.name as player_name, p.short_name as player_short_name, p.shirt_number,
     e.team_id, e.type, (e.type = 'goal') as is_goal,
     e.x_start, e.y_start, e.x_end, e.y_end,
-    case when e.team_id = 'HOME' then {{ var('pitch_length') }} else 0 end as attacking_goal_x,
+    (case when e.team_id = 'HOME' then {{ var('pitch_length') }} else 0 end)::double as attacking_goal_x,
     round(sqrt(power(e.x_start - case when e.team_id = 'HOME' then {{ var('pitch_length') }} else 0 end, 2)
              + power(e.y_start - {{ var('pitch_width') }} / 2, 2)), 2)     as distance_to_goal_m,
     sum(case when e.type = 'goal' and e.team_id = 'HOME' then 1 else 0 end)

@@ -1,8 +1,9 @@
-# Data contract: ingestion phase (source -> Kafka -> bronze)
+# Data contract: ingestion, Silver and Gold (source -> Kafka -> bronze -> Silver -> Gold)
 
-Owner: ingestion (Kafka, MinIO, bronze). Consumers: Silver (Spark + Iceberg), then Gold and Streamlit.
+Owner of sections 1 to 8: ingestion (Kafka, MinIO, bronze). Consumers: Silver (Spark + Iceberg), then Gold and Streamlit.
+Sections 9 (Silver) and 10 (Gold) have their own owners and code twins, given at the top of each section.
 The code twin of the table sections is `ingestion/schemas.py` (`SCHEMAS`): change both together, by pull request,
-and warn the Silver owner. Last update: 2026-11-02. Matches covered: `m001` (SkillCorner 1874553) and `m002` (SkillCorner 1925299).
+and warn the Silver owner. Last update: 2026-11-08 (sections 9 to 11: Silver, Gold and quality gates; sections 1 to 8 unchanged). Matches covered: `m001` (SkillCorner 1874553) and `m002` (SkillCorner 1925299).
 
 ## 1. Provenance
 
@@ -163,3 +164,208 @@ Gaps are a property of the source, not of a match: the 20 matches of the SkillCo
 | Sprint detection (> 25 km/h) | Silver | Silver |
 | 22 players per existing second, inside the pitch, speed <= 40 | Soda on Silver | Silver / Gold |
 | Counts bronze = prepared | `make check MATCH=<id>` | ingestion |
+
+## 9. Silver (Iceberg tables written by `spark/silver`)
+
+Owner: Silver. Consumers: Gold (dbt), Soda, and the dashboard through Gold. Code twins: `spark/silver/transforms.py` (the
+`select` of each `clean_*` function) and the schema checks of `soda/checks/silver.yml`: change the three together, by
+pull request, and warn the Gold owner. Rules and decisions: [`silver-guide.md`](silver-guide.md) and
+[`../spark/silver/README.md`](../spark/silver/README.md).
+
+### 9.1 Where and how
+
+- Iceberg tables `lake.silver.tracking`, `events`, `ball`, `players`, `matches` (Hadoop catalog, warehouse
+  `s3://silver/warehouse`, files in `s3://silver/warehouse/silver/<table>/`), format version 2, partitioned by `match_id`.
+  Catalog, namespace and warehouse are settable (`SILVER_CATALOG`, `SILVER_NAMESPACE`, `SILVER_WAREHOUSE`).
+- Written one match at a time by `make silver MATCH=<id>`. A run replaces the partition of its match: running it again gives
+  the same tables, other matches are untouched. A match is not written if its checks fail (counts, keys, goals = score).
+
+### 9.2 What Silver changes compared with bronze
+
+| Item | Bronze | Silver |
+|---|---|---|
+| Duplicates | possible (at-least-once delivery) | none: one row per key (section 6), the latest written copy is kept |
+| Kafka columns (`kafka_partition`, `kafka_offset`, `kafka_ts`, `ingested_at`) | present | removed |
+| Row order | arrival order | tracking by (`player_id`, `ts`), events by (`ts`, `event_id`), ball by `ts` |
+| `team_id` on tracking | absent | added from `players` (never null) |
+| Attack direction | not normalised | **tracking and ball: HOME attacks toward x = 105 in both halves** (period mirrored where `home_side_pN` is `right_to_left`: x = 105 - x, y = 68 - y, both teams). **Events: per team** (see 9.3) |
+| Positions outside the pitch | kept | **tracking only**: clipped to x in [0, 105], y in [0, 68], with `was_corrected` = true on the rows that were outside. Ball and events are not clipped (the ball really leaves the pitch, a shot can end behind the goal line) |
+| `speed_kmh` | derived, may be null | unchanged, null stays null (never 0); not recomputed after clipping |
+| Gaps (missing seconds) | present | present: nothing is invented. `is_after_gap` marks the first second after one |
+| `period` type | int8 | int32 |
+
+### 9.3 Tables
+
+Frame of every coordinate: pitch 105 x 68 m, origin bottom-left. HOME attacks toward x = 105 and AWAY toward x = 0 in both
+halves. In `events` the source already gives the acting team attacking toward x = 105; Silver mirrors the AWAY events only
+(`per_team`), so events and tracking share one frame (measured on m001: an event starts about 1 m from its player's tracking position).
+
+**tracking**: one row = one player at one second (tracked seconds only). Key (match_id, player_id, ts).
+
+| Column | Type | Null | Meaning |
+|---|---|---|---|
+| match_id, player_id | string | no | as in bronze (`H01`.. / `A01`.., match-local) |
+| team_id | string | no | `HOME` or `AWAY` |
+| period | int32 | no | 1 or 2 |
+| ts | int32 | no | second since kick-off |
+| x, y | float64 | no | metres, 2 decimals, inside the pitch (clipped), Silver frame |
+| speed_kmh | float64 | yes | as in bronze: distance to the position at `ts - 1`, times 3.6. Null on the first second of a stretch. Not capped, but never above 40 on the delivered matches |
+| is_sprint | bool | no | `speed_kmh > 25`; false when the speed is null |
+| was_corrected | bool | no | the position delivered by bronze was outside 105 x 68 (before clipping) |
+| is_after_gap | bool | no | the player's previous tracked second is more than 1 s earlier. False for a player's first row (nothing is missing before it) |
+
+**events**: one row = one game action. Key `event_id`. Columns, types and meanings as in section 4 (`match_id, event_id, ts,
+period, player_id, receiver_id, team_id, type, x_start, y_start, x_end, y_end, outcome`, `period` is int32), except:
+coordinates are in the Silver frame (9.3 intro) and are not clipped. Pass `outcome` values seen: `successful`,
+`unsuccessful`, `offside`. Every pass of the two matches has a `receiver_id`.
+
+**ball**: `match_id, ts, period, x, y, z` as in section 4, `period` int32, x and y in the Silver frame, not clipped. One row per second with a ball position.
+
+**players**, **matches**: the columns of section 4 without the Kafka columns, one row per player or match. `home_side_p1/p2`
+keep their bronze meaning (where HOME attacked in the source); they are no longer needed to read positions.
+
+### 9.4 Guarantees (each one is a Soda check on every `make soda`)
+
+One row per key in every table · no null in keys, team, coordinates and flags · `team_id` is `HOME` or `AWAY`, `period` 1 or 2
+· every tracking row and event belongs to a player of `players` with the same team · tracking inside the player's playing
+time · exactly 22 tracking rows in every existing second · tracking inside 105 x 68 · speed in [0, 40] or null · `is_sprint`
+equals (`speed_kmh` > 25) · event types in {pass, shot, goal, tackle, foul, pressure} · goals in events = `home_score +
+away_score` · HOME shots toward x = 105 and AWAY shots toward x = 0 · row counts equal the table of the Silver guide.
+
+### 9.5 Known characteristics (m001 measured through Silver; m002 from the ingestion figures of section 7)
+
+| Item | m001 (SkillCorner 1874553) | m002 (SkillCorner 1925299) |
+|---|---|---|
+| Rows tracking / events / ball / players / matches | 97,416 / 1,741 / 4,428 / 32 / 1 | 105,534 / 1,878 / 4,797 / 32 / 1 |
+| `was_corrected` rows | 735 | 618 |
+| Null `speed_kmh` | 1,386 (= 1,354 `is_after_gap` rows + 32 first rows) | 1,166 |
+| `is_sprint` rows | 444 | to measure at the first run |
+| `is_after_gap` rows | 1,354 | to measure at the first run |
+| Goals home-away | 2-3 | 0-1 |
+
+## 10. Gold (DuckDB tables built by dbt)
+
+Owner: Gold. Consumers: the dashboard (`app/streamlit`), Soda, the post-match report. Code twins: `dbt/models/marts/*.sql` with
+`dbt/models/marts/schema.yml`, and the schema checks of `soda/checks/gold.yml`: change them together, by pull request, and
+warn the dashboard owner. Definitions and examples: [`../dbt/README.md`](../dbt/README.md); specification: [`gold-guide.md`](gold-guide.md).
+
+### 10.1 Where and how
+
+- DuckDB file `data/football.duckdb` (git-ignored), tables `main.gold_*`; copy as Parquet in `s3://gold/<table>.parquet`.
+  The `stg_*` tables in the same file are copies of Silver used by dbt: they are not part of the contract.
+- Rebuilt in full by `make gold` (dbt build): staging, six tables, tests. Read it with `make gold-sql` or open it read-only.
+
+### 10.2 Conventions
+
+| Item | Rule |
+|---|---|
+| Frame | the Silver frame: 105 x 68 m, origin bottom-left, HOME attacks toward x = 105, AWAY toward x = 0 |
+| Keys | always (`match_id`, `player_id`): ids are match-local |
+| Tracked time | distances, speeds, sprints and zones cover **tracked seconds only** (73 % to 78 % of a match) and come from 1 Hz positions: approximate, they under-estimate. Null speeds add nothing to a distance |
+| Sprint | `speed_kmh > 25`. A **sprint effort** is a run of consecutive sprint seconds; a missing second ends it |
+| Types | DuckDB: VARCHAR, INTEGER, BIGINT (counts), DOUBLE, BOOLEAN |
+| Counts | a player with no event has 0, never null. Ratios and speeds are null when there is nothing to compute them from |
+| `shots` | type `shot` only. Goals are separate: shots on the shot map = shots + goals (`gold_shots` holds both) |
+| Successful pass | `outcome = 'successful'` |
+
+### 10.3 Tables
+
+**gold_player_match_stats**: one row per player per match. Key (match_id, player_id).
+
+| Column | Type | Meaning |
+|---|---|---|
+| match_id, player_id, team_id | VARCHAR | keys; `team_id` HOME or AWAY |
+| name, short_name, position | VARCHAR | from `players` |
+| shirt_number | INTEGER | |
+| minutes_on_pitch | DOUBLE | (`end_ts` - `start_ts`) / 60 |
+| tracked_seconds | BIGINT | tracking rows of the player |
+| distance_m, distance_km | DOUBLE | sum of `speed_kmh / 3.6` over tracked seconds (0 if none) |
+| sprint_seconds, sprint_count | BIGINT | tracked seconds above 25 km/h; sprint efforts |
+| max_speed_kmh, avg_speed_kmh | DOUBLE | null if the player has no speed |
+| avg_x, avg_y | DOUBLE | mean tracked position (node of the pass network) |
+| passes, passes_successful, passes_received | BIGINT | made, successful, received (as `receiver_id`) |
+| shots, goals, tackles, fouls, pressures | BIGINT | event counts; a tackle is a duel that directly regains or disrupts the ball; a pressure is any on-ball engagement, tackles and fouls are carved out of that family |
+
+**gold_team_match_stats**: one row per team per match (two per match). Key (match_id, team_id).
+
+| Column | Type | Meaning |
+|---|---|---|
+| match_id, team_id | VARCHAR | keys |
+| team_name, team_short, team_color | VARCHAR | from `matches` (colour may be null or too dark to draw) |
+| score, opponent_score | INTEGER | final score from this team's point of view |
+| distance_km | DOUBLE | sum of the players |
+| sprint_count, sprint_seconds | BIGINT | sums |
+| max_speed_kmh | DOUBLE | fastest player |
+| passes, passes_successful | BIGINT | sums |
+| pass_accuracy | DOUBLE | passes_successful / passes, null if no pass |
+| shots, goals, tackles, fouls, pressures | BIGINT | sums |
+| avg_x, avg_y | DOUBLE | mean tracked position of the team |
+
+**gold_zone_occupancy**: one row per player per visited zone per match. Key (match_id, player_id, zone_id). Grid of 6 columns x 4
+rows over the pitch (cells 17.5 m x 17 m), Silver frame; a zone never visited has no row.
+
+| Column | Type | Meaning |
+|---|---|---|
+| match_id, player_id, team_id | VARCHAR | |
+| zone_id | INTEGER | `zone_y * 6 + zone_x`, 0 to 23 |
+| zone_x, zone_y | INTEGER | cell column 0 to 5 (toward x = 105), cell row 0 to 3 (toward y = 68). x = 105 and y = 68 stay in the last cell |
+| x_min, x_max, y_min, y_max | DOUBLE | bounds of the cell, metres |
+| seconds | BIGINT | tracked seconds in the cell |
+| share_of_tracked_seconds | DOUBLE | seconds / the player's tracked seconds; the shares of a player add up to 1 (4 decimals) |
+
+**gold_pass_network**: one row per passer and receiver per match, passes with a known receiver only. Key (match_id, passer_id, receiver_id).
+
+| Column | Type | Meaning |
+|---|---|---|
+| match_id, passer_id, receiver_id, team_id | VARCHAR | passer and receiver are in the same team |
+| passer_name, receiver_name | VARCHAR | short names |
+| passes, passes_successful | BIGINT | passes from passer to receiver, and the successful ones |
+| avg_start_x, avg_start_y, avg_end_x, avg_end_y | DOUBLE | mean start and end of these passes |
+
+**gold_shots**: one row per shot or goal. Key `event_id`.
+
+| Column | Type | Meaning |
+|---|---|---|
+| match_id, event_id | VARCHAR | |
+| ts, period | INTEGER | when |
+| player_id, player_name, player_short_name | VARCHAR | the shooter |
+| shirt_number | INTEGER | |
+| team_id, type | VARCHAR | HOME or AWAY; `shot` or `goal` |
+| is_goal | BOOLEAN | `type = 'goal'` |
+| x_start, y_start, x_end, y_end | DOUBLE | where the shot was taken and where the action ended (Silver frame, may lie behind the goal line) |
+| attacking_goal_x | DOUBLE | 105 for HOME, 0 for AWAY: the goal the team attacks (its centre is y = 34) |
+| distance_to_goal_m | DOUBLE | distance from the shot to the centre of that goal |
+| score_home_after, score_away_after | INTEGER | running score including this row (ordered by `ts`, `event_id`) |
+
+The source gives no saved / blocked / off-target outcome: there is no expected-goals value.
+
+**gold_player_5min**: one row per player per 5-minute window of the match clock per match. Key (match_id, player_id, window_start_ts).
+
+| Column | Type | Meaning |
+|---|---|---|
+| match_id, player_id, team_id | VARCHAR | |
+| window_start_ts, window_end_ts | INTEGER | seconds; `window_start_ts` is a multiple of 300, `window_end_ts` = start + 300 |
+| tracked_seconds | BIGINT | tracked seconds in the window (at most 300) |
+| coverage | DOUBLE | tracked_seconds / 300: a low value means the window is incomplete |
+| distance_m, max_speed_kmh | DOUBLE | distance (0 if none), fastest speed (null if none) |
+| sprint_seconds | BIGINT | |
+| passes, shots, goals, tackles, fouls, pressures | BIGINT | event counts in the window |
+
+### 10.4 Known characteristics (m001 measured; m002 to fill after the first run on SkillCorner 1925299)
+
+| Item | m001 |
+|---|---|
+| Rows: player stats / team stats / zones / pass network / shots / 5-minute windows | 32 / 2 / 638 / 261 / 26 / 469 |
+| Shots table | 21 shots + 5 goals; running score ends 2-3 (= real score) |
+| Passes | 837 (700 successful, 135 unsuccessful, 2 offside), all with a receiver |
+| Team distance and sprint efforts | HOME 101.2 km and 108; AWAY 97.3 km and 106 (tracked time only) |
+
+## 11. Quality gates
+
+| Rule | Where | Owner |
+|---|---|---|
+| Counts after deduplication, keys, goals = score (nothing is written if one fails) | Silver job, before writing (`spark/silver/checks.py`) | Silver |
+| Silver contract, keys, 22 players per second, inside the pitch, speed <= 40, event types, orientation of events, consistency | Soda on Silver (`soda/checks/silver.yml`, `make soda-silver`) | Silver / Gold |
+| Gold counts, goals, passes and tracked seconds reconciled with Silver | dbt tests (`dbt/tests/assert_*.sql`, run by `make gold`) | Gold |
+| Gold contract, ranges, consistency between Gold tables | Soda on Gold (`soda/checks/gold.yml`, `make soda-gold`) | Gold |
+| Last result of the Soda runs | dashboard page "Data quality" (`data/soda/*.json`) | Gold |

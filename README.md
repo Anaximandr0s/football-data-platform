@@ -35,10 +35,10 @@ Details: [`docs/architecture.md`](docs/architecture.md). The ingestion part: [`i
 | Bronze | MinIO, partitioned by match, counts verified | done |
 | Silver | Spark + Iceberg: cleaning, grain player x second | code and unit tests done, to run on the stack ([`spark/silver/README.md`](spark/silver/README.md)) |
 | Gold | dbt + DuckDB: 6 tables, tests, export to `s3://gold` | code and tests done, to run on the stack ([`dbt/README.md`](dbt/README.md)) |
-| Checks | Soda | to do |
+| Checks | Soda Core on Silver and Gold, 66 + 57 checks, failure demo | code and tests done, to run on the stack ([`soda/README.md`](soda/README.md)) |
 | Streaming stats (optional) | 5-minute windows | to do |
 | Orchestration | Dagster | to do |
-| Presentation | Streamlit + mplsoccer | to do |
+| Presentation | Streamlit + mplsoccer dashboard on Gold (live pitch page still to do) | code and tests done, to run on the stack ([`app/streamlit/README.md`](app/streamlit/README.md)) |
 
 Requirement by requirement: [`docs/requirements-coverage.md`](docs/requirements-coverage.md).
 
@@ -70,6 +70,8 @@ make check MATCH=m002
 make silver MATCH="m001 m002"            # Silver on the Spark cluster (ARGS=--dry-run to only check)
 make gold                                # Gold: dbt + DuckDB, tests, export to s3://gold
 make gold-sql Q="select * from gold_shots limit 5"
+make soda                                # Soda checks on Silver then Gold (make soda-demo shows a failure on purpose)
+make app                                 # dashboard on http://localhost:8501
 ```
 
 | Service | URL | Notes |
@@ -78,10 +80,11 @@ make gold-sql Q="select * from gold_shots limit 5"
 | MinIO S3 API | http://localhost:9000 | buckets `bronze`, `silver`, `gold` |
 | Kafka UI | http://localhost:8081 | topics, messages, consumer groups |
 | Spark master UI | http://localhost:8082 | cluster for Silver (`spark://spark-master:7077` inside Docker) |
+| Dashboard | http://localhost:8501 | after `make app` (needs `make gold`) |
 | Kafka from your machine | `localhost:29092` | Python scripts and Spark outside Docker |
 | Kafka from containers | `kafka:9092` | |
 
-Other commands: `make silver` · `make gold` · `make help` · `make down` (keep data) · `make reset` (**deletes all data**) ·
+Other commands: `make silver` · `make gold` · `make soda` · `make app` · `make help` · `make down` (keep data) · `make reset` (**deletes all data**) ·
 `make counts` (messages per topic) · `make lint` · `make test`.
 
 Troubleshooting:
@@ -93,20 +96,22 @@ Troubleshooting:
 | Folder | Content | State |
 |---|---|---|
 | `ingestion/` | download, convert, replay into Kafka, bronze writer ([guide](ingestion/README.md)) | done |
-| `tests/<part>/` | Python tests, one folder per part (`tests/ingestion/`, `tests/spark/`, `tests/dbt/`) | ingestion, Silver and Gold done |
+| `tests/<part>/` | Python tests, one folder per part (`tests/ingestion/`, `tests/spark/`, `tests/dbt/`, `tests/soda/`, `tests/app/`) | ingestion to dashboard done |
 | `scripts/` | `smoke_test.py`: health of the Docker stack | done |
 | `docs/` | contract, guides, ADRs | in progress |
 | `spark/` | Silver job (`spark/silver/`, [guide](spark/silver/README.md)); streaming job later | Silver code done, streaming to do |
 | `dbt/` | Gold models, dbt tests, Dockerfile ([guide](dbt/README.md)) | Gold code done |
-| `soda/` | data-quality checks | to do |
+| `soda/` | data-quality checks on Silver and Gold, runner, Dockerfile ([guide](soda/README.md)) | Soda code done |
 | `dagster/` | orchestration | to do |
-| `app/` | Streamlit app (`app/streamlit/`), optional 3D page (`app/web3d/`) | to do |
+| `app/` | Streamlit dashboard (`app/streamlit/`, [guide](app/streamlit/README.md)), optional 3D page (`app/web3d/`) and API | dashboard code done, live page and bonus to do |
 
 ## Documentation
 
 - **Start here (Silver and Gold): [`docs/silver-guide.md`](docs/silver-guide.md)**
 - Silver job (what it does, tables, decisions, checks): [`spark/silver/README.md`](spark/silver/README.md)
 - Gold layer (tables, definitions, tests, how to run): [`dbt/README.md`](dbt/README.md), specification in [`docs/gold-guide.md`](docs/gold-guide.md)
+- Data quality (what is checked, the failure demo): [`soda/README.md`](soda/README.md)
+- Dashboard (pages, how to read the graphics): [`app/streamlit/README.md`](app/streamlit/README.md)
 - Ingestion guide (files, outputs, how to verify): [`ingestion/README.md`](ingestion/README.md)
 - Data contract (every table, column, rule): [`docs/contrat_donnees.md`](docs/contrat_donnees.md)
 - Where the data comes from and its limits: [`docs/data-sources.md`](docs/data-sources.md)

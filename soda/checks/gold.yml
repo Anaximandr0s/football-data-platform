@@ -1,0 +1,262 @@
+# Soda checks on the GOLD layer (FOO-05): the six tables of the DuckDB file written by dbt (`make gold`).
+# Columns and types: docs/contrat_donnees.md section 10. dbt already reconciles Gold with Silver (dbt/tests/assert_*.sql);
+# these checks guard the published tables themselves: contract, ranges, and consistency between Gold tables.
+
+checks for gold_player_match_stats:
+  - schema:
+      name: gold_player_match_stats follows the data contract
+      fail:
+        when required column missing: [match_id, player_id, team_id, name, short_name, position, shirt_number, minutes_on_pitch, tracked_seconds, distance_m, distance_km, sprint_seconds, sprint_count, max_speed_kmh, avg_speed_kmh, avg_x, avg_y, passes, passes_successful, passes_received, shots, goals, tackles, fouls, pressures]
+        when wrong column type:
+          match_id: VARCHAR
+          player_id: VARCHAR
+          team_id: VARCHAR
+          shirt_number: INTEGER
+          minutes_on_pitch: DOUBLE
+          tracked_seconds: BIGINT
+          distance_m: DOUBLE
+          distance_km: DOUBLE
+          sprint_seconds: BIGINT
+          sprint_count: BIGINT
+          max_speed_kmh: DOUBLE
+          avg_speed_kmh: DOUBLE
+          avg_x: DOUBLE
+          avg_y: DOUBLE
+          passes: BIGINT
+          passes_successful: BIGINT
+          passes_received: BIGINT
+          shots: BIGINT
+          goals: BIGINT
+          tackles: BIGINT
+          fouls: BIGINT
+          pressures: BIGINT
+  - row_count > 0
+  - duplicate_count(match_id, player_id) = 0:
+      name: one row per player per match
+  - missing_count(team_id) = 0
+  - missing_count(name) = 0
+  - missing_count(distance_m) = 0
+  - invalid_count(team_id) = 0:
+      name: player team_id is HOME or AWAY
+      valid values: [HOME, AWAY]
+  - min(distance_m) >= 0:
+      name: no negative distance
+  - max(max_speed_kmh) <= 40:
+      name: no speed above 40 km/h
+  - failed rows:
+      name: a player never runs more than 16 km in a match
+      fail condition: distance_km > 16
+  - failed rows:
+      name: sprint efforts never exceed sprint seconds
+      fail condition: sprint_count > sprint_seconds
+  - failed rows:
+      name: successful passes never exceed passes
+      fail condition: passes_successful > passes
+  - failed rows:
+      name: tracked seconds never exceed the time on the pitch
+      fail condition: tracked_seconds > minutes_on_pitch * 60 + 10
+  - failed rows:
+      name: average position is inside the pitch
+      fail condition: avg_x < 0 or avg_x > 105 or avg_y < 0 or avg_y > 68
+
+checks for gold_team_match_stats:
+  - schema:
+      name: gold_team_match_stats follows the data contract
+      fail:
+        when required column missing: [match_id, team_id, team_name, team_short, team_color, score, opponent_score, distance_km, sprint_count, sprint_seconds, max_speed_kmh, passes, passes_successful, pass_accuracy, shots, goals, tackles, fouls, pressures, avg_x, avg_y]
+        when wrong column type:
+          match_id: VARCHAR
+          team_id: VARCHAR
+          team_name: VARCHAR
+          score: INTEGER
+          opponent_score: INTEGER
+          distance_km: DOUBLE
+          sprint_count: BIGINT
+          passes: BIGINT
+          pass_accuracy: DOUBLE
+          goals: BIGINT
+          avg_x: DOUBLE
+  - row_count > 0
+  - duplicate_count(match_id, team_id) = 0:
+      name: one row per team per match
+  - invalid_count(team_id) = 0:
+      name: team team_id is HOME or AWAY
+      valid values: [HOME, AWAY]
+  - missing_count(team_name) = 0
+  - failed rows:
+      name: every match has exactly two teams
+      fail query: |
+        select match_id, count(*) as teams from gold_team_match_stats group by match_id having count(*) != 2
+  - failed rows:
+      name: pass accuracy is a ratio between 0 and 1
+      fail condition: pass_accuracy < 0 or pass_accuracy > 1
+  - failed rows:
+      name: a team scored the goals of its score
+      fail condition: goals != score
+  - failed rows:
+      name: the two teams of a match have mirrored scores
+      fail query: |
+        select h.match_id, h.score as home_score, a.score as away_score
+        from gold_team_match_stats h join gold_team_match_stats a on h.match_id = a.match_id
+        where h.team_id = 'HOME' and a.team_id = 'AWAY'
+          and (h.score != a.opponent_score or h.opponent_score != a.score)
+  - failed rows:
+      name: team totals equal the sum of the player rows
+      fail query: |
+        select t.match_id, t.team_id, t.passes as team_passes, p.passes as player_passes
+        from gold_team_match_stats t
+        join (select match_id, team_id, sum(passes) as passes, sum(shots) as shots, sum(goals) as goals
+              from gold_player_match_stats group by match_id, team_id) p using (match_id, team_id)
+        where t.passes != p.passes or t.shots != p.shots or t.goals != p.goals
+
+checks for gold_zone_occupancy:
+  - schema:
+      name: gold_zone_occupancy follows the data contract
+      fail:
+        when required column missing: [match_id, player_id, team_id, zone_id, zone_x, zone_y, x_min, x_max, y_min, y_max, seconds, share_of_tracked_seconds]
+        when wrong column type:
+          match_id: VARCHAR
+          player_id: VARCHAR
+          zone_id: INTEGER
+          zone_x: INTEGER
+          zone_y: INTEGER
+          x_min: DOUBLE
+          seconds: BIGINT
+          share_of_tracked_seconds: DOUBLE
+  - row_count > 0
+  - duplicate_count(match_id, player_id, zone_id) = 0:
+      name: one row per player per zone per match
+  - failed rows:
+      name: zone ids are inside the 6 x 4 grid (0 to 23)
+      fail condition: zone_id < 0 or zone_id > 23 or zone_x < 0 or zone_x > 5 or zone_y < 0 or zone_y > 3
+  - failed rows:
+      name: every zone cell lies inside the pitch
+      fail condition: x_min < 0 or x_max > 105 or y_min < 0 or y_max > 68 or x_min >= x_max or y_min >= y_max
+  - failed rows:
+      name: the zone shares of a player add up to 1
+      fail query: |
+        select match_id, player_id, sum(share_of_tracked_seconds) as total_share from gold_zone_occupancy
+        group by match_id, player_id having abs(sum(share_of_tracked_seconds) - 1) > 0.01
+
+checks for gold_pass_network:
+  - schema:
+      name: gold_pass_network follows the data contract
+      fail:
+        when required column missing: [match_id, passer_id, receiver_id, team_id, passer_name, receiver_name, passes, passes_successful, avg_start_x, avg_start_y, avg_end_x, avg_end_y]
+        when wrong column type:
+          match_id: VARCHAR
+          passer_id: VARCHAR
+          receiver_id: VARCHAR
+          passes: BIGINT
+          passes_successful: BIGINT
+          avg_start_x: DOUBLE
+  - row_count > 0
+  - duplicate_count(match_id, passer_id, receiver_id) = 0:
+      name: one row per passer and receiver per match
+  - missing_count(passer_id) = 0
+  - missing_count(receiver_id) = 0
+  - failed rows:
+      name: nobody passes to himself
+      fail condition: passer_id = receiver_id
+  - failed rows:
+      name: successful passes never exceed passes
+      fail condition: passes_successful > passes
+  - failed rows:
+      name: network passes never exceed the passes of the player table
+      fail query: |
+        select n.match_id, n.passer_id, n.passes as network_passes, p.passes as player_passes
+        from (select match_id, passer_id, sum(passes) as passes from gold_pass_network group by match_id, passer_id) n
+        join gold_player_match_stats p on p.match_id = n.match_id and p.player_id = n.passer_id
+        where n.passes > p.passes
+
+checks for gold_shots:
+  - schema:
+      name: gold_shots follows the data contract
+      fail:
+        when required column missing: [match_id, event_id, ts, period, player_id, player_name, player_short_name, shirt_number, team_id, type, is_goal, x_start, y_start, x_end, y_end, attacking_goal_x, distance_to_goal_m, score_home_after, score_away_after]
+        when wrong column type:
+          match_id: VARCHAR
+          event_id: VARCHAR
+          ts: INTEGER
+          type: VARCHAR
+          is_goal: BOOLEAN
+          x_start: DOUBLE
+          attacking_goal_x: DOUBLE
+          distance_to_goal_m: DOUBLE
+          score_home_after: INTEGER
+          score_away_after: INTEGER
+  - row_count > 0
+  - duplicate_count(event_id) = 0:
+      name: one row per shot
+  - missing_count(distance_to_goal_m) = 0
+  - invalid_count(type) = 0:
+      name: shot type is shot or goal
+      valid values: [shot, goal]
+  - failed rows:
+      name: is_goal is true exactly for type goal
+      fail condition: is_goal != (type = 'goal')
+  - failed rows:
+      name: HOME attacks the goal at x = 105 and AWAY the goal at x = 0
+      fail condition: (team_id = 'HOME' and attacking_goal_x != 105) or (team_id = 'AWAY' and attacking_goal_x != 0)
+  - failed rows:
+      name: a shot is taken less than 120 m from the goal it attacks
+      fail condition: distance_to_goal_m < 0 or distance_to_goal_m > 120
+  - failed rows:
+      name: the running score never goes down
+      fail query: |
+        select match_id, event_id, ts, score_home_after, score_away_after,
+               lag(score_home_after) over w as previous_home, lag(score_away_after) over w as previous_away
+        from gold_shots window w as (partition by match_id order by ts, event_id)
+        qualify score_home_after < previous_home or score_away_after < previous_away
+  - failed rows:
+      name: goals in gold_shots equal the score in gold_team_match_stats
+      fail query: |
+        select t.match_id, t.team_id, t.score, coalesce(g.goals, 0) as goals_in_shots
+        from gold_team_match_stats t
+        left join (select match_id, team_id, count(*) filter (where is_goal) as goals
+                   from gold_shots group by match_id, team_id) g using (match_id, team_id)
+        where t.score != coalesce(g.goals, 0)
+  - failed rows:
+      name: the final running score is the final score
+      fail query: |
+        select h.match_id, h.score as home_score, a.score as away_score, s.home_last, s.away_last
+        from gold_team_match_stats h
+        join gold_team_match_stats a on a.match_id = h.match_id and a.team_id = 'AWAY'
+        left join (select match_id, max(score_home_after) as home_last, max(score_away_after) as away_last
+                   from gold_shots group by match_id) s on s.match_id = h.match_id
+        where h.team_id = 'HOME' and (h.score != coalesce(s.home_last, 0) or a.score != coalesce(s.away_last, 0))
+
+checks for gold_player_5min:
+  - schema:
+      name: gold_player_5min follows the data contract
+      fail:
+        when required column missing: [match_id, player_id, team_id, window_start_ts, window_end_ts, tracked_seconds, coverage, distance_m, sprint_seconds, max_speed_kmh, passes, shots, goals, tackles, fouls, pressures]
+        when wrong column type:
+          match_id: VARCHAR
+          player_id: VARCHAR
+          window_start_ts: INTEGER
+          window_end_ts: INTEGER
+          tracked_seconds: BIGINT
+          coverage: DOUBLE
+          distance_m: DOUBLE
+          passes: BIGINT
+  - row_count > 0
+  - duplicate_count(match_id, player_id, window_start_ts) = 0:
+      name: one row per player per 5-minute window
+  - missing_count(team_id) = 0
+  - failed rows:
+      name: a window lasts 300 seconds and starts on a multiple of 300
+      fail condition: window_end_ts - window_start_ts != 300 or window_start_ts % 300 != 0
+  - failed rows:
+      name: coverage is tracked seconds over 300 (between 0 and 1)
+      fail condition: coverage < 0 or coverage > 1 or tracked_seconds > 300
+  - failed rows:
+      name: a player covers less than 2 km in 5 minutes
+      fail condition: distance_m > 2000
+  - failed rows:
+      name: windows add up to the tracked seconds of the player table
+      fail query: |
+        select w.match_id, w.player_id, w.seconds as window_seconds, p.tracked_seconds
+        from (select match_id, player_id, sum(tracked_seconds) as seconds from gold_player_5min group by match_id, player_id) w
+        join gold_player_match_stats p on p.match_id = w.match_id and p.player_id = w.player_id
+        where w.seconds != p.tracked_seconds
