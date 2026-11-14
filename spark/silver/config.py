@@ -15,9 +15,9 @@ SPRINT_KMH = 25.0                # is_sprint = speed_kmh > 25
 MAX_SPEED_KMH = 40.0             # plausibility limit (the Soda check of FOO-05 uses the same value)
 RIGHT_TO_LEFT = "right_to_left"  # value of matches.home_side_pN when HOME attacks toward x = 0
 DECIMALS = 2                     # coordinates keep 2 decimals, like bronze
-# How events are oriented: "guide" = literal rule of the silver guide, "per_team" = mirror AWAY events only
-# (see spark/silver/README.md, open decision 1). Default: what the guide says.
-EVENTS_DIRECTION = os.getenv("SILVER_EVENTS_DIRECTION", "guide")
+# How events are oriented: "per_team" = mirror AWAY events only (chosen: the source already gives events with the
+# acting team attacking toward x = 105, see spark/silver/README.md decision 1); "guide" = literal silver-guide rule.
+EVENTS_DIRECTION = os.getenv("SILVER_EVENTS_DIRECTION", "per_team")
 
 # --- Bronze (input) ---
 BRONZE_URI = os.getenv("SILVER_BRONZE_URI", "s3a://bronze")

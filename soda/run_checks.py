@@ -22,6 +22,7 @@ import sys
 from pathlib import Path
 
 import duckdb
+from ruamel.yaml import YAML  # installed with soda-core
 from soda.scan import Scan
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -90,6 +91,66 @@ def corrupt(con: duckdb.DuckDBPyConnection, layer: str) -> list[str]:
     return ["a goal removed from gold_shots (breaks: goals equal the score of the team table)"]
 
 
+def _rule_of(check: dict):
+    """The rule of one check: Soda keeps its YAML snippet (`checks for <table>:` + one item) in `definition`."""
+    try:
+        doc = YAML(typ="safe").load(check.get("definition") or "")
+        items = next(iter(doc.values()))
+        return items[0] if items else None
+    except Exception:  # noqa: BLE001 - an explanation is a bonus, never a reason to fail the run
+        return None
+
+
+def _fmt(value) -> str:
+    return f"{value:.2f}".rstrip("0").rstrip(".") if isinstance(value, float) else str(value)
+
+
+def _failed_rows_detail(con: duckdb.DuckDBPyConnection, check: dict, limit: int = 3) -> str | None:
+    """Count and show the first rows that break a `failed rows` rule, by running its query again."""
+    rule = _rule_of(check)
+    if not isinstance(rule, dict) or "failed rows" not in rule:
+        return None
+    cfg = rule["failed rows"]
+    sql = cfg.get("fail query") or f"select * from {check['table']} where {cfg['fail condition']}"
+    sql = sql.strip().rstrip(";")
+    total = con.execute(f"select count(*) from ({sql})").fetchone()[0]
+    cur = con.execute(f"select * from ({sql}) limit {limit}")
+    names = [d[0] for d in cur.description]
+    shown = " | ".join(", ".join(f"{n}={_fmt(v)}" for n, v in zip(names, row, strict=True)) for row in cur.fetchall())
+    return f"{total} failing row(s), first: {shown}"
+
+
+def _schema_detail(log_text: str, name: str) -> str | None:
+    """Soda writes why a schema check failed (missing / wrong type / forbidden column) under the check in its log."""
+    lines = log_text.splitlines()
+    for i, line in enumerate(lines):
+        if line.rstrip().endswith("[FAILED]") and name in line:
+            details = []
+            for nxt in lines[i + 1:]:
+                body = nxt.split("INFO   |", 1)[-1]
+                if not body.startswith(" " * 9):      # the details are indented deeper than the check line
+                    break
+                text = body.strip()
+                if not text.startswith("schema_measured"):
+                    details.append(text)
+            return "; ".join(details) or None
+    return None
+
+
+def explain(con: duckdb.DuckDBPyConnection, check: dict, raw: dict, log_text: str) -> str:
+    """Why a check did not pass, in one line (shown on the dashboard)."""
+    detail = None
+    try:
+        detail = _failed_rows_detail(con, check) or _schema_detail(log_text, check["name"] or "")
+    except duckdb.Error:
+        pass
+    if detail is None:
+        value = (raw.get("diagnostics") or {}).get("value")
+        if isinstance(value, (int, float)):
+            detail = f"measured value: {_fmt(value)}"
+    return (detail or "")[:500]
+
+
 def run_layer(layer: str, con: duckdb.DuckDBPyConnection, out_dir: Path) -> tuple[Scan, dict]:
     scan = Scan()
     scan.set_scan_definition_name(f"football_{layer}")
@@ -99,9 +160,13 @@ def run_layer(layer: str, con: duckdb.DuckDBPyConnection, out_dir: Path) -> tupl
     scan.execute()
 
     checks = []
+    log_text = scan.get_logs_text()
     for c in scan.get_scan_results().get("checks", []):
-        checks.append({"name": c.get("name") or c.get("definition"), "table": c.get("table"),
-                       "outcome": c.get("outcome") or "unknown", "definition": c.get("definition")})
+        entry = {"name": c.get("name") or c.get("definition"), "table": c.get("table"),
+                 "outcome": c.get("outcome") or "unknown", "definition": c.get("definition"), "detail": ""}
+        if entry["outcome"] in ("fail", "warn"):
+            entry["detail"] = explain(con, entry, c, log_text)
+        checks.append(entry)
     summary = {"layer": layer, "finished_at_utc": dt.datetime.now(dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
                "passed": sum(c["outcome"] == "pass" for c in checks),
                "failed": sum(c["outcome"] == "fail" for c in checks),
@@ -135,6 +200,9 @@ def main() -> None:
             print(f"DEMO: injected {line}")
         scan, summary = run_layer(layer, con, a.out)
         print(scan.get_logs_text())
+        for c in summary["checks"]:
+            if c["outcome"] in ("fail", "warn") and c["detail"]:
+                print(f"WHY  {c['name']}\n     {c['detail']}")
         if a.demo_failure:
             caught = summary["failed"] > 0
             print(f"DEMO: {summary['failed']} check(s) failed on the corrupted data: "

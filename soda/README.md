@@ -25,8 +25,10 @@ make soda-gold       # Gold only
 make soda-demo       # shows the checks catching damaged data ON PURPOSE (nothing is written)
 ```
 
-Each run prints the checks (`[PASSED]` / `[FAILED]`, with the failing value) and writes `data/soda/<layer>.json`, which
-the dashboard shows on its Data quality page. A failed check lists how many rows broke the rule.
+Each run prints the checks (`[PASSED]` / `[FAILED]`) and writes `data/soda/<layer>.json`, which the dashboard shows on its Data
+quality page. For every check that did not pass the file carries a `detail`: how many rows break the rule and the first ones
+(`2 failing row(s), first: match_id=m001, team_id=HOME, avg_shot_x=51.79`), the measured value, or the column whose type or
+presence differs from the contract (`attacking_goal_x expected(DOUBLE) actual(decimal(11,1))`).
 
 ## What is checked
 
@@ -73,6 +75,18 @@ installed as above and are skipped otherwise.
 - **Dagster** is not built yet: the exit code of `make soda` is what it will use to block the steps after a failure.
 
 ## Troubleshooting
+
+**A check is red: read its `detail` first** (dashboard, page Data quality, or the JSON). The three failures seen on the first
+real run, and what each one meant:
+
+| Check | Detail | Cause and fix |
+|---|---|---|
+| events are oriented per team | HOME `avg_shot_x` around 34 to 54 instead of about 88 (the mean of two matches blurs to about 52) | Silver was written with the old `guide` rule: an older `spark/silver/` on disk, or `--events-direction guide`. The current job refuses to write such events (its report shows `events direction used`). Re-run `make silver MATCH="m001 m002"`, then `make gold` and `make soda` |
+| row counts after deduplication equal the silver guide | `tracking=98516` against `expected_tracking=105534` | the tables hold another match than the guide describes (the zip shipped match 1927964 as m002). Re-run `make data` with the ids of `docs/data-sources.md`, replay, `make silver` |
+| gold_shots follows the data contract | `attacking_goal_x expected(DOUBLE) actual(decimal(11,1))` | Gold was built before the column became `DOUBLE`. Run `make gold`, then `make soda-gold` |
+
+A red result also stays red until `make soda` runs again: rebuilding a table does not refresh `data/soda/*.json`.
+
 
 - `Catalog Error: Table with name silver_... does not exist` or an Iceberg error: Silver is not written, run `make silver`.
 - `data/football.duckdb does not exist`: run `make gold`.

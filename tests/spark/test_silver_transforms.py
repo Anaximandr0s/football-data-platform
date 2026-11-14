@@ -121,12 +121,12 @@ def events(spark, rows):
                              "y_start double, x_end double, y_end double, outcome string, " + K)
 
 
-def test_events_are_mirrored_in_period_2_keep_nulls_and_are_not_clipped(spark, matches):
+def test_events_guide_direction_mirrors_period_2_keeps_nulls_and_is_not_clipped(spark, matches):
     rows = [("m1-e00001", 5, 1, "pass", 10.0, 20.0, 30.0, 40.0),
             ("m1-e00002", 9, 2, "shot", 10.0, 20.0, None, None),
             ("m1-e00003", 9, 1, "shot", 90.0, 34.0, 106.5, 34.0),   # behind the goal line: kept
             ("m1-e00003", 9, 1, "shot", 90.0, 34.0, 106.5, 34.0)]   # duplicate
-    out = {r["event_id"]: r for r in transforms.clean_events(events(spark, rows), matches).collect()}
+    out = {r["event_id"]: r for r in transforms.clean_events(events(spark, rows), matches, "guide").collect()}
     assert len(out) == 3
     assert (out["m1-e00001"]["x_start"], out["m1-e00001"]["x_end"]) == (10.0, 30.0)
     assert (out["m1-e00002"]["x_start"], out["m1-e00002"]["y_start"]) == (95.0, 48.0)
@@ -143,6 +143,8 @@ def test_events_per_team_direction_mirrors_away_events_only_in_every_period(spar
     a = transforms.clean_events(away, matches, "per_team").first()
     assert (h["x_start"], h["y_start"], h["x_end"]) == (90.0, 30.0, 100.0)   # HOME untouched
     assert (a["x_start"], a["y_start"], a["x_end"], a["y_end"]) == (15.0, 38.0, 5.0, 34.0)
+    default = transforms.clean_events(away, matches).first()          # per_team is the default
+    assert (default["x_start"], default["y_start"]) == (15.0, 38.0)
     with pytest.raises(ValueError):
         transforms.clean_events(home, matches, "nonsense")
 
@@ -176,6 +178,7 @@ def _metrics(**over):
     base = {"keys_unique": {"tracking": True, "events": True, "ball": True, "players": True},
             "rows": {"tracking": 10, "events": 4, "ball": 5, "players": 3, "matches": 1},
             "tracking": {"was_corrected": 2, "speed_null": 3, "team_null": 0, "outside_after_clip": 0},
+            "shot_avg_x": {"HOME": [88.0, 10], "AWAY": [15.0, 8]},
             "goals_home_away": [1, 0], "score_home_away": [1, 0]}
     base.update(over)
     return base
@@ -197,3 +200,14 @@ def test_evaluate_fails_on_a_wrong_row_count_or_goal_count_or_duplicates():
     assert [n for n, ok, _ in bad_goals if not ok] == ["events: goals equal the final score"]
     dup = _metrics(keys_unique={"tracking": False, "events": True, "ball": True, "players": True})
     assert [n for n, ok, _ in checks.evaluate(dup, None) if not ok] == ["tracking: one row per key"]
+
+
+def test_evaluate_blocks_events_in_the_wrong_frame_but_not_a_handful_of_shots():
+    """HOME shots averaging x = 51 (the signature of the old literal rule) must stop the write."""
+    wrong = checks.evaluate(_metrics(shot_avg_x={"HOME": [51.8, 26], "AWAY": [30.0, 20]}), None)
+    assert [n for n, ok, _ in wrong if not ok] == ["events: HOME shots are on the half it attacks (frame of Silver)"]
+    assert [n for n, ok, _ in wrong if "AWAY" in n and ok]            # AWAY at 30 is fine
+    few = checks.evaluate(_metrics(shot_avg_x={"HOME": [10.0, 2], "AWAY": [90.0, 1]}), None)
+    assert all(ok for _, ok, _ in few)                                 # 1 or 2 shots: not judged
+    none = checks.evaluate(_metrics(shot_avg_x={}), None)
+    assert all(ok for _, ok, _ in none)                                # a match without shots: nothing to judge

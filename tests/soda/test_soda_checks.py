@@ -125,6 +125,13 @@ def test_a_duplicated_tracking_row_is_caught(tmp_path):
     assert proc.returncode == 1
     assert "tracking has one row per (match_id, player_id, ts)" in failed_names(proc)
     assert "every existing second has exactly 22 players" in failed_names(proc)
+    assert "WHY  every existing second has exactly 22 players" in proc.stdout     # the console says why too
+    assert "players=23" in proc.stdout
+    # the result file says WHY: how many rows and which ones
+    checks = {c["name"]: c for c in json.loads((tmp_path / "out" / "silver.json").read_text())["checks"]}
+    assert "1 failing row(s)" in checks["every existing second has exactly 22 players"]["detail"]
+    assert "players=23" in checks["every existing second has exactly 22 players"]["detail"]
+    assert checks["tracking is not empty"]["detail"] == ""            # a passing check has no detail
 
 
 @needs_soda
@@ -163,6 +170,10 @@ def test_a_wrong_column_type_or_a_kafka_column_breaks_the_contract(tmp_path):
     frames["players"]["kafka_offset"] = 1
     names = failed_names(run_silver(tmp_path, frames))
     assert "tracking follows the data contract" in names and "players follow the data contract" in names
+    checks = {c["name"]: c for c in json.loads((tmp_path / "out" / "silver.json").read_text())["checks"]}
+    assert "ts" in checks["tracking follows the data contract"]["detail"]          # which column, expected and actual type
+    assert "expected(INTEGER)" in checks["tracking follows the data contract"]["detail"]
+    assert "kafka_offset" in checks["players follow the data contract"]["detail"]
 
 
 @needs_soda
@@ -252,6 +263,17 @@ def test_healthy_gold_passes(tmp_path):
     proc = run_gold(tmp_path)
     assert proc.returncode == 0, proc.stdout[-2500:]
     assert json.loads((tmp_path / "out" / "gold.json").read_text())["failed"] == 0
+
+
+@needs_soda
+def test_a_gold_column_with_a_stale_type_is_explained(tmp_path):
+    """The case seen on a real run: Gold built before attacking_goal_x became DOUBLE."""
+    def stale(t):
+        t["gold_shots"]["attacking_goal_x"] = t["gold_shots"]["attacking_goal_x"].astype("float32")
+    proc = run_gold(tmp_path, mutate=stale)
+    assert "gold_shots follows the data contract" in failed_names(proc)
+    checks = {c["name"]: c for c in json.loads((tmp_path / "out" / "gold.json").read_text())["checks"]}
+    assert "attacking_goal_x" in checks["gold_shots follows the data contract"]["detail"]
 
 
 @needs_soda

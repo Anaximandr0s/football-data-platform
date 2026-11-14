@@ -125,16 +125,16 @@ def clean_ball(ball: DataFrame, matches: DataFrame) -> DataFrame:
 EVENT_DIRECTIONS = ("guide", "per_team")
 
 
-def clean_events(events: DataFrame, matches: DataFrame, direction: str = "guide") -> DataFrame:
+def clean_events(events: DataFrame, matches: DataFrame, direction: str = "per_team") -> DataFrame:
     """silver.events: one row per game action, direction normalised on start and end points.
     Not clipped: a shot ending behind the goal line is real information.
 
-    direction="guide" (default): same rule as tracking and ball, as written in docs/silver-guide.md
-        (mirror every event of a period where HOME attacks toward x = 0).
-    direction="per_team": mirror the AWAY events only, in every period. Measured on m001: the source
-        gives event coordinates with the acting team already attacking toward x = 105, so this is what
-        puts events in the same frame as Silver tracking (HOME toward 105, AWAY toward 0).
-        Open decision: see spark/silver/README.md."""
+    direction="per_team" (default, decided): mirror the AWAY events only, in every period. Measured on
+        m001: the source gives event coordinates with the acting team already attacking toward x = 105,
+        so this puts events in the same frame as Silver tracking (HOME toward 105, AWAY toward 0).
+    direction="guide": the literal rule of docs/silver-guide.md, same as tracking and ball (mirror every
+        event of a period where HOME attacks toward x = 0). Kept for comparison; it leaves events
+        54 to 58 m away from the player's tracking position in half of the team x period groups."""
     if direction not in EVENT_DIRECTIONS:
         raise ValueError(f"direction must be one of {EVENT_DIRECTIONS}")
     e = dedup(events, KEYS["events"])

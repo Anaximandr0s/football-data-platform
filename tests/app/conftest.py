@@ -37,7 +37,8 @@ def gold_env(tmp_path_factory):
     (soda / "silver.json").write_text(json.dumps({
         "layer": "silver", "finished_at_utc": "2026-11-08T10:00:00Z", "passed": 2, "failed": 1, "warned": 0, "errors": 0,
         "checks": [{"name": "a check that passed", "table": "silver_tracking", "outcome": "pass", "definition": "x"},
-                   {"name": "a check that failed", "table": "silver_events", "outcome": "fail", "definition": "y"},
+                   {"name": "a check that failed", "table": "silver_events", "outcome": "fail", "definition": "y",
+                    "detail": "2 failing row(s), first: match_id=m1, team_id=HOME"},
                    {"name": "another one that passed", "table": "silver_ball", "outcome": "pass", "definition": "z"}]}))
     return {"GOLD_DUCKDB_PATH": str(tmp / "gold.duckdb"), "SODA_OUT_DIR": str(soda)}
 

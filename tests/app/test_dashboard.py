@@ -72,6 +72,8 @@ def test_quality_page_shows_the_last_soda_run(app_env):
     metrics = {m.label: m.value for m in at.metric}
     assert metrics["Passed"] == "2" and metrics["Failed"] == "1"
     assert any("No result for gold" in w.value for w in at.warning)
+    assert "detail" in at.dataframe[0].value.columns       # the reason of a failure is shown
+    assert "2 failing row(s)" in " ".join(at.dataframe[0].value["detail"])
 
 
 def test_quality_page_without_any_result_explains_what_to_run(app_env, monkeypatch, tmp_path):

@@ -364,7 +364,7 @@ The source gives no saved / blocked / off-target outcome: there is no expected-g
 
 | Rule | Where | Owner |
 |---|---|---|
-| Counts after deduplication, keys, goals = score (nothing is written if one fails) | Silver job, before writing (`spark/silver/checks.py`) | Silver |
+| Counts after deduplication, keys, goals = score, frame of events: HOME shots on the right half and AWAY shots on the left half (nothing is written if one fails) | Silver job, before writing (`spark/silver/checks.py`) | Silver |
 | Silver contract, keys, 22 players per second, inside the pitch, speed <= 40, event types, orientation of events, consistency | Soda on Silver (`soda/checks/silver.yml`, `make soda-silver`) | Silver / Gold |
 | Gold counts, goals, passes and tracked seconds reconciled with Silver | dbt tests (`dbt/tests/assert_*.sql`, run by `make gold`) | Gold |
 | Gold contract, ranges, consistency between Gold tables | Soda on Gold (`soda/checks/gold.yml`, `make soda-gold`) | Gold |

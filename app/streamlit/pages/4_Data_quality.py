@@ -32,4 +32,10 @@ for layer in ("silver", "gold"):
     if only_bad:
         checks = checks[checks.outcome != "pass"]
     checks = checks.assign(result=checks.outcome.map(lambda o: ICON.get(o, o)))
-    st.dataframe(checks[["result", "table", "name"]], hide_index=True, width="stretch")
+    if "detail" not in checks:                       # a result file written before the explanations existed
+        checks["detail"] = ""
+    st.dataframe(checks[["result", "table", "name", "detail"]], hide_index=True, width="stretch")
+    if r["failed"]:
+        st.caption("`detail` says why a check failed: how many rows break the rule and the first ones, or the column whose "
+                   "type or presence differs from the contract. A result older than the data (a table rebuilt since) "
+                   "stays red until `make soda` runs again.")

@@ -23,18 +23,16 @@ from spark.silver import checks, config, transforms
 from spark.silver.session import build_spark
 
 
-def list_matches(bronze_uri: str) -> list[str]:
-    """Match ids that have a `matches` folder in bronze."""
-    if bronze_uri.startswith("s3a://"):
-        import boto3  # same dependency and credentials as ingestion/check_bronze.py
-        bucket, _, prefix = bronze_uri.removeprefix("s3a://").partition("/")
-        s3 = boto3.client("s3", endpoint_url=config.S3_ENDPOINT_URL, region_name="us-east-1",
-                          aws_access_key_id=config.S3_USER, aws_secret_access_key=config.S3_PASSWORD)
-        base = f"{prefix.strip('/')}/matches/".lstrip("/")
-        resp = s3.list_objects_v2(Bucket=bucket, Prefix=base, Delimiter="/")
-        return sorted(p["Prefix"].rstrip("/").split("match_id=")[-1] for p in resp.get("CommonPrefixes", []))
-    root = Path(bronze_uri.removeprefix("file://")) / "matches"
-    return sorted(p.name.split("match_id=")[-1] for p in root.glob("match_id=*"))
+def list_matches(spark: SparkSession, bronze_uri: str) -> list[str]:
+    """Match ids that have a `matches` folder in bronze. Uses Spark's own Hadoop filesystem, so it works
+    for s3a:// and file:// alike and needs no extra Python package inside the Spark container."""
+    jvm = spark._jvm
+    path = jvm.org.apache.hadoop.fs.Path(f"{bronze_uri.rstrip('/')}/matches")
+    fs = path.getFileSystem(spark._jsc.hadoopConfiguration())
+    if not fs.exists(path):
+        return []
+    names = [st.getPath().getName() for st in fs.listStatus(path)]
+    return sorted(n.split("match_id=")[-1] for n in names if n.startswith("match_id="))
 
 
 def read_bronze(spark: SparkSession, bronze_uri: str, table: str, match_id: str) -> DataFrame:
@@ -74,6 +72,7 @@ def process_match(spark: SparkSession, match_id: str, bronze_uri: str, manifest_
         "ball": transforms.clean_ball(raw["ball"], matches).cache(),
     }
 
+    print(f"\nevents direction used for {match_id}: {events_direction}")
     metrics = checks.measure(raw_counts, silver["tracking"], silver["events"], silver["ball"],
                              players, matches)
     manifest = checks.load_manifest(match_id, manifest_dir)
@@ -101,7 +100,7 @@ def main() -> None:
     ap.add_argument("--manifest-dir", type=Path, default=config.MANIFEST_DIR,
                     help="ingestion manifests, to compare counts (skipped if absent)")
     ap.add_argument("--events-direction", choices=transforms.EVENT_DIRECTIONS, default=config.EVENTS_DIRECTION,
-                    help="guide = rule of the silver guide (default); per_team = mirror AWAY events only")
+                    help="per_team = mirror AWAY events only (default); guide = literal silver-guide rule")
     ap.add_argument("--dry-run", action="store_true", help="clean and check, write nothing (no Iceberg needed)")
     ap.add_argument("--packages", default=None,
                     help="Spark Maven packages; '' for none (default: hadoop-aws + Iceberg runtime)")
@@ -110,7 +109,7 @@ def main() -> None:
         ap.error("give --match ID [ID ...] or --all")
 
     spark = build_spark(packages=a.packages, iceberg=not a.dry_run)
-    matches = a.match or list_matches(a.bronze_uri)
+    matches = a.match or list_matches(spark, a.bronze_uri)
     if not matches:
         sys.exit("no match found in bronze")
     results = {m: process_match(spark, m, a.bronze_uri, a.manifest_dir, a.dry_run, a.events_direction) for m in matches}
