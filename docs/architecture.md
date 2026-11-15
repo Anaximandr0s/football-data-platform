@@ -57,3 +57,18 @@ Specification: [`gold-guide.md`](gold-guide.md). Guide of the code: [`dbt/README
 `gold_player_match_stats` (player x match) · `gold_team_match_stats` (team x match) · `gold_zone_occupancy` (player x zone) ·
 `gold_pass_network` (passer x receiver x match) · `gold_shots` (one shot) · `gold_player_5min` (player x 5-minute window).
 
+## Quality (Soda)
+
+Soda Core 3.5 runs SodaCL checks on Silver (`soda/checks/silver.yml`, 66 checks) and on the Gold file (`soda/checks/gold.yml`,
+57 checks) through one DuckDB connection built by `soda/run_checks.py`; nothing is written to the data. The exit code (0 / 1) is
+what Dagster will use to block the next step; each run also writes `data/soda/<layer>.json` for the dashboard. `make soda-demo`
+damages a copy on purpose to show the checks catch it. Soda has its own image because its DuckDB connector pins DuckDB 1.0
+(see [`soda/README.md`](../soda/README.md)). The columns and types the schema checks enforce are in
+[`contrat_donnees.md`](contrat_donnees.md), sections 9 and 10.
+
+## Dashboard (Streamlit)
+
+`app/streamlit/` (`make app`, http://localhost:8501): match overview, players (heatmap, intensity, ranking), shots and passes
+(shot map, pass network), compare matches, data quality. It reads the Gold file and the Soda results **read-only** (the
+repository is mounted `:ro`, the DuckDB file is opened for one query at a time so it never blocks a `make gold`). The live
+pitch and score (FOO-06) are not built: they need the Kafka stream. See [`app/streamlit/README.md`](../app/streamlit/README.md).

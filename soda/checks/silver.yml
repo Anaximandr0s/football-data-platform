@@ -1,0 +1,259 @@
+# Soda checks on the SILVER layer (FOO-05). Tables = views over the Iceberg tables lake.silver.* (see soda/run_checks.py).
+# Rules: docs/silver-guide.md section 5, columns and types: docs/contrat_donnees.md section 9.
+# Every check here must pass on a healthy Silver; `make soda-demo` shows that they fail on damaged data.
+
+checks for silver_tracking:
+  # --- contract ---
+  - schema:
+      name: tracking follows the data contract
+      fail:
+        when required column missing: [match_id, player_id, team_id, period, ts, x, y, speed_kmh, is_sprint, was_corrected, is_after_gap]
+        when forbidden column present: [kafka_partition, kafka_offset, kafka_ts, ingested_at]
+        when wrong column type:
+          match_id: VARCHAR
+          player_id: VARCHAR
+          team_id: VARCHAR
+          period: INTEGER
+          ts: INTEGER
+          x: DOUBLE
+          y: DOUBLE
+          speed_kmh: DOUBLE
+          is_sprint: BOOLEAN
+          was_corrected: BOOLEAN
+          is_after_gap: BOOLEAN
+  - row_count > 0:
+      name: tracking is not empty
+  # --- grain: one row per player per second (deduplication worked) ---
+  - duplicate_count(match_id, player_id, ts) = 0:
+      name: tracking has one row per (match_id, player_id, ts)
+  # --- values that must always exist (speed_kmh is the only nullable column) ---
+  - missing_count(match_id) = 0
+  - missing_count(player_id) = 0
+  - missing_count(team_id) = 0:
+      name: every tracking row has a team
+  - missing_count(ts) = 0
+  - missing_count(x) = 0
+  - missing_count(y) = 0
+  - missing_count(is_sprint) = 0
+  - missing_count(was_corrected) = 0
+  - missing_count(is_after_gap) = 0
+  - invalid_count(team_id) = 0:
+      name: tracking team_id is HOME or AWAY
+      valid values: [HOME, AWAY]
+  - invalid_count(period) = 0:
+      name: tracking period is 1 or 2
+      valid values: [1, 2]
+  # --- football rules ---
+  - failed rows:
+      name: positions are inside the 105 x 68 pitch
+      fail condition: x < 0 or x > 105 or y < 0 or y > 68
+  - max(speed_kmh) <= 40:
+      name: speed is at most 40 km/h (null allowed)
+  - min(speed_kmh) >= 0:
+      name: speed is never negative
+  - failed rows:
+      name: every existing second has exactly 22 players
+      fail query: |
+        select match_id, ts, count(*) as players from silver_tracking
+        group by match_id, ts having count(*) != 22
+  - failed rows:
+      name: is_sprint is true exactly when speed is above 25 km/h (never for a null speed)
+      fail condition: is_sprint != coalesce(speed_kmh > 25, false)
+  # --- consistency with the other Silver tables ---
+  - failed rows:
+      name: every tracked player exists in silver_players with the same team
+      fail query: |
+        select t.match_id, t.player_id, t.team_id, p.team_id as team_in_players
+        from (select distinct match_id, player_id, team_id from silver_tracking) t
+        left join silver_players p using (match_id, player_id)
+        where p.player_id is null or p.team_id != t.team_id
+  - failed rows:
+      name: tracking stays inside the playing time of the player
+      fail query: |
+        select t.match_id, t.player_id, t.ts, p.start_ts, p.end_ts
+        from silver_tracking t join silver_players p using (match_id, player_id)
+        where t.ts < p.start_ts or t.ts > p.end_ts
+
+checks for silver_events:
+  - schema:
+      name: events follow the data contract
+      fail:
+        when required column missing: [match_id, event_id, ts, period, player_id, receiver_id, team_id, type, x_start, y_start, x_end, y_end, outcome]
+        when forbidden column present: [kafka_partition, kafka_offset, kafka_ts, ingested_at]
+        when wrong column type:
+          match_id: VARCHAR
+          event_id: VARCHAR
+          ts: INTEGER
+          period: INTEGER
+          player_id: VARCHAR
+          receiver_id: VARCHAR
+          team_id: VARCHAR
+          type: VARCHAR
+          x_start: DOUBLE
+          y_start: DOUBLE
+          x_end: DOUBLE
+          y_end: DOUBLE
+          outcome: VARCHAR
+  - row_count > 0
+  - duplicate_count(event_id) = 0:
+      name: events have one row per event_id
+  - missing_count(match_id) = 0
+  - missing_count(event_id) = 0
+  - missing_count(player_id) = 0
+  - missing_count(team_id) = 0
+  - missing_count(type) = 0
+  - missing_count(outcome) = 0
+  - invalid_count(type) = 0:
+      name: event type is one of pass, shot, goal, tackle, foul, pressure
+      valid values: [pass, shot, goal, tackle, foul, pressure]
+  - invalid_count(team_id) = 0:
+      name: events team_id is HOME or AWAY
+      valid values: [HOME, AWAY]
+  - invalid_count(period) = 0:
+      name: events period is 1 or 2
+      valid values: [1, 2]
+  - failed rows:
+      name: every event player exists in silver_players with the same team
+      fail query: |
+        select e.match_id, e.event_id, e.player_id, e.team_id, p.team_id as team_in_players
+        from silver_events e left join silver_players p using (match_id, player_id)
+        where p.player_id is null or p.team_id != e.team_id
+  - failed rows:
+      name: a pass receiver is a player of the same team
+      fail query: |
+        select e.match_id, e.event_id, e.receiver_id
+        from silver_events e left join silver_players r on r.match_id = e.match_id and r.player_id = e.receiver_id
+        where e.type = 'pass' and e.receiver_id is not null and (r.player_id is null or r.team_id != e.team_id)
+  - failed rows:
+      name: events are oriented per team (HOME shots toward x = 105, AWAY shots toward x = 0)
+      fail query: |
+        select match_id, team_id, avg(x_start) as avg_shot_x from silver_events
+        where type in ('shot', 'goal') group by match_id, team_id
+        having (team_id = 'HOME' and avg(x_start) <= 52.5) or (team_id = 'AWAY' and avg(x_start) >= 52.5)
+  - failed rows:
+      name: goals in events equal home_score + away_score of the match
+      fail query: |
+        select m.match_id, m.home_score, m.away_score, g.home_goals, g.away_goals
+        from silver_matches m
+        left join (select match_id,
+                          count(*) filter (where team_id = 'HOME') as home_goals,
+                          count(*) filter (where team_id = 'AWAY') as away_goals
+                   from silver_events where type = 'goal' group by match_id) g using (match_id)
+        where coalesce(g.home_goals, 0) != m.home_score or coalesce(g.away_goals, 0) != m.away_score
+
+checks for silver_ball:
+  - schema:
+      name: ball follows the data contract
+      fail:
+        when required column missing: [match_id, ts, period, x, y, z]
+        when forbidden column present: [kafka_partition, kafka_offset, kafka_ts, ingested_at]
+        when wrong column type:
+          match_id: VARCHAR
+          ts: INTEGER
+          period: INTEGER
+          x: DOUBLE
+          y: DOUBLE
+          z: DOUBLE
+  - row_count > 0
+  - duplicate_count(match_id, ts) = 0:
+      name: ball has one row per (match_id, ts)
+  - missing_count(match_id) = 0
+  - missing_count(ts) = 0
+  - missing_count(x) = 0
+  - missing_count(y) = 0
+  - invalid_count(period) = 0:
+      name: ball period is 1 or 2
+      valid values: [1, 2]
+  - failed rows:
+      name: the ball is tracked in the same seconds as the players
+      fail query: |
+        select b.match_id, b.ts from silver_ball b
+        where not exists (select 1 from silver_tracking t where t.match_id = b.match_id and t.ts = b.ts)
+
+checks for silver_players:
+  - schema:
+      name: players follow the data contract
+      fail:
+        when required column missing: [match_id, player_id, team_id, name, short_name, position, shirt_number, start_ts, end_ts]
+        when forbidden column present: [kafka_partition, kafka_offset, kafka_ts, ingested_at]
+        when wrong column type:
+          match_id: VARCHAR
+          player_id: VARCHAR
+          team_id: VARCHAR
+          name: VARCHAR
+          short_name: VARCHAR
+          position: VARCHAR
+          shirt_number: INTEGER
+          start_ts: INTEGER
+          end_ts: INTEGER
+  - row_count > 0
+  - duplicate_count(match_id, player_id) = 0:
+      name: players have one row per (match_id, player_id)
+  - missing_count(player_id) = 0
+  - missing_count(name) = 0
+  - invalid_count(team_id) = 0:
+      name: players team_id is HOME or AWAY
+      valid values: [HOME, AWAY]
+  - failed rows:
+      name: a player enters before he leaves
+      fail condition: start_ts > end_ts
+  - failed rows:
+      name: each team has at least 11 players on record
+      fail query: |
+        select match_id, team_id, count(*) as players from silver_players
+        group by match_id, team_id having count(*) < 11
+
+checks for silver_matches:
+  - schema:
+      name: matches follow the data contract
+      fail:
+        when required column missing: [match_id, competition, season, round, kickoff_utc, stadium, home_team, away_team, home_team_short, away_team_short, home_color, away_color, home_score, away_score, pitch_length, pitch_width, p1_start_ts, p1_end_ts, p2_start_ts, p2_end_ts, home_side_p1, home_side_p2]
+        when forbidden column present: [kafka_partition, kafka_offset, kafka_ts, ingested_at]
+        when wrong column type:
+          match_id: VARCHAR
+          home_team: VARCHAR
+          away_team: VARCHAR
+          home_score: INTEGER
+          away_score: INTEGER
+          pitch_length: DOUBLE
+          pitch_width: DOUBLE
+          p1_start_ts: INTEGER
+          p1_end_ts: INTEGER
+          p2_start_ts: INTEGER
+          p2_end_ts: INTEGER
+          home_side_p1: VARCHAR
+          home_side_p2: VARCHAR
+  - row_count > 0
+  - duplicate_count(match_id) = 0:
+      name: matches have one row per match_id
+  - missing_count(home_team) = 0
+  - missing_count(away_team) = 0
+  - missing_count(home_score) = 0
+  - missing_count(away_score) = 0
+  - invalid_count(home_side_p1) = 0:
+      valid values: [left_to_right, right_to_left]
+  - invalid_count(home_side_p2) = 0:
+      valid values: [left_to_right, right_to_left]
+  - failed rows:
+      name: the pitch is 105 x 68
+      fail condition: pitch_length != 105 or pitch_width != 68
+  - failed rows:
+      name: period 1 ends before period 2 starts
+      fail condition: p1_start_ts > p1_end_ts or p1_end_ts >= p2_start_ts or p2_start_ts > p2_end_ts
+  # --- row counts after deduplication = the table of docs/silver-guide.md section 2 (matches listed there only) ---
+  - failed rows:
+      name: row counts after deduplication equal the silver guide (section 2)
+      fail query: |
+        with expected(match_id, tracking, events, ball, players, matches) as (
+              values ('m001', 97416, 1741, 4428, 32, 1), ('m002', 105534, 1878, 4797, 32, 1)),
+             got as (select m.match_id,
+                            (select count(*) from silver_tracking t where t.match_id = m.match_id) as tracking,
+                            (select count(*) from silver_events e where e.match_id = m.match_id) as events,
+                            (select count(*) from silver_ball b where b.match_id = m.match_id) as ball,
+                            (select count(*) from silver_players p where p.match_id = m.match_id) as players,
+                            (select count(*) from silver_matches x where x.match_id = m.match_id) as matches
+                     from silver_matches m)
+        select g.*, e.tracking as expected_tracking, e.events as expected_events, e.ball as expected_ball
+        from got g join expected e using (match_id)
+        where g.tracking != e.tracking or g.events != e.events or g.ball != e.ball
+           or g.players != e.players or g.matches != e.matches

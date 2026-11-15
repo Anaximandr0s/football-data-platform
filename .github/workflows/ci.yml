@@ -28,3 +28,22 @@ jobs:
 
       - name: Unit tests
         run: python -m pytest -q
+
+  # Soda Core 3.5 pins duckdb==1.0.0, which cannot open the Gold file (DuckDB 2.0): it gets its own job and the same
+  # install as soda/Dockerfile (connector WITHOUT its dependencies). The main job skips tests/soda: Soda is not installed there.
+  soda:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Soda Core with DuckDB 2.0
+        run: |
+          pip install "soda-core==3.5.6" "duckdb>=2.0,<2.1" pandas pyarrow pytest pyyaml
+          pip install --no-deps "soda-core-duckdb==3.5.6"
+
+      - name: Soda check tests
+        run: python -m pytest tests/soda -q

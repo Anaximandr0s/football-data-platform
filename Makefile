@@ -1,7 +1,7 @@
 # Shortcuts (Linux/macOS/WSL). Without make, run the plain commands from README.md.
 # Docker needs sudo on your machine?  make up DOCKER="sudo docker"
 .DEFAULT_GOAL := help
-.PHONY: help up down reset ps logs topics counts smoke lint test data bronze replay check silver gold gold-sql
+.PHONY: help up down reset ps logs topics counts smoke lint test data bronze replay check silver gold gold-sql soda soda-silver soda-gold soda-demo app app-stop
 
 DOCKER ?= docker
 COMPOSE = $(DOCKER) compose
@@ -18,11 +18,11 @@ up: ## Start MinIO + Kafka + Kafka UI (creates .env if missing)
 	@test -f .env || cp .env.example .env
 	$(COMPOSE) up -d
 
-down: ## Stop (data kept)
-	$(COMPOSE) down
+down: ## Stop (data kept), dashboard included
+	$(COMPOSE) --profile app down
 
 reset: ## Stop and DELETE all data (topics, buckets)
-	$(COMPOSE) down -v
+	$(COMPOSE) --profile app down -v
 
 ps: ## Container status
 	$(COMPOSE) ps -a
@@ -66,3 +66,23 @@ gold: ## Silver -> Gold with dbt + DuckDB in Docker (models, tests, export to s3
 
 gold-sql: ## Query the Gold DuckDB file (read-only): make gold-sql Q="select * from gold_shots limit 5"
 	$(COMPOSE) --profile jobs run --rm duckdb "$(Q)"
+
+soda: ## Soda checks on Silver then Gold (exit code 1 if one fails): make soda
+	$(COMPOSE) --profile jobs run --rm soda --layer all
+
+soda-silver: ## Soda checks on the Silver Iceberg tables only
+	$(COMPOSE) --profile jobs run --rm soda --layer silver
+
+soda-gold: ## Soda checks on the Gold DuckDB file only
+	$(COMPOSE) --profile jobs run --rm soda --layer gold
+
+soda-demo: ## Show the checks catching damaged data ON PURPOSE (a copy is corrupted, nothing is written)
+	$(COMPOSE) --profile jobs run --rm soda --layer silver --demo-failure
+	$(COMPOSE) --profile jobs run --rm soda --layer gold --demo-failure
+
+app: ## Dashboard (Streamlit) on http://localhost:8501 (needs `make gold`; `make soda` fills the quality page)
+	$(COMPOSE) --profile app up -d --build app
+	@echo "dashboard: http://localhost:8501"
+
+app-stop: ## Stop the dashboard
+	$(COMPOSE) --profile app stop app

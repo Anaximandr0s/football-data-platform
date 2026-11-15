@@ -11,6 +11,7 @@ __pycache__/
 # data: downloaded or produced by the scripts, never committed
 data/raw/
 data/prepared/
+data/soda/
 *.parquet
 *.jsonl
 *.duckdb

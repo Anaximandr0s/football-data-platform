@@ -33,6 +33,9 @@ def measure(raw_counts: dict[str, int], tracking: DataFrame, events: DataFrame, 
     b = ball.agg(F.count("*").alias("rows"), F.countDistinct("ts").alias("distinct_keys")).first()
     p = players.agg(F.count("*").alias("rows"), F.countDistinct("match_id", "player_id").alias("distinct_keys")).first()
     m = matches.first()
+    shots = {r["team_id"]: [r["avg_x"], r["n"]] for r in
+             events.filter(F.col("type").isin("shot", "goal")).groupBy("team_id")
+             .agg(F.avg("x_start").alias("avg_x"), F.count("*").alias("n")).collect()}
     goals = {r["team_id"]: r["n"] for r in
              events.filter(F.col("type") == "goal").groupBy("team_id").agg(F.count("*").alias("n")).collect()}
     return {
@@ -45,6 +48,7 @@ def measure(raw_counts: dict[str, int], tracking: DataFrame, events: DataFrame, 
                      "sprints": t["sprints"] or 0, "after_gap": t["after_gap"] or 0,
                      "team_null": t["team_null"] or 0, "outside_after_clip": t["outside_after"] or 0,
                      "speed_max": t["speed_max"], "seconds_with_data": t["seconds"]},
+        "shot_avg_x": shots,      # {team: [mean x_start of its shots and goals, how many]}
         "goals_home_away": [int(goals.get("HOME", 0)), int(goals.get("AWAY", 0))],
         "score_home_away": [int(m["home_score"]), int(m["away_score"])] if m else None,
     }
@@ -66,6 +70,14 @@ def evaluate(metrics: dict, manifest: dict | None) -> list[tuple[str, bool, str]
                 f"{tr['outside_after_clip']} outside"))
     goals, score = metrics["goals_home_away"], metrics["score_home_away"]
     out.append(("events: goals equal the final score", goals == score, f"goals={goals} score={score}"))
+
+    # frame gate: in the Silver frame HOME attacks toward x = 105 and AWAY toward x = 0, so HOME's shots must sit on the
+    # right half on average and AWAY's on the left half (judged only with 3 shots or more: a mean of 1 or 2 shots means little)
+    for team, ok_side in (("HOME", lambda x: x > 52.5), ("AWAY", lambda x: x < 52.5)):
+        avg, n = metrics.get("shot_avg_x", {}).get(team, [None, 0])
+        if avg is not None and n >= 3:
+            out.append((f"events: {team} shots are on the half it attacks (frame of Silver)", ok_side(avg),
+                        f"mean x = {avg:.1f} over {n} shots"))
 
     if manifest is None:
         return out
