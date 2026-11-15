@@ -57,7 +57,6 @@ COMING = {
                        5),
     "pipeline_lineage": ("the Dagster asset graph and the dbt lineage of every Gold table", 8),
     "sources_limits": ("SkillCorner open data, 1 Hz tracking, estimated positions, no expected goals", 8),
-    "match_story": ("goals on a timeline, momentum, possession per 5 minutes and the 3 key differences", 4),
     "team_analysis": ("team shape, pressing, build-up, attack side and space control", 5),
     "physical_fatigue": ("who faded: distance in the first 15 against the last 5 minutes on the pitch", 5),
     "live_match": ("the 5-minute stats of Spark Streaming (possession, distance, top speed, pressing)", 6),
@@ -118,6 +117,11 @@ def style() -> None:
     .ml-board .team {flex:1; font-weight:600; font-size:1rem; line-height:1.25;} .ml-board .away {text-align:right;}
     .ml-board .score {font-size:1.7rem; font-weight:800; letter-spacing:.06em; white-space:nowrap;}
     .ml-meta {color:#8fa69a; font-size:.85rem;}
+    .ml-say {font-size:1.05rem; color:#e8f0ea; border-left:3px solid #3ddc84; padding:.2rem 0 .2rem .8rem;
+             margin:.2rem 0 1.4rem 0;}
+    .ml-scoreline {display:flex; align-items:center; justify-content:center; gap:1.6rem; margin:.4rem 0 .6rem 0;}
+    .ml-scoreline .team {font-size:1.5rem; font-weight:700; flex:1;} .ml-scoreline .team:first-child {text-align:right;}
+    .ml-scoreline .score {font-size:2.8rem; font-weight:800; letter-spacing:.06em;}
     .ml-stats {display:grid; gap:.35rem; margin:.6rem 0;} .ml-stats div {display:flex; justify-content:space-between;
                border-bottom:1px solid #1d3b2c; padding:.25rem 0;} .ml-stats span {color:#b9c8bf;}
     .ml-stats b {font-size:1.15rem;}

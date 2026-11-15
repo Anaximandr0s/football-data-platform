@@ -18,11 +18,16 @@ def texts(at: AppTest) -> str:
     return " ".join(m.value for m in at.markdown)
 
 
-def test_match_story_shows_the_scoreboard_and_the_team_comparison(app_env):
+def test_match_story_tells_the_match_in_sentences(app_env):
     at = run("sections/match_story.py")
     assert not at.exception
-    assert "Home FC" in texts(at) and "Away FC" in texts(at) and "1 - 0" in texts(at)
-    assert "Distance (km)" in texts(at) and "Pass accuracy" in texts(at)
+    page = texts(at)
+    assert "Home FC" in page and "<span class='score'>1 - 0</span>" in page
+    assert "One goal: Home scored it in minute 1 (H. One), final score 1-0." in page      # ts 5
+    assert "H. One and H. Two shared the hub role of Home" in page
+    assert "won because" not in page and page.count("class='ml-say'") >= 6
+    assert "about 28 km/h" in page and "about 30" not in page                    # top speed from detected positions
+    assert "It is not xG" in " ".join(c.value for c in at.caption)
 
 
 def test_player_page_fan_mode_shows_card_badges_scores_pitch_and_f8(app_env):

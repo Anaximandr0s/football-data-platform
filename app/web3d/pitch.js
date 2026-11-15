@@ -6,7 +6,8 @@
 //   frame    [ts, bx, by, id, x, y, detected, ...]      one second (Live)
 //   frames   {ids: [...], t: [ts...], xy: [[bx, by, x0, y0, d0, x1, ...] per second in decimetres, -1 = absent]}
 //            with speed (match seconds per real second) and start (ts): a whole match, played in the browser
-//   heat     {nx, ny, cells: [share...], color}          shots [[x, y, xe, ye, goal]]   passes [[x, y, xe, ye, ok]]
+//   heat     {nx, ny, cells: [share...], color}          shots [[x, y, xe, ye, goal, color?]]   passes [[x, y, xe, ye, ok]]
+//   network  {color, nodes: [[x, y, passes, label, hub]], edges: [[x1, y1, x2, y2, passes]]}
 //   selected player id (ringed)                         arrows {home: "right" | "left"}  clickable (bool)
 // Sends back: player (the id of a clicked player).
 
@@ -78,6 +79,7 @@ function draw(s, now) {
   field(s);
   if (d.heat) heat(s, d.heat);
   if (d.passes) arrows(s, d.passes, "#e8f0ea");
+  if (d.network) network(s, d.network);
   if (d.shots) shots(s, d.shots);
   if (d.arrows) attack(s, d.arrows);
   s.drawn = [];
@@ -139,14 +141,34 @@ function arrows(s, list, color) {
 
 function shots(s, list) {
   const ctx = s.ctx;
-  for (const [x, y, xe, ye, goal] of list) {
+  for (const [x, y, xe, ye, goal, color] of list) {
+    const c = color || "#f4c430";
     if (xe != null) {
-      ctx.strokeStyle = "rgba(244,196,48,0.55)"; ctx.lineWidth = Math.max(1, s.k * 0.2);
+      ctx.strokeStyle = c; ctx.globalAlpha = 0.45; ctx.lineWidth = Math.max(1, s.k * 0.2);
       ctx.beginPath(); ctx.moveTo(px(s, x), py(s, y)); ctx.lineTo(px(s, xe), py(s, ye)); ctx.stroke();
+      ctx.globalAlpha = 1;
     }
-    ctx.beginPath(); ctx.arc(px(s, x), py(s, y), s.k * (goal ? 1.5 : 1.1), 0, 2 * Math.PI);
-    ctx.fillStyle = goal ? "#f4c430" : "rgba(244,196,48,0.25)"; ctx.fill();
-    ctx.strokeStyle = "#f4c430"; ctx.lineWidth = Math.max(1, s.k * 0.2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(px(s, x), py(s, y), s.k * (goal ? 1.6 : 1.1), 0, 2 * Math.PI);
+    ctx.fillStyle = goal ? c : "rgba(11,20,16,0.6)"; ctx.fill();
+    ctx.strokeStyle = goal ? "#f4c430" : c; ctx.lineWidth = Math.max(1.5, s.k * (goal ? 0.4 : 0.25)); ctx.stroke();
+  }
+}
+
+// pass network: lines between average positions (width = passes), nodes sized by passes made, the hub ringed in gold
+function network(s, n) {
+  const ctx = s.ctx, top = Math.max(1, ...n.edges.map((e) => e[4])), most = Math.max(1, ...n.nodes.map((p) => p[2]));
+  for (const [x1, y1, x2, y2, w] of n.edges) {
+    ctx.strokeStyle = n.color; ctx.globalAlpha = 0.25 + 0.6 * w / top; ctx.lineWidth = Math.max(1, s.k * 1.1 * w / top);
+    ctx.beginPath(); ctx.moveTo(px(s, x1), py(s, y1)); ctx.lineTo(px(s, x2), py(s, y2)); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  for (const [x, y, passes, label, isHub] of n.nodes) {
+    const r = s.k * (1.2 + 1.6 * Math.sqrt(passes / most));
+    ctx.beginPath(); ctx.arc(px(s, x), py(s, y), r, 0, 2 * Math.PI);
+    ctx.fillStyle = n.color; ctx.fill();
+    ctx.lineWidth = isHub ? 3.5 : 1.5; ctx.strokeStyle = isHub ? "#f4c430" : "rgba(11,20,16,0.9)"; ctx.stroke();
+    ctx.fillStyle = ink(n.color); ctx.font = `800 ${Math.round(Math.max(10, r * 0.95))}px system-ui, sans-serif`;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(String(label), px(s, x), py(s, y) + 0.5);
   }
 }
 

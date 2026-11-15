@@ -17,7 +17,7 @@ import streamlit as st
 ROOT = Path(__file__).resolve().parents[2]
 GOLD_TABLES = ("gold_player_match_stats", "gold_team_match_stats", "gold_zone_occupancy",
                "gold_pass_network", "gold_shots", "gold_player_5min", "gold_match_library", "gold_player_card",
-               "gold_player_fatigue", "gold_events")
+               "gold_player_fatigue", "gold_events", "gold_match_timeline", "gold_team_profile")
 CREDIT = "Data: SkillCorner open data (MIT licence). Real tracking data of A-League matches."
 CAVEAT = ("Distances, speeds and sprints cover **tracked seconds only** (about 3/4 of each match) and come from 1 Hz "
           "positions: they are approximate and under-estimate real values. Compare players inside a match rather than "

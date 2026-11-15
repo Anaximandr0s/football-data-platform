@@ -22,11 +22,12 @@ def frame_list(ts: int, ball: tuple | None, positions: dict) -> list:
 
 def show(*, key: str, players: dict, colors: dict, frame: list | None = None, frames: dict | None = None,
          start: int | None = None, speed: float = 1.0, heat: dict | None = None, shots: list | None = None,
-         passes: list | None = None, selected: str | None = None, arrows: dict | None = None,
+         passes: list | None = None, network: dict | None = None, selected: str | None = None,
+         arrows: dict | None = None,
          message: str | None = None, clickable: bool = True) -> str | None:
     """Draw the pitch; return the id of the player clicked in this run (None if no click)."""
     data = {"players": players, "colors": colors, "frame": frame, "frames": frames, "start": start, "speed": speed,
-            "heat": heat, "shots": shots, "passes": passes, "selected": selected, "arrows": arrows,
+            "heat": heat, "shots": shots, "passes": passes, "network": network, "selected": selected, "arrows": arrows,
             "message": message, "clickable": clickable}
     result = _component(data=data, key=key, on_player_change=lambda: None)
     return result.player
