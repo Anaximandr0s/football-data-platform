@@ -215,6 +215,7 @@ Not proposed: EPV, xLoss and xShot. They are model outputs no question uses.
 | `gold_space_control` | match x team x 5-min window | mean space share over tracked seconds, by phase (in possession / opponent in possession / unknown), seconds used. Built from `int_space_control_second` (match x second: HOME share, AWAY = 1 - HOME) | S1 |
 | `gold_replay_frames` | match x second x object (players and ball) | x, y, team, shirt number, `is_detected`, possession, HOME space share of the second | R1, S1 |
 | `gold_events` | one row per event, runs included | the Silver event columns plus player names, `x_att`, `y_att`, third and lane, phase, `xthreat`, `dangerous`, `speed_band`, `subtype` | E1, E2 |
+| `gold_match_library` | match | teams, colours, score, kick-off date, competition, round, stadium, tracked share | Match library, Home |
 
 `gold_match_timeline` also gets `xthreat_successful_passes` per team and window, the input of E2.
 
@@ -233,7 +234,7 @@ BEHIND THE DATA is for the jury. The ids point to sections 3, 4 and 8.1; FOO-xx 
 |---|---|---|---|---|---|
 | | Home | Who am I, and which match do I look at? | both | MatchLens logo, "I am a Fan / I am a Coach" (opens FAN VIEW or COACH VIEW), match picked from the Match library | |
 | LIVE | Live match | What is happening right now, and how is this player doing so far? | both | Kafka topics `foot-tracking`, `foot-ball`, `foot-events`, `foot-players`, `foot-matches`; `foot-live-stats` written by Spark Streaming | pitch, score, clock, possession (F2 now), C1 (current second); click a player: distance, top speed, sprints and heatmap so far (F4, F5, FOO-07); per 5 min: F2, F4, F5, C3 (FOO-08) |
-| MATCHES | Match library | Which matches are stored, and how did they end? | both | match facts (teams, score, date): see open question 1 | |
+| MATCHES | Match library | Which matches are stored, and how did they end? | both | `gold_match_library` | |
 | MATCHES | Replay | What did a stored match look like at any moment? | both | `gold_replay_frames`, `gold_space_control`; the stats panel reads `gold_player_5min`, `gold_match_timeline` up to the replay time | R1, S1; panel: the same as Live (F4, F5, sprints, heatmap so far, F2, C3 per 5 min) |
 | MATCHES | Compare matches | Is this how a team usually plays? (any matches) | both | `gold_team_profile` | C7, F7 gaps |
 | FAN VIEW | Match story | How did the match go, and why did it end this way? | fans | `gold_match_timeline`, `gold_shots`, `gold_team_profile` | F1 (goals on the timeline), E2 (momentum), F2, F7 (3 key differences) |
@@ -270,7 +271,7 @@ for the eye, but every number it shows comes from `gold_replay_frames`, so the r
 
 Rule: one pitch component, reused by Live, Replay and the Player page, with clickable players.
 
-Proposed technology (to approve before building): a **Streamlit custom component v2** (`st.components.v2.component`,
+Technology (approved): a **Streamlit custom component v2** (`st.components.v2.component`,
 available in our Streamlit 1.67): our own HTML, CSS and JavaScript passed as strings, drawn on a `<canvas>`, no npm
 build, libraries vendored as files in `app/web3d`. It sends a click back to Python (`setTriggerValue("player", id)`),
 and it animates in the browser between two data updates. Layers, each switched on by the page: players and ball,
@@ -278,10 +279,10 @@ trails, Voronoi cells, heatmap grid, shots, pass arrows, detected-only toggle.
 
 | Option | Click on a player | Moves smoothly | One component for Live, Replay, Player | Verdict |
 |---|---|---|---|---|
-| Custom component v2 + canvas | yes (tested) | yes, in the browser (tested) | yes | proposed |
+| Custom component v2 + canvas | yes (tested) | yes, in the browser (tested) | yes | chosen |
 | Plotly (`st.plotly_chart`, `on_select="rerun"`) | yes (tested) | no: each move is a Python rerun; Voronoi and trails are heavy (section 9) | Live and Player yes, Replay no | fallback |
 | mplsoccer image (today's Live page) | no | no | no | kept for static charts only |
-| `st.components.v1.html` (section 9's first choice) | no: one-way | yes | no | replaced, if approved |
+| `st.components.v1.html` (section 9's first choice) | no: one-way | yes | no | replaced |
 
 Both click tests ran on 2026-11-15 in headless Chrome against a throwaway Streamlit 1.67 app (not committed):
 
@@ -289,7 +290,8 @@ Both click tests ran on 2026-11-15 in headless Chrome against a throwaway Stream
 - Component v2: the dot moved from x = 122 to 174, 222 and 270 px in 0.6 s without any Python rerun, and a click on the
   other player returned `A04` to Python.
 
-What the test does not show yet: a full match in the component (size and frame rate), the component inside
+Its first test, in step 3: a full match (22 players and the ball over m001's 4,428 tracked seconds) inside the 1 s
+refresh of the Live page. What the throwaway test does not show yet: a full match in the component (size and frame rate), the component inside
 `st.fragment` refreshes (Live), and a click test that runs in CI (it needs a browser; `streamlit.testing` cannot click
 inside a component).
 
@@ -307,26 +309,27 @@ inside a component).
 Dropped from the old plan (section 8 before this version): the pages "Player cards" (now Squad + Player page), "Shots &
 passes" (split above) and "Team shape & pressing" (now part of Team analysis, with build-up and attack side); "Data
 quality reads `gold_replay_frames`" (it reads `gold_space_control`); the one-way `st.components.v1.html` replay
-(section 9, if the component above is approved). No Gold table is dropped: all 15 are read by a page, and
+(section 9). No Gold table is dropped: all 15 are read by a page, and
 `gold_replay_frames` is still built in the Replay step. Section 6 items 6 and 7 (`phases_of_play` as a table, passing
 options) stay out: no page needs them.
 
-Open questions (I will not decide them alone):
+Decisions (review of 2026-11-15):
 
-1. **Match library needs the date and competition**, which no Gold table holds (they are in `silver.matches`). Options:
-   a small `gold_match_library` table (one row per match: teams, score, date, competition, round, tracked share), or
-   three columns added to `gold_team_match_stats` (an existing table changes).
-2. **Live player stats "so far"** (distance, top speed, sprints, heatmap): proposed in the page from the Kafka
-   positions, like C1, with the formulas of F4, F5 and FOO-07 (top speed with both positions detected), and Spark only
-   for the 5-minute windows. The other way is Spark for both.
-3. **Player page**: one page with a fan mode and a coach mode (proposed), or two pages.
+1. **Match library**: a new table `gold_match_library` (one row per match: teams, colours, score, kick-off date,
+   competition, round, stadium, tracked share), built in step 2.
+2. **Live player stats "so far"** (distance, top speed, sprints, heatmap): computed in the page from the Kafka
+   positions, like C1, with the formulas of F4, F5 and FOO-07 (top speed with both positions detected). The formulas
+   live in one shared Python module used by the page, with a test that the live values at full time equal Gold. Spark
+   computes only the 5-minute windows.
+3. **Player page**: one page with a fan mode and a coach mode.
+4. **Demo start time**: the producer takes `mm:ss`.
 
 ## 9. Smooth replay
 
 | Option | How it plays | Verdict |
 |---|---|---|
-| Pitch component (custom component v2, canvas, our JavaScript in `app/web3d`) | the page sends the match once; the browser animates, interpolating between seconds, and sends clicks back | proposed (section 8.2) |
-| Streamlit HTML component (`st.components.v1.html`) with our JavaScript in `app/web3d` | the same animation, but one-way: a click cannot reach Python, so no stats panel on click | first choice, replaced if the component is approved |
+| Pitch component (custom component v2, canvas, our JavaScript in `app/web3d`) | the page sends the match once; the browser animates, interpolating between seconds, and sends clicks back | chosen (section 8.2) |
+| Streamlit HTML component (`st.components.v1.html`) with our JavaScript in `app/web3d` | the same animation, but one-way: a click cannot reach Python, so no stats panel on click | first choice, replaced |
 | Streamlit loop redrawing an mplsoccer figure | one server render per frame, no interpolation between seconds | too slow for 0.25x to 8x |
 | Plotly animation frames | built-in play button, but every frame and every Voronoi polygon lives in the figure | too heavy with Voronoi and trails |
 | Two-way custom Streamlit component (React + npm) | same rendering, plus messages back to Python | a build step we do not need: component v2 does it without one |
@@ -371,15 +374,15 @@ In this order. Each step is one branch, merged before the next starts; "check" i
 | # | Step | What you will see | How you check it |
 |---|---|---|---|
 | 1 | Gold metrics (current, merged) | 15 Gold tables answering sections 3, 4 and 8.1 | `make gold` and `make soda` green; the independent pandas recomputations in `requirements-coverage.md` |
-| 2 | Site skeleton | one app with the sections Home, LIVE, MATCHES, FAN VIEW, COACH VIEW, BEHIND THE DATA; every page present, each stating its question, persona and source; Home with a text logo, the Fan / Coach choice and a match picker; the chosen match follows you from page to page | headless page tests (`streamlit.testing`): every page renders without error, the chosen match and persona are kept, each page shows its question; you click through every page in a browser |
-| 3 | Player pages + pitch component | the pitch component (section 8.2) on the Player page with heatmap, shots and passes layers; Squad as cards; a click on a card or a dot opens the Player page, fan or coach mode | Python tests of the data sent to each layer (counts equal Gold); one browser test (Playwright) that clicks a player and checks the page that opens; you click three players |
+| 2 | Site skeleton | one app with the sections Home, LIVE, MATCHES, FAN VIEW or COACH VIEW (the one chosen), BEHIND THE DATA; existing pages moved to their place (section 8.3), new pages "coming soon" with their question; Home with a text logo, the Fan / Coach choice and a match chooser; the chosen view and match follow you from page to page; `gold_match_library` and the Match library page | headless page tests (`streamlit.testing`): every page renders without error, the chosen match and persona are kept, each page shows its question; you click through every page in a browser |
+| 3 | Player pages + pitch component | first, a full match (22 players and the ball, 4,428 s) in the pitch component inside the 1 s Live refresh; then the pitch component (section 8.2) on the Player page with heatmap, shots and passes layers; Squad as cards; a click on a card or a dot opens the Player page, fan or coach mode | Python tests of the data sent to each layer (counts equal Gold); one browser test (Playwright) that clicks a player and checks the page that opens; you click three players |
 | 4 | Fan pages | Match story (goals on the timeline, momentum, possession per 5 min with greyed windows, 3 key differences as sentences) and the finished Squad | page tests that read the numbers shown and compare them with Gold; screenshots of m001 and m002 |
-| 5 | Coach pages + Compare + 2 to 4 matches | Team analysis, Physical & fatigue, Event explorer, Player page coach mode; Compare matches with any matches; the Match library lists the new matches | `make data`, `make replay`, `make silver`, `make gold`, `make soda` green for every match; page tests; Compare shows Brisbane Roar in 3 matches |
-| 6 | Spark Streaming (FOO-08) | on Live, the 5-minute panel fills while the replay runs (F2, F4, F5, C3), and the player click shows his live stats so far | the streaming windows of a full replay compared with the batch twins (`gold_player_5min`, `gold_match_timeline`) of the same match, value by value; you watch a replay at x5 |
+| 5 | Coach pages + Compare + 2 matches | Team analysis, Physical & fatigue, Event explorer, Player page coach mode; Compare matches with any matches; the Match library lists 2007448 and 1996435 (2011166 only if time allows) | `make data`, `make replay`, `make silver`, `make gold`, `make soda` green for every match; page tests; Compare shows Brisbane Roar in 3 matches |
+| 6 | Spark Streaming (FOO-08) | on Live, the 5-minute panel fills while the replay runs (F2, F4, F5, C3), and the player click shows his live stats so far | the streaming windows of a full replay compared with the batch twins (`gold_player_5min`, `gold_match_timeline`) of the same match, value by value; a test that the live stats so far at full time equal Gold (shared formula module); you watch a replay at x5 |
 | 7 | Replay | a stored match played at 0.25x to 8x with play/pause, trails, Voronoi, detected-only toggle, and the stats panel on click | frames sent = tracked seconds of the match; the panel at the last second equals the Gold totals; payload size measured; you play goal 5 of m001 at 4x |
 | 8 | Dagster + Behind the data | a Dagster asset graph (ingestion to Bronze, Silver, Gold, Soda checks) where a failing check blocks what follows; the Data quality, Pipeline & lineage and Sources & limits pages | one green Dagster run for a match; one run with a damaged table that stops at the check; the three pages in a browser |
 | 9 | Design and logo | MatchLens logo, colours and type, light and dark, cards and pitch in the same style | screenshots of every page in light and dark; no horizontal scroll at phone width (390 px) |
-| 10 | Demo preparation | the producer option "start at minute N" (`mm:ss`, so a replay can start 30 s before a goal), a command that empties the Kafka topics before a demo, and the demo script of section 13 | two timed dry runs of section 13 with a stopwatch, each under 10 minutes; a fresh start shows only the demo replay |
+| 10 | Demo preparation | the producer option "start at `mm:ss`" (so a replay can start 30 s before a goal), a command that empties the Kafka topics before a demo, and the demo script of section 13 | two timed dry runs of section 13 with a stopwatch, each under 10 minutes; a fresh start shows only the demo replay |
 
 ## 13. Demo script (10 minutes)
 
@@ -396,8 +399,8 @@ Before the jury arrives: stack up, Kafka topics emptied (step 10), Gold built fo
 | 8:00 - 9:30 | BEHIND THE DATA | Pipeline & lineage (Dagster graph, dbt lineage); Data quality: run the damaged-data demo and show the failing Soda check and the step it blocks | we trust a number because a check would stop it |
 | 9:30 - 10:00 | Sources & limits | SkillCorner open data, 1 Hz, estimated positions, no xG | what the data cannot say |
 
-The live clock is the replay clock (`ts`); the goal at 05:26 is `ts` 326 in Gold. If "start at minute N" accepts only
-whole minutes, the replay starts at 05:00 and the goal comes 26 s later.
+The live clock is the replay clock (`ts`); the goal at 05:26 is `ts` 326 in Gold. The producer takes the start as `mm:ss`
+(step 10), so the replay starts at 04:56, 30 s before the goal.
 
 ## 14. More matches
 
@@ -416,7 +419,7 @@ Soda checks enforce it, so only the 8 other 105 x 68 matches can be added withou
 | 2011166 | 2025-04-12 | Wellington Phoenix - Melbourne Victory | 2-3 |
 | 2017461 | 2025-05-17 | Melbourne Victory - Auckland FC | 0-1 |
 
-Proposed, in this order:
+Decided (review of 2026-11-15): 2007448 and 1996435 are added in step 5; 2011166 only if time allows; 1927964 is not added.
 
 1. **2007448, Perth Glory 1-3 Brisbane Roar.** The demo team's third match, its only away match, and a rematch of m002
    (Brisbane 0-1 Perth). It gives F8 three columns and C7 a home/away comparison against the same opponent.
