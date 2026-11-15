@@ -81,9 +81,9 @@ Names are settable with `SILVER_CATALOG`, `SILVER_NAMESPACE`, `SILVER_WAREHOUSE`
 
 | Table | Grain | Columns |
 |---|---|---|
-| `silver.tracking` | player x second (FOO-03) | `match_id, player_id, team_id, period, ts, x, y, speed_kmh, is_sprint, was_corrected, is_after_gap` |
+| `silver.tracking` | player x second (FOO-03) | `match_id, player_id, team_id, period, ts, x, y, speed_kmh, is_sprint, was_corrected, is_after_gap, is_detected` |
 | `silver.events` | one action | the bronze columns without Kafka metadata: `match_id, event_id, ts, period, player_id, receiver_id, team_id, type, x_start, y_start, x_end, y_end, outcome` |
-| `silver.ball` | second | `match_id, ts, period, x, y, z` |
+| `silver.ball` | second | `match_id, ts, period, x, y, z, possession` |
 | `silver.players` | player of a match | bronze columns without Kafka metadata |
 | `silver.matches` | match | bronze columns without Kafka metadata |
 

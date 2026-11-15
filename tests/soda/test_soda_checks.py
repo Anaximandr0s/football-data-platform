@@ -48,22 +48,26 @@ def silver_tables() -> dict:
     tracking = []
     for pid, team in players:
         for ts, speed in ((0, None), (1, 10.0), (2, 26.0)):
-            tracking.append(("mx", pid, team, 1, ts, 50.0, 34.0, speed, bool(speed and speed > 25), False, False))
+            tracking.append(("mx", pid, team, 1, ts, 50.0, 34.0, speed, bool(speed and speed > 25), False, False,
+                             ts != 1))
     events = [("mx-e1", 0, "H01", "H02", "HOME", "pass", 40.0, 30.0, 50.0, 30.0, "successful"),
               ("mx-e2", 1, "H01", None, "HOME", "shot", 90.0, 30.0, 105.0, 34.0, "shot"),
               ("mx-e3", 2, "H01", None, "HOME", "goal", 100.0, 34.0, 105.0, 34.0, "shot"),
-              ("mx-e4", 2, "A01", None, "AWAY", "shot", 10.0, 34.0, 0.0, 34.0, "shot")]
+              ("mx-e4", 2, "A01", None, "AWAY", "shot", 10.0, 34.0, 0.0, 34.0, "shot"),
+              ("mx-r1", 1, "H03", None, "HOME", "run", 60.0, 30.0, 80.0, 20.0, "n/a")]
     i32 = {"ts": "int32", "period": "int32", "shirt_number": "int32", "start_ts": "int32", "end_ts": "int32"}
     frames = {
         "tracking": pd.DataFrame(tracking, columns=["match_id", "player_id", "team_id", "period", "ts", "x", "y",
-                                                    "speed_kmh", "is_sprint", "was_corrected", "is_after_gap"]),
+                                                    "speed_kmh", "is_sprint", "was_corrected", "is_after_gap",
+                                                    "is_detected"]),
         "events": pd.DataFrame(events, columns=["event_id", "ts", "player_id", "receiver_id", "team_id", "type",
                                                 "x_start", "y_start", "x_end", "y_end", "outcome"]),
-        "ball": pd.DataFrame({"match_id": "mx", "ts": [0, 1, 2], "period": 1, "x": 50.0, "y": 34.0, "z": 0.0}),
-        "players": pd.DataFrame([("mx", p, t, f"Name {p}", f"N. {p}", "CM", n + 1, 0, 2)
+        "ball": pd.DataFrame({"match_id": "mx", "ts": [0, 1, 2], "period": 1, "x": 50.0, "y": 34.0, "z": 0.0,
+                              "possession": ["HOME", None, "AWAY"]}),
+        "players": pd.DataFrame([("mx", p, t, f"Name {p}", f"N. {p}", "CM", n + 1, 0, 2, 5000 + n)
                                  for n, (p, t) in enumerate(players)],
                                 columns=["match_id", "player_id", "team_id", "name", "short_name", "position",
-                                         "shirt_number", "start_ts", "end_ts"]),
+                                         "shirt_number", "start_ts", "end_ts", "source_player_id"]),
         "matches": pd.DataFrame([{"match_id": "mx", "competition": "Test", "season": "2026", "round": "1",
                                   "kickoff_utc": "2026-01-01T00:00:00Z", "stadium": "Park", "home_team": "Home FC",
                                   "away_team": "Away FC", "home_team_short": "Home", "away_team_short": "Away",
@@ -74,8 +78,18 @@ def silver_tables() -> dict:
     }
     frames["events"].insert(0, "match_id", "mx")
     frames["events"]["period"] = 1
-    frames["events"] = frames["events"][["match_id", "event_id", "ts", "period", "player_id", "receiver_id", "team_id",
-                                         "type", "x_start", "y_start", "x_end", "y_end", "outcome"]]
+    ev = frames["events"]
+    is_run = ev["type"] == "run"
+    ev["phase"], ev["phase_against"], ev["speed_band"] = "create", "medium_block", "running"
+    ev["xthreat"] = [0.05 if t == "pass" else 0.1 if t == "run" else None for t in ev["type"]]
+    ev["dangerous"] = pd.array([False if t in ("pass", "run") else None for t in ev["type"]], dtype="boolean")
+    ev["subtype"] = ["behind" if r else None for r in is_run]
+    ev["lead_to_shot"] = ev["type"].isin(["shot", "goal"])
+    ev["targeted"] = pd.array([True if r else None for r in is_run], dtype="boolean")
+    ev["received"] = pd.array([False if r else None for r in is_run], dtype="boolean")
+    frames["events"] = ev[["match_id", "event_id", "ts", "period", "player_id", "receiver_id", "team_id", "type",
+                           "x_start", "y_start", "x_end", "y_end", "outcome", "phase", "phase_against", "xthreat",
+                           "dangerous", "speed_band", "subtype", "lead_to_shot", "targeted", "received"]]
     for df in frames.values():
         for col, typ in i32.items():
             if col in df:
@@ -174,6 +188,19 @@ def test_a_wrong_column_type_or_a_kafka_column_breaks_the_contract(tmp_path):
     assert "ts" in checks["tracking follows the data contract"]["detail"]          # which column, expected and actual type
     assert "expected(INTEGER)" in checks["tracking follows the data contract"]["detail"]
     assert "kafka_offset" in checks["players follow the data contract"]["detail"]
+
+
+@needs_soda
+def test_a_bad_possession_a_run_with_a_receiver_and_a_missing_source_id_are_caught(tmp_path):
+    frames = silver_tables()
+    frames["ball"].loc[1, "possession"] = "BOTH"
+    frames["events"].loc[frames["events"]["type"] == "run", "receiver_id"] = "H01"
+    frames["players"]["source_player_id"] = frames["players"]["source_player_id"].astype("Int64")
+    frames["players"].loc[0, "source_player_id"] = None
+    names = failed_names(run_silver(tmp_path, frames))
+    assert "ball possession is HOME, AWAY or null" in names
+    assert "run fields are set on runs only, and every run says if it was targeted and received" in names
+    assert any("source_player_id" in n for n in names)
 
 
 @needs_soda

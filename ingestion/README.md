@@ -56,7 +56,7 @@ The columns are in `docs/contrat_donnees.md`. The manifest is the health report 
 | `seconds_with_data` | seconds that have tracking (about 74% of the match) | 4,428 |
 | `players_per_second_min` / `max` | rows per existing second: both must be 22 | 22 / 22 |
 | `max_ts` | last second with tracking | 6025 |
-| `events`, `events_by_type` | game actions and their types | 1,741 |
+| `events`, `events_by_type` | game actions and off-ball runs, by type | 2,276 (1,741 actions + 535 runs) |
 | `ball_rows` | seconds with a ball position (same seconds as tracking) | 4,428 |
 | `rows_outside_pitch` | positions outside 105 x 68, kept for Silver to correct | 735 |
 | `rows_speed_over_40` | impossible speeds (should be 0) | 0 |

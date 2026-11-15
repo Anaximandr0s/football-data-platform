@@ -27,10 +27,10 @@ flowchart LR
 
 | Table | Grain | Columns |
 |---|---|---|
-| `silver.tracking` | player x second, tracked seconds only | `match_id, player_id, team_id, period, ts, x, y, speed_kmh, is_sprint, was_corrected, is_after_gap` |
+| `silver.tracking` | player x second, tracked seconds only | `match_id, player_id, team_id, period, ts, x, y, speed_kmh, is_sprint, was_corrected, is_after_gap, is_detected` |
 | `silver.events` | one action | `match_id, event_id, ts, period, player_id, receiver_id, team_id, type, x_start, y_start, x_end, y_end, outcome` |
-| `silver.ball` | second | `match_id, ts, period, x, y, z` |
-| `silver.players` | player of a match | `match_id, player_id, team_id, name, short_name, position, shirt_number, start_ts, end_ts` |
+| `silver.ball` | second | `match_id, ts, period, x, y, z, possession` |
+| `silver.players` | player of a match | `match_id, player_id, team_id, name, short_name, position, shirt_number, start_ts, end_ts, source_player_id` |
 | `silver.matches` | match | the `matches` columns of the data contract (names, colours, score, periods, sides) |
 
 Facts Gold must respect (all measured, see the Silver and data docs):
@@ -161,8 +161,8 @@ on `type`, `team_id`. The export to `s3://gold/<table>.parquet` is the `export_g
 
 **Soda (FOO-05, owner of `soda/`: ingestion side).** On Silver: 22 tracking rows for every existing second of a match,
 `x` in [0, 105] and `y` in [0, 68] on `silver.tracking` (the ball and events are not clipped on purpose), `speed_kmh <= 40`
-(nulls allowed), event types in {pass, shot, goal, tackle, foul, pressure}, goals in events = home_score + away_score,
-row counts per table (m001: 97,416 / 1,741 / 4,428 / 32 / 1). On Gold: the checks below as `row_count` and
+(nulls allowed), event types in {pass, shot, goal, tackle, foul, pressure, run}, goals in events = home_score + away_score,
+row counts per table (m001: 97,416 / 1,741 actions + 535 runs / 4,428 / 32 / 1). On Gold: the checks below as `row_count` and
 `failed rows`. Demonstrate one failure on purpose (the brief asks for it).
 
 **Reconciliation tests in dbt (singular tests)**, expected values for m001:

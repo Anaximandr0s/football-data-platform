@@ -39,7 +39,8 @@ def read_bronze(spark: SparkSession, bronze_uri: str, table: str, match_id: str)
     """One match folder of one table. Read per match (the guide's advice): the folder is named
     match_id=... and the files also contain a match_id column. ingest_date is path-only: dropped."""
     path = f"{bronze_uri.rstrip('/')}/{table}/match_id={match_id}/"
-    return spark.read.parquet(path).drop("ingest_date")
+    # files written before a column was added to the contract lack it: merge so it reads as null there
+    return spark.read.option("mergeSchema", "true").parquet(path).drop("ingest_date")
 
 
 def write_table(spark: SparkSession, df: DataFrame, table: str) -> None:
@@ -47,6 +48,10 @@ def write_table(spark: SparkSession, df: DataFrame, table: str) -> None:
     full = f"{config.CATALOG}.{config.NAMESPACE}.{table}"
     spark.sql(f"CREATE NAMESPACE IF NOT EXISTS {config.CATALOG}.{config.NAMESPACE}")
     if spark.catalog.tableExists(full):
+        existing = set(spark.table(full).columns)
+        for field in df.schema.fields:
+            if field.name not in existing:
+                spark.sql(f"ALTER TABLE {full} ADD COLUMN {field.name} {field.dataType.simpleString()}")
         df.writeTo(full).overwritePartitions()
     else:
         (df.writeTo(full).using("iceberg").partitionedBy(F.col("match_id"))
