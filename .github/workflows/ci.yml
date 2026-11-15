@@ -20,6 +20,12 @@ jobs:
           cache: pip
           cache-dependency-path: requirements.txt
 
+      # same Java as the Spark image; Hadoop 3.4 in pyspark 4.0 calls Subject.getSubject, which JDK 24+ rejects
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
       - name: Install dependencies
         run: pip install -r requirements.txt
 
