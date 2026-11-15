@@ -229,3 +229,33 @@ a fait le plus de passes » ne l'est pas. Il faut vérifier les chiffres **et** 
 
 - **Un modèle de langage pour écrire les phrases** : plus varié, mais impossible à garantir sans invention. Des modèles
   de phrases fixes, remplis avec Gold, se vérifient un par un.
+
+## Correction : l'horloge du football et le nom des équipes
+
+### Le problème
+
+Nos minutes venaient de `ts`, qui compte les secondes depuis le coup d'envoi **sans s'arrêter** : il inclut le temps
+additionnel de la première mi-temps et la pause. Le but de Clough apparaissait à la 49e, celui de Goodwin à la 65e,
+alors que le compte rendu officiel dit 46' et 63'.
+
+### Ce qui a été construit
+
+| Fichier | Rôle |
+|---|---|
+| `app/streamlit/clock.py` | une seule fonction pour la minute « comme à la télé » : 1re mi-temps 1'...45' puis 45+1', 2e mi-temps qui repart à 45:00 au second coup d'envoi, puis 90+1'. Utilisée par Live, Match story, la page joueur, Team analysis et les graphiques |
+| `dbt/seeds/team_names.csv` | le nom que les supporters utilisent pour les 13 équipes des données SkillCorner (« Brisbane Roar », pas « Brisbane FC ») |
+| `gold_match_library` | garde maintenant le début et la fin de chaque période, ce dont l'horloge a besoin |
+
+### Pourquoi c'est construit ainsi
+
+- **Une fonction, partout.** Si chaque page calculait sa minute, elles finiraient par ne plus être d'accord.
+- **Vérifier contre une source extérieure.** Les tests internes ne pouvaient pas voir l'erreur : ils comparaient nos
+  chiffres à nos chiffres. Le compte rendu du club et FBref l'ont montrée. Résultat : 6', 33', 43', 46', 62' pour m001
+  (le club écrit 63' pour Goodwin : notre donnée place son tir à 16 min 31 s de la 2e mi-temps, la 62e minute).
+- **Les noms dans une table, pas dans une règle.** Retirer « FC » donnerait « Sydney » pour Sydney FC ; une table de 13
+  lignes vérifiée à la main est plus sûre.
+
+### L'idée à retenir
+
+**Un test qui compare le système à lui-même ne trouve pas une erreur de définition.** Il faut au moins une vérification
+contre le monde réel.
