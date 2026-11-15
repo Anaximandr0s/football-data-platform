@@ -83,3 +83,15 @@ def test_hub_sentence(hubs, expected):
     card = pd.DataFrame({"team_id": "HOME", "is_hub": hubs, "short_name": ["A", "B"], "player_id": ["H1", "H2"],
                          "passes_successful": [1, 2], "passes_received_successful": [4, 3], "involvement": [0.5, 0.5]})
     assert story.hub(card, "HOME", SHORT).text == expected
+
+
+def test_compare_names_the_venue_and_puts_the_largest_changes_first():
+    import coach
+    rows = pd.DataFrame({"match_id": ["m2", "m3"], "possession_share": [0.63, 0.50], "field_tilt": [0.75, 0.40],
+                         "width": [39.0, 38.0], "defensive_line_height": [37.7, 33.0], "ppp": [1.10, 1.00],
+                         "progressive_passes_per90": [178.0, 120.0], "dpm_outfield": [123.0, 125.0]})
+    labels = {"m2": "at home against Perth Glory (0-1)", "m3": "away at Perth Glory (3-1)"}
+    out = coach.compare(rows, labels, "Brisbane Roar")
+    assert [s.facts["metric"] for s in out] == ["field_tilt", "progressive_passes_per90", "possession_share"]
+    assert out[2].text == ("At home against Perth Glory (0-1), Brisbane Roar had 63% of the ball; away at Perth Glory "
+                           "(3-1), 50%.")
