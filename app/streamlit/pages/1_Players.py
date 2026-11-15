@@ -2,8 +2,8 @@
 import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
-import viz
 
+import viz
 from data import CAVEAT, require_gold, sidebar_match, table
 
 st.set_page_config(page_title="Players", page_icon="🏃", layout="wide")

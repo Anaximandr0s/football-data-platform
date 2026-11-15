@@ -1,8 +1,8 @@
 """Shots and passes: shot map of both teams and pass network of one team (FOO-07)."""
 import matplotlib.pyplot as plt
 import streamlit as st
-import viz
 
+import viz
 from data import CAVEAT, mmss, require_gold, sidebar_match, table
 
 st.set_page_config(page_title="Shots and passes", page_icon="🎯", layout="wide")
