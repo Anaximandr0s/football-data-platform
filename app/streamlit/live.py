@@ -183,6 +183,14 @@ def status(state: MatchState, now_ms: int) -> str:
     return "stalled" if (now_ms - last_ms) / pace > STALLED_AFTER_S else "gap"
 
 
+PLAYING = ("waiting", "live", "gap")
+
+
+def now_playing(states: dict[str, MatchState], now_ms: int) -> list[str]:
+    """Matches being replayed right now: started, not at full time, not silent for longer than any camera gap."""
+    return sorted(m for m, s in states.items() if s.info and status(s, now_ms) in PLAYING)
+
+
 def team_shape(state: MatchState, positions: dict) -> dict[str, tuple[float, float]]:
     """C1 for one second: (width, length) in metres per team, outfield players only."""
     out = {}

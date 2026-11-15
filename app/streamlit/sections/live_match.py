@@ -5,6 +5,7 @@ import time
 import pandas as pd
 import streamlit as st
 
+import cards
 import live
 import live_feed
 import pitch
@@ -71,16 +72,23 @@ def possession_bar(state: live.MatchState, colors: dict[str, str]) -> None:
 
 @st.fragment(run_every=1.0)
 def live_view() -> None:
-    states = {m: s for m, s in feed.snapshot().items() if s.info}
+    states = feed.snapshot()
     if feed.error:
         st.warning(f"Kafka: {feed.error}")
-    if not states:
-        st.info("No replay seen yet. Start one: `make replay MATCH=m001 SPEED=5`.")
-        return
-    match = st.selectbox("Match", sorted(states), key="live_match",
-                         format_func=lambda m: f"{m}: {states[m].info['home_team']} v {states[m].info['away_team']}")
-    state = states[match]
     now_ms = int(time.time() * 1000)
+    playing = live.now_playing(states, now_ms)
+    if not playing:
+        st.info("No match live right now.")
+        st.page_link("sections/replay.py", label="Watch a stored match in Replay", icon=":material/replay:")
+        st.caption("A match goes live when it is replayed into Kafka: `make replay MATCH=m001 SPEED=5`.")
+        return
+    st.markdown("<div class='ml-kicker'>NOW PLAYING</div>" + "".join(
+        cards.badge(f"{states[m].info['home_team']} {live.score(states[m])[0]} - {live.score(states[m])[1]} "
+                    f"{states[m].info['away_team']}", "gold") for m in playing), unsafe_allow_html=True)
+    chosen = st.session_state.get("match_id")          # the sidebar match opens directly when it is playing
+    match = st.selectbox("Match", playing, index=playing.index(chosen) if chosen in playing else 0,
+                         format_func=lambda m: f"{states[m].info['home_team']} v {states[m].info['away_team']}")
+    state = states[match]
     status, colors = live.status(state, now_ms), colors_of(state)
     home_goals, away_goals = live.score(state)
     clock = live.clock(state, now_ms)

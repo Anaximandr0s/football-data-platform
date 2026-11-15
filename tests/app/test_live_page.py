@@ -70,8 +70,36 @@ def test_live_page_says_the_camera_is_off_during_a_gap(monkeypatch):
     assert len(at.dataframe) == 0                                         # no shape from frozen positions
 
 
-def test_live_page_waits_for_a_replay_and_needs_kafka(monkeypatch):
-    assert "make replay" in texts(page(monkeypatch, FakeFeed({})))
+def through_router(monkeypatch, feed) -> AppTest:
+    """The page as the site serves it: st.page_link needs the router's menu."""
+    monkeypatch.setattr(live_feed, "start_feed", lambda: feed)
+    at = AppTest.from_file(str(Path(PAGE).parents[1] / "app.py"), default_timeout=60).run()
+    at.switch_page("sections/live_match.py").run()
+    assert not at.exception, at.exception
+    return at
+
+
+def test_live_page_says_no_match_is_live_and_links_to_replay(monkeypatch, app_env):
+    at = through_router(monkeypatch, FakeFeed({}))
+    assert "No match live right now." in [i.value for i in at.info]
+    assert "make replay" in texts(at)
+    finished = live.apply(state_at(int(time.time() * 1000)), "tracking",
+                          {"match_id": "m1", "player_id": "H01", "ts": 6000, "period": 2, "x": 1.0, "y": 1.0,
+                           "is_detected": True}, int(time.time() * 1000))
+    assert "No match live right now." in [i.value for i in through_router(monkeypatch, FakeFeed({"m1": finished})).info]
+
+
+def test_live_page_lists_what_plays_and_opens_the_sidebar_match(monkeypatch):
+    now = int(time.time() * 1000) + 60_000
+    monkeypatch.setattr(live_feed, "start_feed", lambda: FakeFeed({"m1": state_at(now), "m2": state_at(now)}))
+    at = AppTest.from_file(PAGE, default_timeout=60)
+    at.session_state["match_id"] = "m2"
+    at.run()
+    assert not at.exception and "NOW PLAYING" in texts(at)
+    assert at.selectbox[0].value == "m2" and len(at.selectbox[0].options) == 2
+
+
+def test_live_page_needs_kafka(monkeypatch):
     at = page(monkeypatch, None)
     assert "KAFKA_BOOTSTRAP" in at.error[0].value
 
