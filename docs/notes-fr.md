@@ -125,3 +125,39 @@ entraîneurs, S1 et E1-E2), et trois tables intermédiaires qui les préparent.
 **Un chiffre bizarre est souvent une question de définition des données sources.** Pour la vitesse comme pour les
 passes, le calcul était juste ; c'est ce que la donnée contient (une position estimée, une fin de passe manquante) qui
 faussait le résultat. Avant de corriger une formule, on regarde d'où vient chaque valeur.
+
+## Étape 2 : le squelette du site MatchLens
+
+### Ce qui a été construit
+
+| Fichier | Rôle |
+|---|---|
+| `app/streamlit/sitemap.py` | la carte du site : chaque page avec sa section, sa question et son public, et la fonction `menu(vue)` qui donne le menu d'une vue. Que des données et des fonctions pures : on le teste sans Streamlit |
+| `app/streamlit/app.py` | le routeur : il construit le menu selon la vue choisie (`st.navigation`), dessine la barre latérale (choix de la vue, choix du match) et lance la page |
+| `pages/home.py` | l'accueil : le logo texte, les cartes de match, « I am a Fan / I am a Coach » |
+| `pages/match_library.py` | la bibliothèque : tous les matchs stockés ; choisir une ligne change le match de toutes les pages |
+| `dbt/models/marts/gold_match_library.sql` | une ligne par match : équipes, score, date, compétition, part du match filmée |
+| les autres pages | les anciennes pages déplacées (section 8.3 de `product.md`), et les nouvelles en « coming soon » avec leur question |
+
+### Pourquoi c'est construit ainsi
+
+- **Un seul endroit décrit le site.** Le menu, les titres et les questions viennent tous de `sitemap.py`. Ajouter une
+  page, c'est ajouter une ligne ; les tests vérifient que chaque page a son fichier et sa question.
+- **La vue et le match sont des clés simples de `st.session_state`, jamais des clés de widget.** Streamlit peut effacer
+  la valeur d'un widget quand on change de page ; un test l'a montré (le match disparaissait). Les widgets lisent donc ces
+  clés et y écrivent le nouveau choix.
+- **Un thème, une fois.** Les couleurs (stade de nuit, vert pelouse) sont dans `.streamlit/config.toml`, avec un contraste
+  vérifié, et les graphiques utilisent le même fond.
+
+### L'idée à retenir
+
+**Séparer la carte du site de son affichage.** Le « quoi » (quelles pages, dans quelle section, pour qui) est une donnée
+pure et testée ; le « comment » (Streamlit, CSS) est une couche fine autour. C'est le même principe que le noyau
+fonctionnel de la page live.
+
+### Ce qu'on n'a pas choisi
+
+- **Le dossier `pages/` comme menu automatique** (l'ancien système) : il ne sait ni grouper les pages en sections, ni
+  montrer un menu différent selon la vue.
+- **Deux sites séparés (fan et coach)** : LIVE, MATCHES et BEHIND THE DATA sont communs ; un seul site avec un menu qui
+  change évite de tout dupliquer.

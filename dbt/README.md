@@ -2,14 +2,14 @@
 
 Silver is clean but still row-level (a player at a second, an action). Gold turns it into the numbers the app and the
 report need: distances, sprints, pass networks, shot maps, heatmaps. dbt-core + dbt-duckdb read the Silver Iceberg
-tables, build 15 Gold tables, test them against Silver, and export them to the MinIO bucket `gold`.
+tables, build 16 Gold tables, test them against Silver, and export them to the MinIO bucket `gold`.
 The specification is [`docs/gold-guide.md`](../docs/gold-guide.md); this folder implements it.
 
 ```mermaid
 flowchart LR
     S[(Iceberg lake.silver.*<br/>s3://silver/warehouse)] -->|iceberg_scan| ST[staging<br/>5 stg_* tables]
     ST --> I[intermediate<br/>3 int_* tables]
-    ST --> M[marts<br/>15 gold_* tables]
+    ST --> M[marts<br/>16 gold_* tables]
     I --> M
     M --> D[(data/football.duckdb)]
     M -->|COPY ... PARQUET| G[(s3://gold/*.parquet)]
@@ -26,7 +26,7 @@ containers and keeps the tables in the file `data/football.duckdb` (git-ignored)
 Needs the stack (`make up`) and Silver written for the matches (`make silver MATCH="m001 m002"`). Only Docker is needed:
 
 ```bash
-make gold                                   # dbt build: staging + 15 Gold tables + all tests + Parquet export to s3://gold
+make gold                                   # dbt build: staging + 16 Gold tables + all tests + Parquet export to s3://gold
 make gold ARGS="--select gold_shots"        # one model (+gold_shots also builds its parents)
 make gold-sql                               # list the Gold tables with their row counts
 make gold-sql Q="select name, distance_km, sprint_count from gold_player_match_stats order by distance_km desc limit 5"
@@ -60,7 +60,7 @@ dbt build --vars "{silver_reader: parquet, silver_parquet_root: /path/to/silver_
 | `models/staging/` | `stg_tracking, stg_events, stg_ball, stg_players, stg_matches`: Silver scanned once, same columns |
 | `macros/attack_frame.sql` | `x_att`, `y_att`, thirds and lanes as seen by the team of a row (docs/product.md, section 2) |
 | `models/intermediate/` | `int_events` (events + `x_att` + progressive and defensive flags), `int_team_shape_second`, `int_space_control_second` (a Python model: numpy) |
-| `models/marts/` | the 15 Gold tables and their `schema.yml` |
+| `models/marts/` | the 16 Gold tables and their `schema.yml` |
 | `tests/` | `unique_combination` generic test and five `assert_*` reconciliation tests |
 | `scripts/duckdb_query.py` | read-only SQL on the Gold file (behind `make gold-sql`) |
 | `Dockerfile` | image shared by the `dbt` and `duckdb` services of `docker-compose.yml` (DuckDB pinned to 2.0, like the Soda and dashboard images) |
@@ -95,6 +95,7 @@ there and their columns in [`docs/contrat_donnees.md`](../docs/contrat_donnees.m
 | `gold_space_control` | team x 5-minute window x match | S1: share of a 1 m grid nearest to the team, by phase (about 8 s per match) |
 | `gold_team_profile` | team x match | C7, F7: whole-match team metrics and the gaps between the two teams |
 | `gold_events` | one event, runs included | E1: Silver events + names, `x_att`, `y_att`, third, lane |
+| `gold_match_library` | match | Match library and Home: teams, score, kick-off date, competition, tracked share |
 
 Definitions that matter:
 
