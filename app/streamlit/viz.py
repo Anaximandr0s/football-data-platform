@@ -16,7 +16,7 @@ from mplsoccer import Pitch  # noqa: E402
 PITCH_L, PITCH_W = 105.0, 68.0
 ZONES_X, ZONES_Y = 6, 4
 DEFAULT_COLORS = {"HOME": "#e63946", "AWAY": "#1d8fe1"}
-BG = "#0e1117"
+BG = "#0b1410"   # the app background (.streamlit/config.toml)
 _HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
 
 

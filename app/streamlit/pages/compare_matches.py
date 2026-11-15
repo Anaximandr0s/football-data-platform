@@ -3,13 +3,12 @@ player-level comparison is offered."""
 import pandas as pd
 import streamlit as st
 
-from data import CAVEAT, match_label, require_gold, sidebar_match
+import sitemap
+from data import CAVEAT, match_label, require_gold
 
-st.set_page_config(page_title="Compare matches", page_icon="⚖️", layout="wide")
+sitemap.header("compare_matches")
 teams = require_gold()
-sidebar_match(teams)   # keeps the match picker of the other pages in the sidebar
 
-st.title("⚖️ Compare matches")
 ids = sorted(teams.match_id.unique())
 if len(ids) < 2:
     st.info("Only one match is in Gold: run `make silver MATCH=\"m001 m002\"` and `make gold` to compare two.")
@@ -30,4 +29,4 @@ st.bar_chart(view.set_index("who")[metric], horizontal=True)
 st.subheader("All metrics")
 table = view.set_index("who")[list(metrics)].rename(columns=metrics).T
 st.dataframe(table.map(lambda v: "" if pd.isna(v) else f"{v:.2f}".rstrip("0").rstrip(".")), width="stretch")
-st.caption("Possession is not in the source. " + CAVEAT)
+st.caption(CAVEAT)

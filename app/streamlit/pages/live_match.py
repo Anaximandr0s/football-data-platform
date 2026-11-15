@@ -7,11 +7,11 @@ import streamlit as st
 
 import live
 import live_feed
+import sitemap
 import viz
 from data import CREDIT, mmss
 
-st.set_page_config(page_title="Live match", page_icon="📡", layout="wide")
-st.title("📡 Live match")
+sitemap.header("live_match")
 
 feed = live_feed.start_feed()
 if feed is None:
@@ -97,3 +97,4 @@ def live_view() -> None:
 
 
 live_view()
+sitemap.still_to_come("live_match")

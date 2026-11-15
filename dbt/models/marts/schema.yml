@@ -182,3 +182,12 @@ models:
           - accepted_values:
               arguments:
                 values: ["left", "centre", "right"]
+  - name: gold_match_library
+    description: "GRAIN: one row per stored match (Match library, Home): teams, score, kick-off date, competition, tracked share."
+    columns:
+      - name: match_id
+        data_tests: [unique, not_null]
+      - name: match_date
+        data_tests: [not_null]
+      - name: tracked_share
+        data_tests: [not_null]

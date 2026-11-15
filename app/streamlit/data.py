@@ -16,8 +16,8 @@ import streamlit as st
 
 ROOT = Path(__file__).resolve().parents[2]
 GOLD_TABLES = ("gold_player_match_stats", "gold_team_match_stats", "gold_zone_occupancy",
-               "gold_pass_network", "gold_shots", "gold_player_5min")
-CREDIT = "Data: SkillCorner open data (MIT licence). Real tracking data of two A-League matches."
+               "gold_pass_network", "gold_shots", "gold_player_5min", "gold_match_library")
+CREDIT = "Data: SkillCorner open data (MIT licence). Real tracking data of A-League matches."
 CAVEAT = ("Distances, speeds and sprints cover **tracked seconds only** (about 3/4 of each match) and come from 1 Hz "
           "positions: they are approximate and under-estimate real values. Compare players inside a match rather than "
           "quoting absolute numbers. Player ids are local to a match.")
@@ -86,15 +86,19 @@ def match_label(teams: pd.DataFrame, match_id: str) -> str:
            f"{rows.loc['AWAY', 'team_short']}"
 
 
-def sidebar_match(teams: pd.DataFrame) -> str:
-    """Match picker in the sidebar; the choice follows the user from page to page."""
+def current_match(teams: pd.DataFrame) -> str:
+    """The match chosen on Home or in the sidebar; it follows the visitor from page to page."""
     ids = sorted(teams.match_id.unique())
-    current = st.session_state.get("match_id", ids[0])
-    chosen = st.sidebar.selectbox("Match", ids, index=ids.index(current) if current in ids else 0,
-                                  format_func=lambda m: match_label(teams, m))
-    st.session_state["match_id"] = chosen
-    st.sidebar.caption(CREDIT)
-    return chosen
+    chosen = st.session_state.get("match_id")
+    return chosen if chosen in ids else ids[0]
+
+
+def library() -> pd.DataFrame | None:
+    """gold_match_library, newest match first; None if this Gold file predates it (run `make gold`)."""
+    try:
+        return table("gold_match_library").sort_values(["match_date", "match_id"], ascending=[False, True])
+    except duckdb.Error:
+        return None
 
 
 def mmss(ts: int) -> str:

@@ -1,14 +1,17 @@
-# Dashboard (Streamlit + mplsoccer)
+# MatchLens (Streamlit + mplsoccer)
 
-Five pages that read the Gold tables and the last Soda result, and one Live match page that reads Kafka while a match is
-replayed. The Gold pages compute nothing that Gold does not already hold: they only select, filter and draw, and open the
-data read-only. The Live match page rebuilds the score, possession and positions from the replayed messages.
+One website, the app map of [`docs/product.md`](../../docs/product.md) section 8: Home, then the sections LIVE, MATCHES,
+FAN VIEW or COACH VIEW (the one chosen on Home), and BEHIND THE DATA. The Gold pages compute nothing that Gold does not
+already hold: they select, filter and draw, and open the data read-only. The Live match page rebuilds the score,
+possession and positions from the replayed Kafka messages.
 
 ```mermaid
 flowchart LR
     G[(data/football.duckdb<br/>Gold tables)] -->|short read-only queries| D[data.py]
     Q[(data/soda/*.json)] --> D
-    D --> P[5 pages]
+    R[app.py: router<br/>menu, view, match] --> P[pages/*.py]
+    S[sitemap.py<br/>pages, questions, menu] --> R
+    D --> P
     V[viz.py<br/>mplsoccer figures] --> P
 ```
 
@@ -26,16 +29,28 @@ pages say what to run instead of crashing.
 
 ## Pages
 
-| Page | Reads | What it shows |
-|---|---|---|
-| Live match | Kafka topics `foot-*`, through one background consumer | the match being replayed (`make replay`): pitch with the 22 players (shirt numbers, lighter = estimated position) and the ball, score from goal events, clock and period, possession bar, last goal / shot / tackle / foul, width and length of each team for the current second (outfield players), "No tracking: camera off the pitch" during a camera gap, a box for the 5-minute stats of FOO-08. Redrawn about once per second (FOO-06) |
-| Match overview (`app.py`) | `gold_team_match_stats` | scoreboard, side-by-side team numbers (distance, sprints, top speed, passes and accuracy, shots, goals, tackles, fouls, pressures), average position, how to read the numbers |
-| Players | `gold_player_match_stats`, `gold_zone_occupancy`, `gold_player_5min` | pick a team and a player: key numbers, position heatmap (FOO-07), distance and sprint seconds per 5 minutes with the coverage of each window, ranking of the match on any metric |
-| Shots and passes | `gold_shots`, `gold_pass_network`, `gold_player_match_stats` | shot map of both teams (stars = goals) with team and goals filters and a table with time, distance to goal and running score; pass network of one team with a minimum-passes slider (FOO-07) |
-| Compare matches | `gold_team_match_stats` | two or more matches side by side at team level, one bar chart per metric (FOO-09) |
-| Data quality | `data/soda/silver.json`, `gold.json` | passed / failed / warnings / errors of the last `make soda` per layer, and the list of checks (FOO-05) |
+Home asks for a match and a view; the menu then shows that view's section, and the sidebar keeps a view switch and the
+match picker. The view and the match are plain session keys (`view`, `match_id`), so they follow the visitor from page
+to page. A page marked "coming soon" states its question and the build step (product.md, section 12) that will add it.
 
-The match picker in the sidebar follows you from page to page.
+| Section | Page | Reads | Now |
+|---|---|---|---|
+| | Home | `gold_match_library` | wordmark, match cards (teams, score, date, tracked share), "I am a Fan / I am a Coach" |
+| LIVE | Live match | Kafka topics `foot-*`, through one background consumer | the match being replayed (`make replay`): pitch with the 22 players (lighter = estimated position) and the ball, score from goal events, clock and period, possession bar, last goal / shot / tackle / foul, width and length of each team for the current second, "No tracking: camera off the pitch" during a camera gap, a box for the 5-minute stats of FOO-08. Redrawn about once per second (FOO-06) |
+| MATCHES | Match library | `gold_match_library` | every stored match, newest first; selecting a row makes it the match of every page |
+| MATCHES | Replay | | coming soon (step 7) |
+| MATCHES | Compare matches | `gold_team_match_stats` | two or more matches side by side at team level (FOO-09) |
+| FAN VIEW | Match story | `gold_team_match_stats` | scoreboard and side-by-side team numbers (the former overview) |
+| FAN VIEW | Squad | | coming soon (step 3) |
+| FAN VIEW, COACH VIEW | Player page | `gold_player_match_stats`, `gold_zone_occupancy` | pick a team and a player: key numbers, position heatmap (FOO-07), ranking of the match on any metric |
+| COACH VIEW | Team analysis | `gold_shots`, `gold_pass_network`, `gold_player_match_stats` | shot map of both teams with filters and a shot table; pass network of one team (FOO-07) |
+| COACH VIEW | Physical & fatigue | `gold_player_5min` | distance and sprint seconds per 5 minutes of one player, with the coverage of each window |
+| COACH VIEW | Event explorer | | coming soon (step 5) |
+| BEHIND THE DATA | Data quality | `data/soda/silver.json`, `gold.json` | passed / failed / warnings / errors of the last `make soda` per layer, and the list of checks (FOO-05) |
+| BEHIND THE DATA | Pipeline & lineage, Sources & limits | | coming soon (step 8) |
+
+Look: a stadium at night (`.streamlit/config.toml`, colours checked for contrast: body text 16:1, white on the primary
+green 5.0:1); `sitemap.style()` holds the few shared classes, and the charts use the same background (`viz.BG`).
 
 ## Reading the graphics
 
@@ -54,8 +69,10 @@ The match picker in the sidebar follows you from page to page.
 
 | File | Role |
 |---|---|
-| `app.py`, `pages/*.py` | the pages (Streamlit multipage: the `pages/` folder is the menu) |
-| `data.py` | reading Gold (cached for a minute), the match picker, the Soda result reader, shared texts |
+| `app.py` | the router: `st.navigation` menu for the chosen view, the sidebar (view switch, match picker), the move to a view's first page |
+| `sitemap.py` | every page with its section, question and persona; the menu per view; the page header and the "coming soon" box. Pure data, tested without Streamlit |
+| `pages/*.py` | the pages |
+| `data.py` | reading Gold (cached for a minute), the current match, the match library, the Soda result reader, shared texts |
 | `viz.py` | the figures: zone heatmap, shot map, pass network, ranking bars, live pitch (pure functions, tested without Streamlit) |
 | `live.py` | the live state of a replayed match: `apply(state, table, record, kafka_ms)` returns a new state, plus the readers (score, possession, clock, status, team shape, event line). Pure, tested without Kafka |
 | `live_feed.py` | the single Kafka consumer of the app (a thread created once by `st.cache_resource`), holding the latest state per match |
@@ -77,7 +94,10 @@ open by the dashboard would block the next `make gold`.
 ## Tests
 
 `tests/app/`: every page runs headless (Streamlit `AppTest`) on a real Gold file built by dbt from the tiny fixture, plus the
-case "Gold does not exist yet" and the colour rules (`python -m pytest tests/app`). The graphics were also rendered on the real
+case "Gold does not exist yet" and the colour rules; `test_site.py` checks the menu of each view, that every page has a
+file, and through the router that choosing a view asks for its first page and that pages keep the view and the match
+(`python -m pytest tests/app`). After its first run `AppTest` reruns only the page, not the router, so the move to a
+view's first page and the sidebar view switch are checked in a browser instead (Playwright, see the step 2 proof). The graphics were also rendered on the real
 m001 data and looked at: the shot map shows HOME's 2 goals at the right goal and AWAY's 3 at the left one (final score 2-3),
 and the pass network puts AWAY's goalkeeper near x = 100, as expected for a team attacking to the left.
 

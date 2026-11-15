@@ -279,7 +279,7 @@ warn the dashboard owner. Definitions and examples: [`../dbt/README.md`](../dbt/
 
 - DuckDB file `data/football.duckdb` (git-ignored), tables `main.gold_*`; copy as Parquet in `s3://gold/<table>.parquet`.
   The `stg_*` tables in the same file are copies of Silver used by dbt: they are not part of the contract.
-- Rebuilt in full by `make gold` (dbt build): staging, intermediate models, 15 Gold tables, tests. Read it with `make gold-sql`
+- Rebuilt in full by `make gold` (dbt build): staging, intermediate models, 16 Gold tables, tests. Read it with `make gold-sql`
   or open it read-only. The `int_*` tables (`int_events`, `int_team_shape_second`, `int_space_control_second`) are inputs of
   several Gold tables: they are in the file but not exported and not part of the contract.
 
@@ -486,6 +486,20 @@ a 1 m grid whose nearest player, detected or not, is HOME).
 | ppp, high_press_share | DOUBLE | whole match |
 | progressive_passes_per90, dpm_outfield, share_left, share_centre, share_right | DOUBLE | from `gold_team_build_up`; dpm over outfield rows |
 | gap_possession_share, gap_field_tilt, gap_shots_and_goals, gap_progressive_passes, gap_ppp, gap_dpm_outfield | DOUBLE | F7: `(m_team - m_opponent) / ((m_team + m_opponent) / 2)`, null if both are 0; the two teams have opposite gaps |
+
+**gold_match_library** (Match library, Home): one row per stored match. Key `match_id`.
+
+| Column | Type | Meaning |
+|---|---|---|
+| match_id | VARCHAR | |
+| home_team, away_team, home_team_short, away_team_short, home_color, away_color | VARCHAR | from `matches` |
+| home_score, away_score | INTEGER | final score |
+| kickoff_utc | VARCHAR | ISO 8601, as in `matches` |
+| match_date | DATE | kick-off day (UTC) |
+| competition, season, round, stadium | VARCHAR | |
+| match_seconds | INTEGER | seconds of the two periods: `(p1_end_ts - p1_start_ts + 1) + (p2_end_ts - p2_start_ts + 1)` |
+| tracked_seconds | BIGINT | distinct seconds with tracking |
+| tracked_share | DOUBLE | tracked_seconds / match_seconds (m001 0.7358, m002 0.7828) |
 
 **gold_events** (E1, E2): one row per event, runs included. Key `event_id`.
 
