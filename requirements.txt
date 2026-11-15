@@ -7,6 +7,9 @@ pyarrow>=26,<27
 confluent-kafka>=2.16,<3
 boto3>=1.43,<2
 
+# --- Silver: Spark job (needs Java 17+; the S3A and Iceberg jars are downloaded at the first run) ---
+pyspark>=4.0,<4.1
+
 # --- Dev tools: lint, tests, hooks ---
 ruff>=0.17
 pytest>=9.2

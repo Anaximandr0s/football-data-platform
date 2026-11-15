@@ -16,6 +16,7 @@ x-common: &common
 volumes:
   minio-data:
   kafka-data:
+  spark-ivy:   # Maven jars of the Silver job (S3A, Iceberg): downloaded once
 
 services:
   # --- MinIO: S3-compatible storage (buckets = bronze / silver / gold) ---------
@@ -131,3 +132,74 @@ services:
     ports:
       - "127.0.0.1:${KAFKA_UI_PORT}:8080"
     mem_limit: 512m
+
+  # --- Spark standalone cluster (Silver): 1 master + 1 worker ---------------------
+  #   master UI: http://localhost:${SPARK_MASTER_UI_PORT}   cluster URL (inside Docker): spark://spark-master:7077
+  spark-master:
+    <<: *common
+    image: ${SPARK_IMAGE:-apache/spark:4.0.0-scala2.13-java17-python3-ubuntu}
+    hostname: spark-master
+    command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.master.Master",
+              "--host", "spark-master", "--port", "7077", "--webui-port", "8080"]
+    ports:
+      - "127.0.0.1:${SPARK_MASTER_UI_PORT:-8082}:8080"
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8080"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+
+  spark-worker:
+    <<: *common
+    image: ${SPARK_IMAGE:-apache/spark:4.0.0-scala2.13-java17-python3-ubuntu}
+    depends_on:
+      spark-master:
+        condition: service_healthy
+    command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.worker.Worker",
+              "spark://spark-master:7077", "--cores", "2", "--memory", "2g", "--webui-port", "8081"]
+    mem_limit: 2560m
+
+  # One-shot driver of the Silver job (profile "jobs": not started by `docker compose up`).
+  #   make silver MATCH="m001 m002"      or      docker compose --profile jobs run --rm silver --match m001
+  # The repository is mounted in /app, so the code and data/prepared/<match>/manifest.json are the ones on your disk.
+  # Runs as root only so the named volume spark-ivy is writable (local development stack).
+  silver:
+    profiles: ["jobs"]
+    image: ${SPARK_IMAGE:-apache/spark:4.0.0-scala2.13-java17-python3-ubuntu}
+    user: "0:0"
+    working_dir: /app
+    depends_on:
+      spark-master:
+        condition: service_healthy
+      spark-worker:
+        condition: service_started
+      minio:
+        condition: service_healthy
+    environment:
+      PYTHONPATH: /app
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - ./:/app
+      - spark-ivy:/tmp/ivy
+    # Same jar versions as spark/silver/config.py (override both with SPARK_JARS_PACKAGES in .env).
+    entrypoint:
+      - /opt/spark/bin/spark-submit
+      - --master
+      - spark://spark-master:7077
+      - --packages
+      - ${SPARK_JARS_PACKAGES:-org.apache.hadoop:hadoop-aws:3.4.1,org.apache.iceberg:iceberg-spark-runtime-4.0_2.13:1.10.0}
+      - --conf
+      - spark.jars.ivy=/tmp/ivy
+      - --driver-memory
+      - 1g
+      - --executor-memory
+      - 1g
+      - /app/spark/silver/bronze_to_silver.py
+      - --packages
+      - ""
+    command: ["--match", "m001"]
+    mem_limit: 1536m
