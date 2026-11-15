@@ -356,6 +356,12 @@ checks for gold_player_card:
         from gold_player_card group by 1, 2
         having count(*) filter (where is_hub) = 0 and max(involvement) > 0
   - failed rows:
+      name: the card top speed never exceeds the fastest speed of the player table
+      fail query: |
+        select c.match_id, c.player_id, c.top_speed_kmh, s.max_speed_kmh
+        from gold_player_card c join gold_player_match_stats s using (match_id, player_id)
+        where c.top_speed_kmh > round(s.max_speed_kmh, 1)
+  - failed rows:
       name: the card agrees with the player table
       fail query: |
         select c.match_id, c.player_id, c.sprint_count, s.sprint_count as stats_sprints, c.goals, s.goals as stats_goals
@@ -437,13 +443,13 @@ checks for gold_team_build_up:
   - schema:
       name: gold_team_build_up follows the data contract
       fail:
-        when required column missing: [match_id, team_id, progressive_passes, progressive_passes_successful, progressive_success_rate, tracked_minutes, progressive_passes_per_tracked_minute, final_third_entries, entries_left, entries_centre, entries_right, share_left, share_centre, share_right]
+        when required column missing: [match_id, team_id, progressive_passes, progressive_passes_successful, tracked_minutes, progressive_passes_per90, final_third_entries, entries_left, entries_centre, entries_right, share_left, share_centre, share_right]
         when wrong column type:
           match_id: VARCHAR
           team_id: VARCHAR
           progressive_passes: BIGINT
-          progressive_success_rate: DOUBLE
           tracked_minutes: DOUBLE
+          progressive_passes_per90: DOUBLE
           final_third_entries: BIGINT
           share_left: DOUBLE
   - row_count > 0
@@ -452,6 +458,13 @@ checks for gold_team_build_up:
   - failed rows:
       name: the three lanes add up to the final-third entries and their shares to 1
       fail condition: entries_left + entries_centre + entries_right != final_third_entries or (final_third_entries > 0 and abs(share_left + share_centre + share_right - 1) > 0.001)
+  - failed rows:
+      name: team tracked minutes are seconds of the match, not player-minutes
+      fail query: |
+        select b.match_id, b.team_id, b.tracked_minutes, m.p2_end_minutes
+        from gold_team_build_up b
+        join (select match_id, max(window_end_ts) / 60.0 as p2_end_minutes from gold_match_timeline group by 1) m using (match_id)
+        where b.tracked_minutes > m.p2_end_minutes
   - failed rows:
       name: progressive passes are passes, and the successful ones are fewer
       fail query: |
@@ -523,7 +536,7 @@ checks for gold_team_profile:
   - schema:
       name: gold_team_profile follows the data contract
       fail:
-        when required column missing: [match_id, team_id, team_name, opponent_name, possession_share, field_tilt, shots_and_goals, width, length, defensive_line_height, ppp, high_press_share, progressive_passes, progressive_passes_per_tracked_minute, dpm_outfield, share_left, share_centre, share_right, gap_possession_share, gap_field_tilt, gap_shots_and_goals, gap_progressive_passes, gap_ppp, gap_dpm_outfield]
+        when required column missing: [match_id, team_id, team_name, opponent_name, possession_share, field_tilt, shots_and_goals, width, length, defensive_line_height, ppp, high_press_share, progressive_passes, progressive_passes_per90, dpm_outfield, share_left, share_centre, share_right, gap_possession_share, gap_field_tilt, gap_shots_and_goals, gap_progressive_passes, gap_ppp, gap_dpm_outfield]
         when wrong column type:
           match_id: VARCHAR
           team_id: VARCHAR

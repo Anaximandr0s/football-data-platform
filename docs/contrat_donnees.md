@@ -299,7 +299,7 @@ warn the dashboard owner. Definitions and examples: [`../dbt/README.md`](../dbt/
 | Thirds, lanes | own `x_att < 35`, middle, final `x_att >= 70`; left `y_att > 45.33`, centre, right `y_att < 22.67` |
 | Defensive action | `pressure`, `tackle` or `foul`; a `run` never counts |
 | Progressive pass | a pass with `x_att(end) - x_att(start) >= 10` |
-| Rates | `dpm` = distance / (seconds with a speed / 60); other per-minute values divide by tracked minutes = tracking rows / 60 |
+| Rates | `dpm` = distance / (seconds with a speed / 60), "per minute of tracked play (mostly ball in play)"; player per-minute values divide by the player's tracking rows / 60; team rates are per 90 minutes of the team's distinct tracked seconds |
 | Eligibility | flags, never filters: a row below its threshold stays, with `is_eligible = false` or `possession_greyed = true`, and the app greys it out |
 | Formulas | [`product.md`](product.md), sections 2 to 4 and 8.1 (ids F1-F8, C1-C7, S1, E1-E2) |
 
@@ -410,7 +410,7 @@ The source gives no saved / blocked / off-target outcome: there is no expected-g
 | source_player_id | BIGINT | SkillCorner id: the same player across matches |
 | shirt_number | INTEGER | |
 | is_outfield, is_eligible | BOOLEAN | eligible = outfield and `tracked_minutes >= 20` |
-| tracked_minutes, dpm, top_speed_kmh | DOUBLE | tracking rows / 60; m per minute with a speed; fastest second (shown "about N km/h") |
+| tracked_minutes, dpm, top_speed_kmh | DOUBLE | tracking rows / 60; m per minute with a speed; fastest speed whose two positions (this second and the one before) are both detected, shown "about N km/h" (`gold_player_match_stats.max_speed_kmh` keeps all positions) |
 | sprint_count, passes_successful, progressive_passes, progressive_passes_successful, defensive_actions, goals, passes_received_successful | BIGINT | |
 | sprints_per_min, passes_successful_per_min, progressive_passes_successful_per_min, defensive_actions_per_min | DOUBLE | per tracked minute |
 | score_work_rate, score_sprints, score_passing, score_progression, score_defending | INTEGER | `round(100 x percent_rank())` among the eligible players of the match, of dpm and the four rates above; null if not eligible |
@@ -425,7 +425,7 @@ The source gives no saved / blocked / off-target outcome: there is no expected-g
 | match_id, team_id | VARCHAR | |
 | phase | VARCHAR | `in_possession`, `out_of_possession` (opponent owns the ball) or `unknown` (nobody, or no ball row) |
 | seconds_used | BIGINT | tracked seconds in that phase |
-| width, length, area | DOUBLE | means over the seconds of `max(y) - min(y)`, `max(x_att) - min(x_att)` and their product, outfield players |
+| width, length, area | DOUBLE | means over the seconds of `max(y) - min(y)`, `max(x_att) - min(x_att)` ("outfield block length": SkillCorner's length includes the goalkeeper and is about 21 m longer) and their product, outfield players |
 | defensive_line_height | DOUBLE | mean `x_att` of the 4 deepest outfield players (assumes a back four); C2 reads the `out_of_possession` row |
 | detected_share | DOUBLE | positions seen by the camera / positions used |
 
@@ -447,8 +447,7 @@ Key (match_id, team_id, window_index).
 |---|---|---|
 | match_id, team_id | VARCHAR | |
 | progressive_passes, progressive_passes_successful | BIGINT | |
-| progressive_success_rate | DOUBLE | successful / all, null if none |
-| tracked_minutes, progressive_passes_per_tracked_minute | DOUBLE | tracking rows of the team / 60, so the rate is per player-minute |
+| tracked_minutes, progressive_passes_per90 | DOUBLE | distinct tracked seconds of the team / 60; progressive_passes / tracked_minutes x 90. No success rate: a failed pass has no reception point, so failed passes rarely look progressive (`product.md`, C4) |
 | final_third_entries, entries_left, entries_centre, entries_right | BIGINT | successful passes ending at `x_att >= 70` (those starting there too), by lane of the end |
 | share_left, share_centre, share_right | DOUBLE | lane / final_third_entries, null if none |
 
@@ -485,7 +484,7 @@ a 1 m grid whose nearest player, detected or not, is HOME).
 | shots_and_goals, progressive_passes | BIGINT | |
 | width, length, defensive_line_height | DOUBLE | means over all tracked seconds; the line over the seconds the opponent owns the ball |
 | ppp, high_press_share | DOUBLE | whole match |
-| progressive_passes_per_tracked_minute, dpm_outfield, share_left, share_centre, share_right | DOUBLE | from `gold_team_build_up`; dpm over outfield rows |
+| progressive_passes_per90, dpm_outfield, share_left, share_centre, share_right | DOUBLE | from `gold_team_build_up`; dpm over outfield rows |
 | gap_possession_share, gap_field_tilt, gap_shots_and_goals, gap_progressive_passes, gap_ppp, gap_dpm_outfield | DOUBLE | F7: `(m_team - m_opponent) / ((m_team + m_opponent) / 2)`, null if both are 0; the two teams have opposite gaps |
 
 **gold_events** (E1, E2): one row per event, runs included. Key `event_id`.

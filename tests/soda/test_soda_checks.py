@@ -327,11 +327,11 @@ def matchlens_tables() -> dict:
          **{f"defensive_actions_{z}_third": i64 for z in ("own", "middle", "final")}})
     build_up = typed([
         dict(match_id="mx", team_id=t, progressive_passes=n, progressive_passes_successful=n,
-             progressive_success_rate=1.0 if n else None, tracked_minutes=0.1, progressive_passes_per_tracked_minute=n * 10.0,
+             tracked_minutes=0.05, progressive_passes_per90=n * 1800.0,
              final_third_entries=0, entries_left=0, entries_centre=0, entries_right=0, share_left=None,
              share_centre=None, share_right=None)
         for t, n in (("HOME", 1), ("AWAY", 0))],
-        {"progressive_passes": i64, "progressive_passes_successful": i64, "progressive_success_rate": f64,
+        {"progressive_passes": i64, "progressive_passes_successful": i64,
          "final_third_entries": i64, "entries_left": i64, "entries_centre": i64, "entries_right": i64,
          "share_left": f64, "share_centre": f64, "share_right": f64})
     fatigue = typed([
@@ -350,7 +350,7 @@ def matchlens_tables() -> dict:
     profile = typed([
         dict(match_id="mx", team_id=t, team_name=n, opponent_name=o, possession_share=0.5, field_tilt=0.5,
              shots_and_goals=sg, width=30.0, length=25.0, defensive_line_height=35.0, ppp=ppp, high_press_share=None,
-             progressive_passes=pp, progressive_passes_per_tracked_minute=pp * 10.0, dpm_outfield=dpm, share_left=None,
+             progressive_passes=pp, progressive_passes_per90=pp * 1800.0, dpm_outfield=dpm, share_left=None,
              share_centre=None, share_right=None, gap_possession_share=0.0, gap_field_tilt=0.0, gap_shots_and_goals=gs,
              gap_progressive_passes=gp, gap_ppp=None, gap_dpm_outfield=gd)
         for t, n, o, sg, ppp, pp, dpm, gs, gp, gd in (

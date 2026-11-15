@@ -1,9 +1,17 @@
 -- Grain: one row per player per match (F3, F4, F5, F6, F8). Rates are per tracked minute (count(*) / 60 of the player's
 -- tracking rows); dpm divides by the seconds that have a speed. Scores rank the eligible players of both teams
 -- (outfield, at least 20 tracked minutes) inside one match: 100 = best. Other players keep their values, without scores.
-with spd as (
-    select match_id, player_id, sum(speed_kmh / 3.6) as distance_m, count(speed_kmh) as speed_seconds
+with flagged as (
+    select *, lag(is_detected) over (partition by match_id, player_id order by ts) as previous_detected
     from {{ ref('stg_tracking') }}
+),
+
+-- a speed joins two positions one second apart: the top speed uses only speeds whose two positions the camera saw,
+-- because every speed above 33 km/h in m001 and m002 had an estimated position at one end
+spd as (
+    select match_id, player_id, sum(speed_kmh / 3.6) as distance_m, count(speed_kmh) as speed_seconds,
+           max(speed_kmh) filter (where is_detected and previous_detected) as top_speed_kmh
+    from flagged
     group by 1, 2
 ),
 
@@ -39,7 +47,7 @@ base as (
         s.tracked_seconds / 60.0                                             as tracked_minutes,
         s.position != 'GK' and s.tracked_seconds / 60.0 >= 20                as is_eligible,
         spd.distance_m / nullif(spd.speed_seconds / 60.0, 0)                 as dpm,
-        s.max_speed_kmh                                                      as top_speed_kmh,
+        spd.top_speed_kmh,
         s.sprint_count,
         coalesce(ev.passes_successful, 0)                                    as passes_successful,
         coalesce(ev.progressive_passes, 0)                                   as progressive_passes,

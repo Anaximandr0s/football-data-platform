@@ -46,7 +46,7 @@ m as (
         shape.width, shape.length, shape.defensive_line_height,
         ev.defensive_actions / nullif(o.passes, 0)                                  as ppp,
         ev.defensive_actions_final_third / nullif(ev.defensive_actions, 0)          as high_press_share,
-        b.progressive_passes, b.progressive_passes_per_tracked_minute,
+        b.progressive_passes, b.progressive_passes_per90,
         run.dpm_outfield,
         b.share_left, b.share_centre, b.share_right
     from {{ ref('gold_team_build_up') }} b
@@ -63,7 +63,7 @@ select
     round(t.possession_share, 4) as possession_share, round(t.field_tilt, 4) as field_tilt, t.shots_and_goals,
     round(t.width, 2) as width, round(t.length, 2) as length, round(t.defensive_line_height, 2) as defensive_line_height,
     round(t.ppp, 4) as ppp, round(t.high_press_share, 4) as high_press_share,
-    t.progressive_passes, t.progressive_passes_per_tracked_minute, round(t.dpm_outfield, 1) as dpm_outfield,
+    t.progressive_passes, t.progressive_passes_per90, round(t.dpm_outfield, 1) as dpm_outfield,
     t.share_left, t.share_centre, t.share_right,
     {%- for metric in ['possession_share', 'field_tilt', 'shots_and_goals', 'progressive_passes', 'ppp', 'dpm_outfield'] %}
     round((t.{{ metric }} - o.{{ metric }}) / nullif((t.{{ metric }} + o.{{ metric }}) / 2, 0), 4) as gap_{{ metric }}{{ ',' if not loop.last }}
