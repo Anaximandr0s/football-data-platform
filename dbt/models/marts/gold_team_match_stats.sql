@@ -1,4 +1,5 @@
--- Grain: one row per team per match. Sums of gold_player_match_stats; possession is not in the source.
+-- Grain: one row per team per match. Sums of gold_player_match_stats. team_short is the name fans use (seed
+-- team_names.csv: "Brisbane Roar", not the source's "Brisbane FC"), the source short name for a team not in it.
 with players as (
     select match_id, team_id,
            sum(distance_m)         as distance_m,
@@ -25,7 +26,7 @@ pos as (
 select
     pl.match_id, pl.team_id,
     case when pl.team_id = 'HOME' then m.home_team       else m.away_team       end as team_name,
-    case when pl.team_id = 'HOME' then m.home_team_short else m.away_team_short end as team_short,
+    coalesce(n.fan_name, case when pl.team_id = 'HOME' then m.home_team_short else m.away_team_short end) as team_short,
     case when pl.team_id = 'HOME' then m.home_color      else m.away_color      end as team_color,
     case when pl.team_id = 'HOME' then m.home_score      else m.away_score      end as score,
     case when pl.team_id = 'HOME' then m.away_score      else m.home_score      end as opponent_score,
@@ -37,4 +38,6 @@ select
     round(pos.avg_x, 2) as avg_x, round(pos.avg_y, 2) as avg_y
 from players pl
 join {{ ref('stg_matches') }} m using (match_id)
+left join {{ ref('team_names') }} n
+    on n.skillcorner_name = case when pl.team_id = 'HOME' then m.home_team else m.away_team end
 left join pos using (match_id, team_id)
