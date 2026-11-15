@@ -5,13 +5,13 @@ from dataclasses import dataclass
 import streamlit as st
 
 VIEWS = {"fan": "FAN VIEW", "coach": "COACH VIEW"}
-FIRST_PAGE = {"fan": "pages/match_story.py", "coach": "pages/team_analysis.py"}   # where a view opens
+FIRST_PAGE = {"fan": "sections/match_story.py", "coach": "sections/team_analysis.py"}   # where a view opens
 SECTIONS = ("", "LIVE", "MATCHES", "FAN VIEW", "COACH VIEW", "BEHIND THE DATA")
 
 
 @dataclass(frozen=True)
 class PageSpec:
-    key: str        # file pages/<key>.py and URL path
+    key: str        # file sections/<key>.py and URL path
     title: str
     icon: str
     section: str
@@ -32,7 +32,7 @@ PAGES = (
              "Is this how a team usually plays?", "both", True),
     PageSpec("match_story", "Match story", ":material/auto_stories:", "FAN VIEW",
              "How did the match go, and why did it end this way?", "fans", True),
-    PageSpec("squad", "Squad", ":material/groups:", "FAN VIEW", "Who played?", "fans", False),
+    PageSpec("squad", "Squad", ":material/groups:", "FAN VIEW", "Who played?", "fans", True),
     PageSpec("player", "Player page", ":material/person:", "FAN VIEW", "How did this player play?", "fans", True),
     PageSpec("team_analysis", "Team analysis", ":material/strategy:", "COACH VIEW",
              "How does the team organise, press and attack?", "coaches", True),
@@ -53,16 +53,14 @@ PAGES = (
 # what is still missing on a page that exists, and the build step of docs/product.md section 12 that adds it
 COMING = {
     "replay": ("play a stored match at 0.25x to 8x with trails, Voronoi cells and a stats panel on click", 7),
-    "squad": ("the players as cards (shirt, number, name); a click opens the Player page", 3),
     "event_explorer": ("every action and run, filtered by team, player, type, phase and time, with the momentum chart",
                        5),
     "pipeline_lineage": ("the Dagster asset graph and the dbt lineage of every Gold table", 8),
     "sources_limits": ("SkillCorner open data, 1 Hz tracking, estimated positions, no expected goals", 8),
     "match_story": ("goals on a timeline, momentum, possession per 5 minutes and the 3 key differences", 4),
-    "player": ("the pitch component with heatmap, shots and passes, the 5 scores, and a coach mode", 3),
     "team_analysis": ("team shape, pressing, build-up, attack side and space control", 5),
     "physical_fatigue": ("who faded: distance in the first 15 against the last 5 minutes on the pitch", 5),
-    "live_match": ("a click on a player for his stats so far, and the 5-minute stats of Spark Streaming", 6),
+    "live_match": ("the 5-minute stats of Spark Streaming (possession, distance, top speed, pressing)", 6),
 }
 
 
@@ -120,4 +118,21 @@ def style() -> None:
     .ml-board .team {flex:1; font-weight:600; font-size:1rem; line-height:1.25;} .ml-board .away {text-align:right;}
     .ml-board .score {font-size:1.7rem; font-weight:800; letter-spacing:.06em; white-space:nowrap;}
     .ml-meta {color:#8fa69a; font-size:.85rem;}
+    .ml-stats {display:grid; gap:.35rem; margin:.6rem 0;} .ml-stats div {display:flex; justify-content:space-between;
+               border-bottom:1px solid #1d3b2c; padding:.25rem 0;} .ml-stats span {color:#b9c8bf;}
+    .ml-stats b {font-size:1.15rem;}
+    .ml-chip {display:inline-block; font-size:.78rem; font-weight:700; padding:.15rem .6rem; border-radius:999px;
+              margin:.15rem .3rem .15rem 0; letter-spacing:.02em;}
+    .ml-chip-gold {background:#f4c430; color:#0b1410;} .ml-chip-info {background:#1d3b2c; color:#d5e2da;}
+    .ml-chip-muted {background:transparent; color:#8fa69a; border:1px dashed #2f4a3c;}
+    .ml-player {display:flex; gap:.9rem; align-items:center; margin:.4rem 0 1.4rem 0;}
+    .ml-player .name {font-weight:700; line-height:1.2;}
+    .ml-cardname {font-weight:700; margin-top:.2rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+    .ml-oneline {white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+    .ml-team {display:flex; align-items:center; gap:.6rem; margin:1rem 0 .4rem 0;}
+    .ml-team .bar {width:6px; height:1.6rem; border-radius:3px;}
+    .ml-score-row {display:grid; grid-template-columns:8.5rem 1fr 2.6rem; gap:.6rem; align-items:center; margin:.35rem 0;}
+    .ml-score-row .track {height:.6rem; background:#1d3b2c; border-radius:999px; overflow:hidden;}
+    .ml-score-row .fill {height:100%; background:#3ddc84; border-radius:999px;}
+    .ml-score-row .val {font-weight:800; text-align:right;} .ml-score-row.off {opacity:.45;}
     </style>""", unsafe_allow_html=True)

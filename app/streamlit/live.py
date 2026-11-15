@@ -10,7 +10,10 @@ ends at half-time).
 """
 from dataclasses import dataclass, field, replace
 
+import playerstats
+
 FULL_FRAME = 22
+CHUNK = 64                                               # seconds per frozen chunk of a player's history
 KEY_EVENTS = {"goal": "Goal", "shot": "Shot", "tackle": "Tackle", "foul": "Foul"}
 STALLED_AFTER_S = 300  # match seconds without any tracking: longer than any camera gap of the source (143 s)
 
@@ -29,6 +32,7 @@ class MatchState:
     first_tracking: tuple | None = None                  # (ts, kafka_ms) of the earliest tracked second seen
     last_tracking: tuple | None = None                   # (ts, kafka_ms) of the latest tracked second seen
     period: int | None = None
+    seconds: dict = field(default_factory=dict)          # player_id -> (chunks, tail) of (ts, period, x, y, speed, detected, kafka_ms)
 
 
 def apply(state: MatchState, table: str, rec: dict, kafka_ms: int) -> MatchState:
@@ -63,14 +67,22 @@ def _new_replay(state: MatchState, rec: dict, start: int) -> MatchState:
         possession={ts: p for ts, p in state.possession.items() if recent(p[1])},
         goals={k: g for k, g in state.goals.items() if recent(g[-1])},
         last_event=keep(state.last_event), first_tracking=keep(state.first_tracking),
-        last_tracking=keep(state.last_tracking), period=state.period if keep(state.last_tracking) else None)
+        last_tracking=keep(state.last_tracking), period=state.period if keep(state.last_tracking) else None,
+        seconds={pid: ((), kept) for pid, history in state.seconds.items()
+                 if (kept := tuple(v for v in _history(history) if recent(v[-1])))})
 
 
 def _tracking(state: MatchState, rec: dict, kafka_ms: int) -> MatchState:
-    ts = rec["ts"]
+    ts, pid = rec["ts"], rec["player_id"]
+    # every second of every player is kept for the live player stats, appended to small frozen chunks so that a
+    # message copies at most CHUNK items, not the whole history
+    item = (ts, rec["period"], rec["x"], rec["y"], rec.get("speed_kmh"), bool(rec.get("is_detected")), kafka_ms)
+    chunks, tail = state.seconds.get(pid, ((), ()))
+    history = (chunks, tail + (item,)) if len(tail) < CHUNK else (chunks + (tail,), (item,))
+    state = replace(state, seconds={**state.seconds, pid: history})
     frames = state.frames
     if ts not in frames and len(frames) >= 2 and ts < min(frames):
-        return state                                      # older than both frames kept: nothing to show
+        return state                                      # older than both frames kept: nothing more to show
     ms, positions = frames.get(ts, (kafka_ms, {}))
     positions = {**positions, rec["player_id"]: (rec["x"], rec["y"], rec.get("is_detected"))}
     frames = {**frames, ts: (max(ms, kafka_ms), positions)}
@@ -195,6 +207,22 @@ def event_line(state: MatchState) -> str | None:
     ts, _, kind, team, pid, _ = state.last_event
     who = state.players.get(pid, {}).get("short_name")
     return f"{KEY_EVENTS[kind]}, {ts // 60 + 1}', {team_name(state, team)}" + (f" ({who})" if who else "")
+
+
+def player_stats(state: MatchState, player_id: str) -> playerstats.PlayerStats:
+    """Distance, sprints, top speed and heatmap of a player over the replay so far, with the formulas of Gold."""
+    p1, p2 = state.info.get("home_side_p1"), state.info.get("home_side_p2")
+    latest = {}                                           # a repeated message (at-least-once) counts once
+    for ts, period, x, y, speed, detected, _ in _history(state.seconds.get(player_id, ((), ()))):
+        latest[ts] = (period, x, y, speed, detected)
+    seconds = [playerstats.Second(ts, *playerstats.silver_xy(x, y, period, p1, p2), speed, detected)
+               for ts, (period, x, y, speed, detected) in latest.items()]
+    return playerstats.player_stats(seconds)
+
+
+def _history(history: tuple) -> list:
+    chunks, tail = history
+    return [item for chunk in (*chunks, tail) for item in chunk]
 
 
 def home_attacks_right(state: MatchState) -> bool | None:

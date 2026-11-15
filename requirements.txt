@@ -15,7 +15,7 @@ dbt-duckdb>=1.11,<1.12
 duckdb>=2.0,<2.1   # same DuckDB as dbt/Dockerfile and soda/Dockerfile (one file format)
 
 # --- Dashboard: Streamlit + mplsoccer (the Docker image of `make app` pins its own copy, see app/streamlit/requirements.txt) ---
-streamlit>=1.50,<2
+streamlit>=1.67,<2   # the pitch component (st.components.v2) was tested on 1.67
 mplsoccer>=1.4,<2
 
 # --- Dev tools: lint, tests, hooks ---

@@ -8,7 +8,7 @@ import live
 import live_feed
 
 AppTest = pytest.importorskip("streamlit.testing.v1").AppTest
-PAGE = str(Path(__file__).resolve().parents[2] / "app" / "streamlit" / "pages" / "live_match.py")
+PAGE = str(Path(__file__).resolve().parents[2] / "app" / "streamlit" / "sections" / "live_match.py")
 MATCH = {"match_id": "m1", "home_team": "Home FC", "away_team": "Away FC", "home_color": "#ff0000",
          "away_color": "#0000ff", "p2_end_ts": 6000, "home_side_p1": "left_to_right", "home_side_p2": "right_to_left"}
 
@@ -74,3 +74,15 @@ def test_live_page_waits_for_a_replay_and_needs_kafka(monkeypatch):
     assert "make replay" in texts(page(monkeypatch, FakeFeed({})))
     at = page(monkeypatch, None)
     assert "KAFKA_BOOTSTRAP" in at.error[0].value
+
+
+def test_live_page_shows_the_stats_so_far_of_the_clicked_player(monkeypatch):
+    monkeypatch.setattr(live_feed, "start_feed", lambda: FakeFeed({"m1": state_at(int(time.time() * 1000) + 60_000)}))
+    at = AppTest.from_file(PAGE, default_timeout=60)
+    at.session_state["live_player"] = {"m1": "H09"}         # what a click on the pitch stores
+    at.run()
+    assert not at.exception
+    assert "SELECTED PLAYER" in texts(at) and "P. H09" in texts(at)
+    panel = texts(at)
+    assert "<b>0.00 km</b>" in panel and "<span>Sprints</span><b>0</b>" in panel     # two seconds, no speed sent
+    assert "<b>not yet</b>" in panel

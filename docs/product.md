@@ -291,7 +291,10 @@ Both click tests ran on 2026-11-15 in headless Chrome against a throwaway Stream
   other player returned `A04` to Python.
 
 Its first test, in step 3: a full match (22 players and the ball over m001's 4,428 tracked seconds) inside the 1 s
-refresh of the Live page. What the throwaway test does not show yet: a full match in the component (size and frame rate), the component inside
+refresh of the Live page. Result (2026-11-15, 160 s each, headless Chrome on this machine): one frame per refresh, as Live
+does, costs 2-3 ms of server time per refresh and stays at 60 frames per second with a flat memory (server 220 MB,
+browser heap 11 MB); the whole match (1.9 MB of JSON) sent at every refresh also plays at 60 frames per second without
+restarting, but costs about 150 ms of server time per refresh, so Replay sends it once, outside the refresh. What the throwaway test does not show yet: a full match in the component (size and frame rate), the component inside
 `st.fragment` refreshes (Live), and a click test that runs in CI (it needs a browser; `streamlit.testing` cannot click
 inside a component).
 

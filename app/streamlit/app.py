@@ -35,9 +35,9 @@ def sidebar() -> None:
                                               format_func=lambda v: v.capitalize())
         if picked and picked != view:
             st.session_state["view"] = picked
-            on_view_page = any(p.key == navigation.url_path and p.section in sitemap.VIEWS.values() for p in sitemap.PAGES)
-            if on_view_page:
-                st.session_state["go_to"] = sitemap.FIRST_PAGE[picked]   # this page is not in the other view
+            current = navigation.url_path or "home"          # the default page has an empty URL path
+            if current not in {p.key for pages in sitemap.menu(picked).values() for p in pages}:
+                st.session_state["go_to"] = sitemap.FIRST_PAGE[picked]   # this page is not in that view
             st.rerun()          # the menu depends on the view
     try:
         ids, labels = match_choices()
@@ -51,7 +51,7 @@ def sidebar() -> None:
     st.sidebar.caption(CREDIT)
 
 
-pages = {section: [st.Page(f"pages/{p.key}.py", title=p.title, icon=p.icon, url_path=p.key, default=p.key == "home")
+pages = {section: [st.Page(f"sections/{p.key}.py", title=p.title, icon=p.icon, url_path=p.key, default=p.key == "home")
                    for p in specs]
          for section, specs in sitemap.menu(st.session_state.get("view")).items()}
 navigation = st.navigation(pages)
