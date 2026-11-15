@@ -161,3 +161,41 @@ fonctionnel de la page live.
   montrer un menu différent selon la vue.
 - **Deux sites séparés (fan et coach)** : LIVE, MATCHES et BEHIND THE DATA sont communs ; un seul site avec un menu qui
   change évite de tout dupliquer.
+
+## Étape 3 : le terrain cliquable, la page Squad et la page joueur
+
+### Ce qui a été construit
+
+| Fichier | Rôle |
+|---|---|
+| `app/web3d/pitch.js` | le terrain : un `<canvas>` dessiné en JavaScript, avec des couches (joueurs et ballon, match entier joué dans le navigateur, heatmap, tirs, passes, flèches d'attaque, message). Un clic sur un joueur renvoie son identifiant à Python |
+| `app/streamlit/pitch.py` | l'enveloppe Python : un composant Streamlit « v2 » (HTML et JS passés en texte, sans compilation) qui prépare les données et rend le joueur cliqué |
+| `app/streamlit/playerstats.py` | les formules joueur écrites une seule fois : position comme Silver (miroir, bornes du terrain), distance, efforts de sprint, vitesse max sur positions détectées, heatmap 6 x 4. Utilisées par la page live |
+| `sections/squad.py` | l'effectif en cartes maillot (couleur de l'équipe, numéro, nom, poste), par équipe ; un clic ouvre la page joueur |
+| `sections/player.py` | la page joueur, un seul fichier, deux modes : fan (carte, badges, 5 scores, terrain, autres matchs) et coach (valeurs brutes, seuils, fatigue, événements, classement) |
+
+### Pourquoi c'est construit ainsi
+
+- **Mesurer avant de construire.** Le premier test a mis un match entier (4 428 secondes) dans le composant, rafraîchi
+  chaque seconde pendant 160 s. Résultat : 60 images par seconde, mémoire stable, 2 à 3 ms par rafraîchissement en
+  mode live. Le match entier envoyé à chaque seconde reste fluide mais coûte 150 ms au serveur : le replay l'enverra
+  une seule fois.
+- **Une formule, un seul endroit.** Les stats live d'un joueur utilisent `playerstats.py`, qui reproduit les règles de
+  Silver et de Gold. Un test rejoue tous les messages Kafka d'un match et compare à Gold : sur m001 et m002, les
+  320 valeurs (32 joueurs x 5 valeurs x 2 matchs) sont identiques.
+- **L'état reste pur, mais pas lent.** Garder chaque seconde de chaque joueur en copiant un dictionnaire à chaque
+  message rendait le rattrapage Kafka 4 fois plus lent. Les secondes sont maintenant rangées en petits blocs figés de
+  64 : un message ne copie que le dernier bloc.
+
+### Les deux idées à retenir
+
+1. **Tester le pire cas d'abord.** Si le composant n'avait pas tenu un match entier, il aurait fallu changer de
+   technologie avant d'écrire les pages ; on l'a su en une heure au lieu de le découvrir à la fin.
+2. **Un nom de dossier peut changer le comportement d'un outil.** Un dossier `pages/` active l'ancien mode multipage
+   de Streamlit tant que le routeur n'a pas tourné : après un redémarrage, la première page ouverte montrait un menu
+   brut. Le dossier s'appelle maintenant `sections/`.
+
+### Ce qu'on n'a pas choisi
+
+- **Plotly pour le terrain** : le clic marche aussi, mais chaque mouvement relance Python, donc pas de replay fluide.
+- **Calculer les stats live dans Spark** : décidé en revue, Spark ne fera que les fenêtres de 5 minutes (étape 6).
