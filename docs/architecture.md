@@ -62,7 +62,7 @@ build-up, fatigue, space control, team profile, events).
 ## Quality (Soda)
 
 Soda Core 3.5 runs SodaCL checks on Silver (`soda/checks/silver.yml`, 71 checks) and on the Gold file (`soda/checks/gold.yml`,
-119 checks) through one DuckDB connection built by `soda/run_checks.py`; nothing is written to the data. The exit code (0 / 1) is
+121 checks) through one DuckDB connection built by `soda/run_checks.py`; nothing is written to the data. The exit code (0 / 1) is
 what Dagster will use to block the next step; each run also writes `data/soda/<layer>.json` for the dashboard. `make soda-demo`
 damages a copy on purpose to show the checks catch it. Soda has its own image because its DuckDB connector pins DuckDB 1.0
 (see [`soda/README.md`](../soda/README.md)). The columns and types the schema checks enforce are in

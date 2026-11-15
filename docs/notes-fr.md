@@ -104,3 +104,24 @@ entraîneurs, S1 et E1-E2), et trois tables intermédiaires qui les préparent.
   besoin ; la grille de 1 m suffit.
 - **Filtrer les joueurs non éligibles** : on perdrait l'information « ce joueur a trop peu joué », que la page doit
   montrer.
+
+### Corrections après la revue
+
+- **Longueur d'équipe** : on garde les joueurs de champ seulement, sous le nom « outfield block length ». SkillCorner
+  compte le gardien ; avec lui, notre mesure retombe sur la sienne (écart médian 0,26 m). Ce n'est donc pas une erreur
+  de calcul mais un choix de définition, écrit dans `product.md`.
+- **Taux d'équipe** : divisés par les minutes filmées de l'équipe (secondes distinctes / 60), pas par la somme des
+  minutes de ses joueurs, et montrés pour 90 minutes. Avant, le chiffre était 11 fois trop petit et sans unité parlante.
+- **Vitesse maximale** : une vitesse relie deux positions à une seconde d'écart. Toutes les vitesses au-dessus de
+  33 km/h avaient une position estimée à un bout. La carte joueur n'utilise plus que les vitesses dont les deux
+  positions sont vues par la caméra : 33,0 km/h au plus dans m001 au lieu de 39,2.
+- **Taux de réussite des passes progressives** : supprimé. Une passe ratée n'a pas de point de réception ; on garde
+  alors la fin de la possession du passeur, à 1,5 m de son départ. Une passe ratée n'a donc presque jamais l'air
+  « progressive », et le taux était gonflé (89 à 96 %). Les passes progressives réussies restent fiables.
+- **Distance par minute** : gardée, avec le libellé « par minute de jeu filmé (surtout ballon en jeu) ».
+
+### L'idée à retenir
+
+**Un chiffre bizarre est souvent une question de définition des données sources.** Pour la vitesse comme pour les
+passes, le calcul était juste ; c'est ce que la donnée contient (une position estimée, une fin de passe manquante) qui
+faussait le résultat. Avant de corriger une formule, on regarde d'où vient chaque valeur.
