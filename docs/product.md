@@ -141,7 +141,7 @@ The 36 tackles and 7 fouls raise `ppp` by 4.3 % (HOME) and 6.2 % (AWAY) and leav
 ## 5. Rules for every number
 
 - **Divide by tracked minutes.** About a quarter of each match has no tracking. Totals are shown, but comparisons use
-  per-tracked-minute values. Events follow the same rule: 99.4 % of them fall in tracked seconds (11 of 1,741 in m001,
+  per-tracked-minute values. Events follow the same rule: 99.4 % of the actions fall in tracked seconds (11 of 1,741 in m001,
   11 of 1,878 in m002, measured).
 - **Compare within a match.** Ranks and scores are computed inside one match. Across matches only team profiles are
   compared, with the opponent named next to them.
@@ -202,7 +202,8 @@ Not proposed: EPV, xLoss and xShot. They are model outputs no question uses.
 `gold_match_timeline` also gets `xthreat_successful_passes` per team and window, the input of E2.
 
 Live scope. Spark Structured Streaming (FOO-08) reads Kafka and computes only F2, F4, F5 and C3, per 5-min window, with
-the formulas of this document. C1 on the live page is the current second only, computed in the page from the Kafka
+the formulas of this document, and writes them to the Kafka topic `foot-live-stats`, which the Live match page reads (no
+other service is added). C1 on the live page is the current second only, computed in the page from the Kafka
 positions, without Spark. F1, C6 and every other question are post-match only, read from the Gold tables above.
 
 ## 8. Page map
@@ -212,7 +213,7 @@ Home plus ten pages. Each page answers one main question; the ids point to secti
 | Page | Main question | Questions | For | When | Reads |
 |---|---|---|---|---|---|
 | Home | Which match do I look at, and how did it end? | score, teams, date, links | both | post (live badge while a match plays) | `gold_team_match_stats` |
-| Live match | What is happening right now? | positions and score now, C1 (current second), F2, F4, F5, C3 per 5 min | both | live | Kafka topics, output of the streaming job (FOO-08) |
+| Live match | What is happening right now? | positions and score now, C1 (current second), F2, F4, F5, C3 per 5 min | both | live | Kafka topics, and `foot-live-stats` written by the streaming job (FOO-08) |
 | Match story | How did the match go, and why did it end this way? | F1, F2, F7 | fans | post | `gold_match_timeline`, `gold_team_profile` |
 | Player cards | Who played well, and how does my player do across matches? | F3, F4, F5, F8 | fans | post | `gold_player_card` |
 | Shots & passes | Where did the team shoot from, and how did the ball move? | shot map, F6, C4, C5 | both | post | `gold_shots`, `gold_pass_network`, `gold_team_build_up` |
@@ -237,7 +238,8 @@ Physical & fatigue, and Shots and passes, Compare matches and Data quality keep 
 
 Space control uses all 22 positions, detected or not: leaving out the estimated ones would give their cells to the
 wrong team. The detected share is shown next to it. The 1 m grid is an approximation of the exact Voronoi areas; it
-needs only numpy (already installed with pandas) instead of a geometry library. The replay draws exact Voronoi cells
+needs only numpy (already installed with pandas) instead of a geometry library. Its run time is measured when it is
+built: above about 60 s per match, the grid becomes 2 m (1,785 cells). The replay draws exact Voronoi cells
 for the eye, but every number it shows comes from `gold_replay_frames`, so the replay and the Gold tables agree.
 
 ## 9. Smooth replay
@@ -254,7 +256,8 @@ The chosen design: the Match replay page reads one match from `gold_replay_frame
 (positions in decimetres as integers, one array per second), and passes it with the HTML and JavaScript of
 `app/web3d` to `st.components.v1.html`. Playback speed, trails, labels, highlight, the Voronoi layer and the
 detected-only toggle are handled in the browser, so playing never reruns the Python page. Voronoi cells come from
-d3-delaunay, kept as a file in `app/web3d` so the demo works offline.
+d3-delaunay, kept as a file in `app/web3d` so the demo works offline. No npm build: every library is vendored as a
+file in `app/web3d`.
 
 Size, measured on m001 at 1 Hz (4,428 tracked seconds, 32 player slots plus the ball, 101,844 positions): 1.12 MB of
 JSON, 0.38 MB gzipped. `is_detected`, possession and the space share add a few columns to that.
