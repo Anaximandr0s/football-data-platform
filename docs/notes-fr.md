@@ -199,3 +199,33 @@ fonctionnel de la page live.
 
 - **Plotly pour le terrain** : le clic marche aussi, mais chaque mouvement relance Python, donc pas de replay fluide.
 - **Calculer les stats live dans Spark** : décidé en revue, Spark ne fera que les fenêtres de 5 minutes (étape 6).
+
+## Étape 4 : la page « Match story » pour les fans
+
+### Ce qui a été construit
+
+| Fichier | Rôle |
+|---|---|
+| `app/streamlit/story.py` | les phrases sous les graphiques. Chaque fonction rend la phrase **et** les chiffres Gold qui l'ont produite, pour qu'on puisse la vérifier |
+| `app/streamlit/charts.py` | les frises du match (buts, danger créé, possession, territoire), alignées sur les mêmes minutes |
+| `sections/match_story.py` | la page : score et frise des buts, « qui dominait » par tranche de 5 minutes, les 3 grandes différences, tirs et réseau de passes sur le terrain du composant, tableau côte à côte |
+| `sections/live_match.py` | correction : « Now playing » ne montre que les matchs rejoués en ce moment, ouvre le match de la barre latérale s'il joue, et sinon dit « No match live right now » avec un lien vers Replay |
+
+### Pourquoi c'est construit ainsi
+
+- **Une phrase ne doit rien inventer.** Le texte et les chiffres sortent de la même fonction. La preuve relit Gold
+  avec ses propres requêtes SQL et compare : sur m001 et m002, aucune des 23 phrases n'a un chiffre différent de Gold.
+- **Décrire, pas expliquer.** Les phrases disent « had more », jamais « won because » : un écart de possession ne
+  prouve pas pourquoi un match a été gagné. Un test vérifie que « because » et « won » n'apparaissent pas.
+- **Lire la preuve comme un fan.** Les chiffres étaient justes, mais la relecture a trouvé trois défauts : « passs »,
+  « the most of the team » alors qu'un coéquipier avait fait plus de passes, et une phrase qui répétait une autre.
+
+### L'idée à retenir
+
+**Une donnée juste peut quand même donner une phrase fausse.** « J. O'Shea, le plus impliqué » est vrai ; « celui qui
+a fait le plus de passes » ne l'est pas. Il faut vérifier les chiffres **et** le sens des mots.
+
+### Ce qu'on n'a pas choisi
+
+- **Un modèle de langage pour écrire les phrases** : plus varié, mais impossible à garantir sans invention. Des modèles
+  de phrases fixes, remplis avec Gold, se vérifient un par un.
