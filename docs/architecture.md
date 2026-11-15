@@ -70,5 +70,6 @@ damages a copy on purpose to show the checks catch it. Soda has its own image be
 
 `app/streamlit/` (`make app`, http://localhost:8501): match overview, players (heatmap, intensity, ranking), shots and passes
 (shot map, pass network), compare matches, data quality. It reads the Gold file and the Soda results **read-only** (the
-repository is mounted `:ro`, the DuckDB file is opened for one query at a time so it never blocks a `make gold`). The live
-pitch and score (FOO-06) are not built: they need the Kafka stream. See [`app/streamlit/README.md`](../app/streamlit/README.md).
+repository is mounted `:ro`, the DuckDB file is opened for one query at a time so it never blocks a `make gold`). The Live
+match page (FOO-06) reads Kafka instead: one background consumer in the `app` container keeps the state of each replayed
+match, and the page redraws it about once per second. See [`app/streamlit/README.md`](../app/streamlit/README.md).

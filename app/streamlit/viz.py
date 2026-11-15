@@ -114,6 +114,32 @@ def pass_network(network: pd.DataFrame, players: pd.DataFrame, color: str, min_p
     return fig
 
 
+def live_pitch(positions: dict, players: dict, ball: tuple | None, colors: dict[str, str],
+               home_attacks_right: bool | None, message: str | None = None) -> plt.Figure:
+    """One second of the replay as the camera shows it (teams switch ends at half-time). `positions`:
+    {player_id: (x, y, is_detected)}; `ball`: (x, y) or None; `message` replaces the dots (camera gap)."""
+    pitch, fig, ax = draw_pitch((9, 6))
+    if message:
+        ax.text(PITCH_L / 2, PITCH_W / 2, message, ha="center", va="center", color="white", fontsize=15,
+                bbox={"facecolor": BG, "alpha": 0.85, "edgecolor": "#c9d3cd", "boxstyle": "round,pad=0.6"}, zorder=6)
+        return fig
+    for pid, (x, y, detected) in positions.items():
+        p = players.get(pid, {})
+        color = colors.get(p.get("team_id"), "#8a948f")
+        label = "#0e1117" if _luminance(color) > 0.6 else "white"
+        # an estimated position (camera did not see the player) is drawn lighter
+        pitch.scatter(x, y, ax=ax, s=330, facecolor=color, edgecolor="white", lw=1.2,
+                      alpha=1.0 if detected is not False else 0.45, zorder=4)
+        ax.text(x, y, str(p.get("shirt_number", "")), ha="center", va="center", color=label, fontsize=8,
+                fontweight="bold", zorder=5)
+    if ball is not None:
+        pitch.scatter(ball[0], ball[1], ax=ax, s=90, facecolor="white", edgecolor="#0e1117", lw=1.5, zorder=6)
+    if home_attacks_right is not None:
+        left, right = (colors["HOME"], colors["AWAY"]) if home_attacks_right else (colors["AWAY"], colors["HOME"])
+        _attack_arrows(ax, left, right)
+    return fig
+
+
 def ranking_bars(df: pd.DataFrame, metric: str, colors: dict[str, str], top: int = 10) -> plt.Figure:
     best = df.nlargest(top, metric).iloc[::-1]
     fig, ax = plt.subplots(figsize=(7, 0.42 * len(best) + 1.2))

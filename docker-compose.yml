@@ -275,6 +275,7 @@ services:
     environment:
       GOLD_DUCKDB_PATH: /app/data/football.duckdb
       SODA_OUT_DIR: /app/data/soda
+      KAFKA_BOOTSTRAP: kafka:9092          # Live match page: one consumer reading the replay topics
     volumes:
       - ./:/app:ro
     ports:
