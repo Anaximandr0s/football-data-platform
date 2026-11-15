@@ -5,7 +5,7 @@ import pytest
 import story
 
 SHORT = {"HOME": "Reds", "AWAY": "Blues"}
-NO_HALF = (0, None)          # clock bounds without a second half: windows read 1-5, 6-10...
+
 
 
 def profile(**over) -> pd.DataFrame:
@@ -25,9 +25,10 @@ def profile(**over) -> pd.DataFrame:
 def timeline(xt_home, xt_away, poss_home, greyed) -> pd.DataFrame:
     rows = []
     for w, (xh, xa, ph, g) in enumerate(zip(xt_home, xt_away, poss_home, greyed, strict=True)):
-        rows.append({"window_index": w, "team_id": "HOME", "xthreat_successful_passes": xh, "possession_share": ph,
-                     "possession_greyed": g})
-        rows.append({"window_index": w, "team_id": "AWAY", "xthreat_successful_passes": xa,
+        label = f"{5 * w}-{5 * w + 5}"
+        rows.append({"window_index": w, "window_label": label, "team_id": "HOME", "xthreat_successful_passes": xh,
+                     "possession_share": ph, "possession_greyed": g})
+        rows.append({"window_index": w, "window_label": label, "team_id": "AWAY", "xthreat_successful_passes": xa,
                      "possession_share": 1 - ph, "possession_greyed": g})
     return pd.DataFrame(rows)
 
@@ -48,16 +49,16 @@ def test_the_team_with_more_comes_first_even_when_it_is_away():
 
 
 def test_momentum_counts_the_spells_and_names_the_strongest():
-    s = story.momentum(timeline([0.1, 0.0, 0.5], [0.2, 0.1, 0.0], [0.5, 0.5, 0.5], [False] * 3), SHORT, NO_HALF)
+    s = story.momentum(timeline([0.1, 0.0, 0.5], [0.2, 0.1, 0.0], [0.5, 0.5, 0.5], [False] * 3), SHORT)
     assert s.text == ("Blues created more danger with its passes in 2 of the 3 five-minute spells; its strongest spell "
-                      "was minutes 1-5.")                      # -0.1 in spells 0 and 1: the first is named
+                      "was minutes 0-5.")                      # -0.1 in spells 0 and 1: the first is named
     assert (s.facts["home_ahead"], s.facts["away_ahead"]) == (1, 2)
 
 
 def test_possession_skips_greyed_spells_and_says_how_many():
     s = story.possession(timeline([0] * 3, [0] * 3, [0.9, 0.6, 0.7], [True, False, False]),
-                         profile(possession_share=(0.65, 0.35)), SHORT, NO_HALF)
-    assert s.text == ("Reds had the ball 65% of the time; its best spell was minutes 11-15 with 70%. "
+                         profile(possession_share=(0.65, 0.35)), SHORT)
+    assert s.text == ("Reds had the ball 65% of the time; its best spell was minutes 10-15 with 70%. "
                       "1 spell is greyed: under 60 seconds with a known owner.")
 
 

@@ -295,6 +295,7 @@ warn the dashboard owner. Definitions and examples: [`../dbt/README.md`](../dbt/
 | Counts | a player with no event has 0, never null. Ratios and speeds are null when there is nothing to compute them from. Event counts cover actions only: a `run` is never counted and never creates a row (a 5-minute window with only runs has no row) |
 | `shots` | type `shot` only. Goals are separate: shots on the shot map = shots + goals (`gold_shots` holds both) |
 | Successful pass | `outcome = 'successful'` |
+| Football windows | 5 and 15 minutes, restarting at each kick-off: index 0-8 then 9 (45+) in the first half, 10-18 then 19 (90+) in the second (15 minutes: 0-2, 3, 4-6, 7). Defined once by the dbt macro `football_window` and the table `int_football_windows`, the same rule as `clock.window_index` in the app; the stoppage window lasts until the end of its half |
 | `x_att`, `y_att` | coordinates seen by the team of the row: `x_att` = `x` for HOME, `105 - x` for AWAY (distance from its own goal line); `y_att` = `y` for HOME, `68 - y` for AWAY (`y_att > 45.33` is its left) |
 | Thirds, lanes | own `x_att < 35`, middle, final `x_att >= 70`; left `y_att > 45.33`, centre, right `y_att < 22.67` |
 | Defensive action | `pressure`, `tackle` or `foul`; a `run` never counts |
@@ -375,25 +376,29 @@ rows over the pitch (cells 17.5 m x 17 m), Silver frame; a zone never visited ha
 
 The source gives no saved / blocked / off-target outcome: there is no expected-goals value.
 
-**gold_player_5min**: one row per player per 5-minute window of the match clock per match. Key (match_id, player_id, window_start_ts).
+**gold_player_5min**: one row per player per 5-minute football window per match. Key (match_id, player_id, window_index).
 
 | Column | Type | Meaning |
 |---|---|---|
 | match_id, player_id, team_id | VARCHAR | |
-| window_start_ts, window_end_ts | INTEGER | seconds; `window_start_ts` is a multiple of 300, `window_end_ts` = start + 300 |
-| tracked_seconds | BIGINT | tracked seconds in the window (at most 300) |
-| coverage | DOUBLE | tracked_seconds / 300: a low value means the window is incomplete |
+| window_index, period, window_start_ts, window_end_ts | INTEGER | the football window (section 10.2): its first second and the second after its last |
+| window_label | VARCHAR | "0-5" ... "45+" ... "90+" |
+| window_seconds | BIGINT | length of the window: 300, or the stoppage time for 45+ and 90+ |
+| tracked_seconds | BIGINT | tracked seconds in the window (at most window_seconds) |
+| coverage | DOUBLE | tracked_seconds / window_seconds: a low value means the window is incomplete |
 | distance_m, max_speed_kmh | DOUBLE | distance (0 if none), fastest speed (null if none) |
 | sprint_seconds | BIGINT | |
 | passes, shots, goals, tackles, fouls, pressures | BIGINT | event counts in the window |
 
 **gold_match_timeline** (F1, F2, F7, E2): one row per team per 5-minute window per match, every window from 0 to
-`p2_end_ts // 300` even if empty. Key (match_id, team_id, window_index).
+`p2_end_ts`, even if empty: 5-minute football windows (see below). Key (match_id, team_id, window_index).
 
 | Column | Type | Meaning |
 |---|---|---|
 | match_id, team_id | VARCHAR | |
-| window_index, window_start_ts, window_end_ts | INTEGER | `ts // 300`; start = index x 300, end = start + 300 |
+| window_index, period, window_start_ts, window_end_ts | INTEGER | football window (below); its first second and the second after its last |
+| window_label | VARCHAR | "0-5" ... "40-45", "45+", "45-50" ... "85-90", "90+" |
+| window_seconds | BIGINT | length of the window: 300, or the stoppage time for 45+ and 90+ |
 | passes, final_third_passes | BIGINT | passes of the team; those starting at `x_att >= 70` |
 | field_tilt | DOUBLE | final_third_passes / those of both teams in the window; null if neither has one |
 | possession_seconds, known_seconds | BIGINT | ball seconds owned by the team; owned by either team |
@@ -430,13 +435,13 @@ The source gives no saved / blocked / off-target outcome: there is no expected-g
 | defensive_line_height | DOUBLE | mean `x_att` of the 4 deepest outfield players (assumes a back four); C2 reads the `out_of_possession` row |
 | detected_share | DOUBLE | positions seen by the camera / positions used |
 
-**gold_pressing** (C3): one row per team per 15-minute window per match, every window from 0 to `p2_end_ts // 900`.
+**gold_pressing** (C3): one row per team per 15-minute football window per match (0-15, 15-30, 30-45, 45+, 45-60, 60-75, 75-90, 90+).
 Key (match_id, team_id, window_index).
 
 | Column | Type | Meaning |
 |---|---|---|
 | match_id, team_id | VARCHAR | |
-| window_index, window_start_ts, window_end_ts | INTEGER | `ts // 900` |
+| window_index, period, window_start_ts, window_end_ts, window_label, window_seconds | | the 15-minute football window, as in `gold_match_timeline` |
 | defensive_actions, opponent_passes | BIGINT | |
 | ppp | DOUBLE | defensive_actions / opponent_passes, null if no opponent pass |
 | defensive_actions_own_third, defensive_actions_middle_third, defensive_actions_final_third | BIGINT | by third of `x_att` at the start |
@@ -471,7 +476,7 @@ a 1 m grid whose nearest player, detected or not, is HOME).
 | Column | Type | Meaning |
 |---|---|---|
 | match_id, team_id | VARCHAR | |
-| window_index, window_start_ts, window_end_ts | INTEGER | `ts // 300` |
+| window_index, period, window_start_ts, window_end_ts, window_label, window_seconds | | the 5-minute football window, as in `gold_match_timeline` |
 | seconds_used, seconds_in_possession, seconds_out_of_possession, seconds_unknown | BIGINT | tracked seconds, and by owner of the ball |
 | space_share, space_share_in_possession, space_share_out_of_possession, space_share_unknown | DOUBLE | mean share of the pitch nearest to the team; HOME + AWAY = 1 |
 | detected_share | DOUBLE | positions seen by the camera / positions used |

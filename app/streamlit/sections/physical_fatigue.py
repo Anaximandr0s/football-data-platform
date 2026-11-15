@@ -2,10 +2,9 @@
 (C6) comes in step 5."""
 import streamlit as st
 
-import clock
 import sitemap
 import viz
-from data import CAVEAT, clock_bounds, current_match, require_gold, table
+from data import CAVEAT, current_match, require_gold, table
 
 sitemap.header("physical_fatigue")
 teams = require_gold()
@@ -29,8 +28,7 @@ win = win[(win.match_id == match) & (win.player_id == pid)].sort_values("window_
 if win.empty:
     st.info("No window for this player.")
 else:
-    bounds = clock_bounds(match)
-    win = win.assign(minute=[clock.span(r.window_start_ts, r.window_end_ts, *bounds) for r in win.itertuples()])
+    win = win.assign(minute=win.window_label + "'")
     st.markdown("**Distance per 5-minute window (m)**")
     st.bar_chart(win.set_index("minute")["distance_m"], color=colors[side], sort=False)
     st.markdown("**Sprint seconds per window**")

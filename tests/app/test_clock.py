@@ -35,3 +35,15 @@ def test_windows_and_axis():
     ticks = dict((label, value) for value, label in clock.axis_ticks(*M001, end_ts=6025))
     assert list(ticks) == ["0'", "15'", "30'", "45'", "60'", "75'", "90'"]
     assert ticks["45'"] == pytest.approx(2899 / 60)        # the axis restarts at 45' at the second kick-off
+
+
+def test_football_windows_restart_at_each_kick_off():
+    w5 = clock.windows(0, 2890, 2899, 6025, 300)                    # m001
+    assert [w[2] for w in w5] == ["0-5", "5-10", "10-15", "15-20", "20-25", "25-30", "30-35", "35-40", "40-45", "45+",
+                                  "45-50", "50-55", "55-60", "60-65", "65-70", "70-75", "75-80", "80-85", "85-90", "90+"]
+    assert w5[9] == (9, 1, "45+", 2700, 2891)                         # 191 s of first-half stoppage time
+    assert w5[10] == (10, 2, "45-50", 2899, 3199) and w5[19] == (19, 2, "90+", 5599, 6026)
+    assert [w[2] for w in clock.windows(0, 2890, 2899, 6025, 900)] == ["0-15", "15-30", "30-45", "45+", "45-60", "60-75",
+                                                                       "75-90", "90+"]
+    assert clock.window_index(2936, 2, *M001) == 10 and clock.window_index(3890, 2, *M001) == 13   # Clough, Goodwin
+    assert clock.window_index(2800, 1, *M001) == 9 and clock.window_index(2800, 1, *M001, size=900) == 3

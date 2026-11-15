@@ -67,14 +67,14 @@ st.altair_chart(charts.momentum(timeline, goals, colors, names, end_minute, tick
 st.caption("SkillCorner xThreat of the successful passes: how threatening the targeted spot was. It is not xG (expected "
            "goals). Above the line: " + short["HOME"] + " on top; below: " + short["AWAY"] + ". Dotted lines: goals; "
            "solid line: second-half kick-off.")
-say(story.momentum(timeline, short, bounds))
+say(story.momentum(timeline, short))
 
 st.markdown("**Possession**, per 5 minutes")
 st.altair_chart(charts.shares(timeline, "possession_share", goals, colors, names, end_minute, ticks, kickoff2,
                               greyed="possession_greyed"), width="stretch")
 st.caption(f"{short['HOME']} from the bottom, {short['AWAY']} from the top. Grey: fewer than 60 seconds with a known "
            "owner in that spell, too few to trust.")
-say(story.possession(timeline, profile, short, bounds))
+say(story.possession(timeline, profile, short))
 
 st.markdown("**Territory**: passes played from the final third, per 5 minutes")
 st.altair_chart(charts.shares(timeline, "field_tilt", goals, colors, names, end_minute, ticks, kickoff2),

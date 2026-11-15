@@ -59,3 +59,48 @@ def axis_ticks(p1_start_ts: int, p2_start_ts: int | None, end_ts: int) -> list[t
         ticks += [((p2_start_ts + 60 * (m - 45)) / 60, f"{m}'") for m in (45, 60, 75, 90)
                   if p2_start_ts + 60 * (m - 45) <= end_ts]
     return ticks
+
+
+# ---------------------------------------------------------------- football windows (docs/product.md, section 2)
+# 5- and 15-minute windows restart at each kick-off: 0-5' ... 40-45', then one stoppage window 45+ (as long as the
+# first-half stoppage time), 45-50' ... 85-90', then 90+. The dbt macro football_window and Spark Streaming (step 6)
+# use the same rule; tests/dbt checks that dbt and this function agree.
+REGULAR_SECONDS = HALF_MINUTES * 60
+
+
+def regular_windows(size: int) -> int:
+    """Regular windows per half: 9 of 5 minutes, 3 of 15 minutes."""
+    return REGULAR_SECONDS // size
+
+
+def window_index(ts: int, period: int | None, p1_start_ts: int, p2_start_ts: int | None, size: int = 300) -> int:
+    """0..8 then 9 (45+) in the first half, 10..18 then 19 (90+) in the second; 0..2, 3, 4..6, 7 for 15 minutes."""
+    period = period if period in (1, 2) else period_of(ts, p2_start_ts)
+    start = p2_start_ts if period == 2 and p2_start_ts is not None else p1_start_ts
+    k = min(max(0, int(ts) - int(start)) // size, regular_windows(size))
+    return k + (regular_windows(size) + 1 if period == 2 else 0)
+
+
+def window_label(index: int, size: int = 300) -> str:
+    """"0-5", "40-45", "45+", "45-50", "90+" (15 minutes: "0-15", "45+", "75-90", "90+")."""
+    n = regular_windows(size)
+    period, k = (2, index - n - 1) if index > n else (1, index)
+    if k == n:
+        return f"{HALF_MINUTES * period}+"
+    first = HALF_MINUTES * (period - 1) + k * size // 60
+    return f"{first}-{first + size // 60}"
+
+
+def windows(p1_start_ts: int, p1_end_ts: int, p2_start_ts: int, p2_end_ts: int, size: int = 300) -> list[tuple]:
+    """Every window of a match: (index, period, label, start_ts, end_ts exclusive). A half that ends before 45:00 has
+    no stoppage window; the stoppage window lasts until the end of the half."""
+    out = []
+    for period, start, end in ((1, p1_start_ts, p1_end_ts + 1), (2, p2_start_ts, p2_end_ts + 1)):
+        for k in range(regular_windows(size) + 1):
+            first = start + k * size
+            if first >= end:
+                break
+            last = end if k == regular_windows(size) else min(first + size, end)
+            index = k + (regular_windows(size) + 1 if period == 2 else 0)
+            out.append((index, period, window_label(index, size), first, last))
+    return out

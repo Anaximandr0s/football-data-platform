@@ -231,7 +231,7 @@ checks for gold_player_5min:
   - schema:
       name: gold_player_5min follows the data contract
       fail:
-        when required column missing: [match_id, player_id, team_id, window_start_ts, window_end_ts, tracked_seconds, coverage, distance_m, sprint_seconds, max_speed_kmh, passes, shots, goals, tackles, fouls, pressures]
+        when required column missing: [match_id, player_id, team_id, window_index, period, window_label, window_start_ts, window_end_ts, window_seconds, tracked_seconds, coverage, distance_m, sprint_seconds, max_speed_kmh, passes, shots, goals, tackles, fouls, pressures]
         when wrong column type:
           match_id: VARCHAR
           player_id: VARCHAR
@@ -242,15 +242,15 @@ checks for gold_player_5min:
           distance_m: DOUBLE
           passes: BIGINT
   - row_count > 0
-  - duplicate_count(match_id, player_id, window_start_ts) = 0:
+  - duplicate_count(match_id, player_id, window_index) = 0:
       name: one row per player per 5-minute window
   - missing_count(team_id) = 0
   - failed rows:
-      name: a window lasts 300 seconds and starts on a multiple of 300
-      fail condition: window_end_ts - window_start_ts != 300 or window_start_ts % 300 != 0
+      name: a window lasts its own length (300 seconds, or the stoppage time for 45+ and 90+)
+      fail condition: window_end_ts - window_start_ts != window_seconds or window_seconds <= 0 or (window_label not like '%+' and window_seconds > 300)
   - failed rows:
-      name: coverage is tracked seconds over 300 (between 0 and 1)
-      fail condition: coverage < 0 or coverage > 1 or tracked_seconds > 300
+      name: coverage is tracked seconds over the window length (between 0 and 1)
+      fail condition: coverage < 0 or coverage > 1 or tracked_seconds > window_seconds
   - failed rows:
       name: a player covers less than 2 km in 5 minutes
       fail condition: distance_m > 2000
@@ -266,7 +266,7 @@ checks for gold_match_timeline:
   - schema:
       name: gold_match_timeline follows the data contract
       fail:
-        when required column missing: [match_id, team_id, window_index, window_start_ts, window_end_ts, passes, final_third_passes, field_tilt, possession_seconds, known_seconds, possession_share, possession_greyed, shots, goals, defensive_actions, xthreat_successful_passes, score_home_end, score_away_end]
+        when required column missing: [match_id, team_id, window_index, period, window_label, window_start_ts, window_end_ts, window_seconds, passes, final_third_passes, field_tilt, possession_seconds, known_seconds, possession_share, possession_greyed, shots, goals, defensive_actions, xthreat_successful_passes, score_home_end, score_away_end]
         when wrong column type:
           match_id: VARCHAR
           team_id: VARCHAR
@@ -289,7 +289,7 @@ checks for gold_match_timeline:
       fail condition: possession_share < 0 or possession_share > 1 or field_tilt < 0 or field_tilt > 1
   - failed rows:
       name: a window is greyed exactly when it has fewer than 60 known seconds
-      fail condition: possession_greyed != (known_seconds < 60) or known_seconds > 300
+      fail condition: possession_greyed != (known_seconds < 60) or known_seconds > window_seconds
   - failed rows:
       name: the two teams of a window share the same known seconds and add up to them
       fail query: |
@@ -313,6 +313,13 @@ checks for gold_match_timeline:
         from (select match_id, team_id, sum(passes) as passes from gold_match_timeline group by 1, 2) t
         join gold_team_match_stats s using (match_id, team_id)
         where t.passes != s.passes
+
+  - failed rows:
+      name: windows restart at each kick-off (labels 0-5 ... 45+, 45-50 ... 90+)
+      fail query: |
+        select match_id, window_index, window_label, period from gold_match_timeline
+        where (period = 1 and window_index > 9) or (period = 2 and window_index < 10)
+           or (window_index in (9, 19)) != (window_label like '%+')
 
 checks for gold_player_card:
   - schema:
@@ -405,7 +412,7 @@ checks for gold_pressing:
   - schema:
       name: gold_pressing follows the data contract
       fail:
-        when required column missing: [match_id, team_id, window_index, window_start_ts, window_end_ts, defensive_actions, opponent_passes, ppp, defensive_actions_own_third, defensive_actions_middle_third, defensive_actions_final_third, high_press_share]
+        when required column missing: [match_id, team_id, window_index, period, window_label, window_start_ts, window_end_ts, window_seconds, defensive_actions, opponent_passes, ppp, defensive_actions_own_third, defensive_actions_middle_third, defensive_actions_final_third, high_press_share]
         when wrong column type:
           match_id: VARCHAR
           team_id: VARCHAR
@@ -419,8 +426,8 @@ checks for gold_pressing:
   - duplicate_count(match_id, team_id, window_index) = 0:
       name: one row per team per 15-minute window
   - failed rows:
-      name: a window lasts 900 seconds and starts on a multiple of 900
-      fail condition: window_end_ts - window_start_ts != 900 or window_start_ts != window_index * 900
+      name: a 15-minute window lasts 900 seconds, or the stoppage time for 45+ and 90+
+      fail condition: window_end_ts - window_start_ts != window_seconds or window_seconds <= 0 or (window_label not like '%+' and window_seconds > 900)
   - failed rows:
       name: the three thirds add up to the defensive actions
       fail condition: defensive_actions_own_third + defensive_actions_middle_third + defensive_actions_final_third > defensive_actions or high_press_share < 0 or high_press_share > 1 or ppp < 0
@@ -504,7 +511,7 @@ checks for gold_space_control:
   - schema:
       name: gold_space_control follows the data contract
       fail:
-        when required column missing: [match_id, team_id, window_index, window_start_ts, window_end_ts, seconds_used, space_share, seconds_in_possession, space_share_in_possession, seconds_out_of_possession, space_share_out_of_possession, seconds_unknown, space_share_unknown, detected_share]
+        when required column missing: [match_id, team_id, window_index, period, window_label, window_start_ts, window_end_ts, window_seconds, seconds_used, space_share, seconds_in_possession, space_share_in_possession, seconds_out_of_possession, space_share_out_of_possession, seconds_unknown, space_share_unknown, detected_share]
         when wrong column type:
           match_id: VARCHAR
           team_id: VARCHAR
@@ -517,7 +524,7 @@ checks for gold_space_control:
       name: one space row per team per 5-minute window
   - failed rows:
       name: space shares are between 0 and 1 and the phases add up to the seconds used
-      fail condition: space_share < 0 or space_share > 1 or detected_share < 0 or detected_share > 1 or seconds_used > 300 or seconds_in_possession + seconds_out_of_possession + seconds_unknown != seconds_used
+      fail condition: space_share < 0 or space_share > 1 or detected_share < 0 or detected_share > 1 or seconds_used > window_seconds or seconds_in_possession + seconds_out_of_possession + seconds_unknown != seconds_used
   - failed rows:
       name: the two teams share the pitch (HOME + AWAY = 1 in every window)
       fail query: |

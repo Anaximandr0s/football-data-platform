@@ -16,7 +16,7 @@ Every number on screen answers one of the questions below. A statistic with no q
 | seconds with a possession group | 3,287 of 6,030 (54.8 min) | 3,560 of 6,130 |
 | HOME share of those seconds | 39.6 % | 63.1 % |
 | HOME share of passes (cross-check, Gold) | 37.4 % | 63.9 % |
-| 5-min windows with fewer than 60 known seconds (greyed out, F2) | 1 of 21: the last, partial window (10 s); the lowest full window has 70 s | 0 of 21 (lowest: 76 s) |
+| 5-min windows with fewer than 60 known seconds (greyed out, F2) | 0 of 20 football windows (lowest: 45+, 68 s in a 191 s window); with the old `ts // 300` windows, 1 of 21 (the last, 10 s) | 0 of 20 |
 
 The known-possession time of m001 (54.8 min) equals its ball-in-play time (54.7 min, `docs/data-sources.md`), so a null
 group means the ball is dead or nobody controls it. Possession % per team and per 5 minutes is computable. It is not in
@@ -68,7 +68,7 @@ and 59.5 min of m002, the ball-in-play time.
 | `x_att` | distance from the team's own goal line toward the goal it attacks: `x` for HOME, `105 - x` for AWAY |
 | `y_att` | `y` for HOME, `68 - y` for AWAY. Seen by the attacking team: `y_att > 45.33` is its left, `< 22.67` its right |
 | Thirds | own third `x_att < 35`, middle `35 <= x_att < 70`, final third `x_att >= 70` |
-| `w5`, `w15` | 5- and 15-minute windows of the match clock: `ts // 300`, `ts // 900` |
+| `w5`, `w15` | 5- and 15-minute football windows: they restart at each kick-off, on the football clock. 5 minutes: 0-5' ... 40-45', 45+ (first-half stoppage time, as long as it lasted), 45-50' ... 85-90', 90+. 15 minutes: 0-15', 15-30', 30-45', 45+, 45-60', 60-75', 75-90', 90+. One definition: `clock.window_index` (Python, also for Spark Streaming in step 6) and the dbt macro `football_window`, checked equal by a test. A short window keeps its own length for coverage and is greyed by the usual thresholds |
 | Outfield | `silver.players.position != 'GK'` |
 | Tracked minutes | player: `count(*) / 60` of the player's rows in `silver.tracking`; team: its distinct tracked seconds / 60 (not the sum of its players' minutes) |
 | Team rate | a team count per 90 tracked minutes: `count / team tracked minutes x 90` |
