@@ -51,12 +51,14 @@ def _frames():
             frame = {"frame": f, "period": period,
                      "ball_data": {"x": None, "y": None, "z": None}, "player_data": []}
         else:
+            group = {0: "home team", 1: "away team"}.get(ts)                  # unknown from second 3 on
             frame = {"frame": f, "period": period, "ball_data": {"x": off, "y": 0.0, "z": 0.3},
+                     "possession": {"player_id": None, "group": group},
                      "player_data": [
-                         {"player_id": 1, "x": -52.5 + ts + off, "y": 0.0},   # keeper: +1 m per second
-                         {"player_id": 2, "x": 60.0, "y": 0.0},               # outside the pitch
-                         {"player_id": 3, "x": 10.0, "y": 5.0},
-                         {"player_id": 4, "x": 0.0, "y": 0.0},
+                         {"player_id": 1, "x": -52.5 + ts + off, "y": 0.0, "is_detected": True},  # +1 m/s
+                         {"player_id": 2, "x": 60.0, "y": 0.0, "is_detected": False},  # outside the pitch
+                         {"player_id": 3, "x": 10.0, "y": 5.0, "is_detected": True},
+                         {"player_id": 4, "x": 0.0, "y": 0.0, "is_detected": ts % 2 == 0},
                          {"player_id": 99, "x": 0.0, "y": 0.0}]}              # not in the lineup
         lines.append(json.dumps(frame))
     return lines
@@ -66,18 +68,29 @@ def _events():
     cols = ["frame_start", "period", "team_id", "player_id", "event_type", "end_type",
             "team_score", "opponent_team_score", "x_start", "y_start", "x_end", "y_end",
             "player_targeted_id", "player_targeted_x_reception", "player_targeted_y_reception",
-            "pass_outcome"]
+            "pass_outcome", "event_subtype", "player_targeted_xthreat", "player_targeted_dangerous",
+            "xthreat", "dangerous", "targeted", "received", "speed_avg_band", "lead_to_shot"]
     nan = float("nan")
     rows = [
-        (15, 1, 200, 4, "on_ball_engagement", "indirect_regain", 0, 0, 10, 0, 12, 1, nan, nan, nan, nan),
-        (25, 1, 100, 1, "player_possession", "pass", 0, 0, -10, 0, -5, 0, 2, -20, 5, "successful"),
-        (25, 1, 100, 1, "off_ball_run", nan, 0, 0, 0, 0, 1, 1, nan, nan, nan, nan),
-        (35, 1, 100, 2, "player_possession", "shot", 0, 0, 40, 0, 52.5, 0, nan, nan, nan, nan),
-        (45, 1, 200, 4, "on_ball_engagement", "direct_regain", 0, 1, 5, 5, 6, 6, nan, nan, nan, nan),
-        (65, 2, 200, 4, "on_ball_engagement", "foul_committed", 0, 1, 5, 5, 6, 6, nan, nan, nan, nan),
-        (65, 2, 100, 77, "player_possession", "pass", 1, 0, 0, 0, 1, 1, nan, nan, nan, nan),
+        (15, 1, 200, 4, "on_ball_engagement", "indirect_regain", 0, 0, 10, 0, 12, 1, nan, nan, nan, nan,
+         "pressing", nan, nan, nan, nan, nan, nan, "running", False),
+        (25, 1, 100, 1, "player_possession", "pass", 0, 0, -10, 0, -5, 0, 2, -20, 5, "successful",
+         nan, 0.04, True, nan, nan, nan, nan, "jogging", True),
+        (25, 1, 100, 3, "off_ball_run", nan, 0, 0, 0, 0, 1, 1, nan, nan, nan, nan,
+         "behind", nan, nan, 0.12, True, True, False, "sprinting", True),
+        (35, 1, 100, 2, "player_possession", "shot", 0, 0, 40, 0, 52.5, 0, nan, nan, nan, nan,
+         nan, nan, nan, nan, nan, nan, nan, nan, True),
+        (45, 1, 200, 4, "on_ball_engagement", "direct_regain", 0, 1, 5, 5, 6, 6, nan, nan, nan, nan,
+         "counter_press", nan, nan, nan, nan, nan, nan, "hsr", False),
+        (65, 2, 200, 4, "on_ball_engagement", "foul_committed", 0, 1, 5, 5, 6, 6, nan, nan, nan, nan,
+         "other", nan, nan, nan, nan, nan, nan, "jogging", False),
+        (65, 2, 100, 77, "player_possession", "pass", 1, 0, 0, 0, 1, 1, nan, nan, nan, nan,
+         nan, nan, nan, nan, nan, nan, nan, nan, False),
     ]
-    return pd.DataFrame(rows, columns=cols)
+    df = pd.DataFrame(rows, columns=cols)
+    df["team_in_possession_phase_type"] = "build_up"
+    df["team_out_of_possession_phase_type"] = "high_block"
+    return df
 
 
 def test_players_ids_names_and_playing_time(info):
@@ -87,6 +100,7 @@ def test_players_ids_names_and_playing_time(info):
     row = players.set_index("player_id").loc["H02"]
     assert row["name"] == "Sam Striker" and row["short_name"] == "S. Striker"
     assert (row["start_ts"], row["end_ts"]) == (0, 3)            # frames 10-49 -> seconds 0-3
+    assert list(players["source_player_id"]) == [1, 2, 3, 4]    # SkillCorner id, stable across matches
 
 
 def test_tracking_one_row_per_player_per_second_with_gaps(info):
@@ -108,6 +122,16 @@ def test_tracking_one_row_per_player_per_second_with_gaps(info):
 
     striker = tracking[tracking["player_id"] == "H02"]
     assert (striker["x"] == 112.5).all() and striker["x"].max() > PITCH_L   # positions are not clipped
+    assert not striker["is_detected"].any() and keeper["is_detected"].all()
+    assert list(tracking[tracking["player_id"] == "A01"]["is_detected"]) == [True, False, False, False, True,
+                                                                             False, True]
+
+
+def test_ball_possession_uses_our_team_keys_and_stays_null_when_unknown(info):
+    _, idmap, spans = build_players(info, "t1")
+    _, ball, _ = parse_tracking(_frames(), info, idmap, spans, "t1")
+    assert list(ball["possession"])[:2] == ["HOME", "AWAY"]
+    assert ball["possession"].iloc[2:].isna().all()
 
 
 def test_events_mapping_receiver_and_goal(info, tmp_path):
@@ -115,14 +139,41 @@ def test_events_mapping_receiver_and_goal(info, tmp_path):
     csv = tmp_path / "events.csv"
     _events().to_csv(csv, index=False)
     ev = parse_events(csv, info, idmap, "t1")
+    actions = ev[ev["type"] != "run"]
 
-    assert list(ev["type"]) == ["pressure", "pass", "goal", "tackle", "foul"]
-    assert list(ev["ts"]) == [0, 1, 2, 3, 5]
-    assert list(ev["event_id"]) == [f"t1-e{i:05d}" for i in range(1, 6)]
-    assert list(ev["team_id"]) == ["AWAY", "HOME", "HOME", "AWAY", "AWAY"]
+    assert list(actions["type"]) == ["pressure", "pass", "goal", "tackle", "foul"]
+    assert list(actions["ts"]) == [0, 1, 2, 3, 5]
+    assert list(actions["event_id"]) == [f"t1-e{i:05d}" for i in range(1, 6)]   # runs do not shift them
+    assert list(actions["team_id"]) == ["AWAY", "HOME", "HOME", "AWAY", "AWAY"]
     pas = ev[ev["type"] == "pass"].iloc[0]
     assert pas["receiver_id"] == "H02" and pas["x_end"] == 32.5 and pas["y_end"] == 39.0
-    assert ev["receiver_id"].isna().sum() == 4                       # only passes have a receiver
+    assert ev["receiver_id"].isna().sum() == 5                       # only passes have a receiver
+
+
+def test_off_ball_runs_are_kept_as_type_run_with_their_own_ids(info, tmp_path):
+    _, idmap, _ = build_players(info, "t1")
+    csv = tmp_path / "events.csv"
+    _events().to_csv(csv, index=False)
+    ev = parse_events(csv, info, idmap, "t1")
+    run = ev[ev["type"] == "run"].iloc[0]
+    assert run["event_id"] == "t1-r00001" and run["player_id"] == "H03" and run["ts"] == 1
+    assert (run["subtype"], run["xthreat"], run["dangerous"]) == ("behind", 0.12, True)
+    assert (run["targeted"], run["received"], run["outcome"]) == (True, False, "n/a")
+    assert ev.loc[ev["type"] != "run", ["targeted", "received"]].isna().all().all()
+
+
+def test_event_context_columns(info, tmp_path):
+    _, idmap, _ = build_players(info, "t1")
+    csv = tmp_path / "events.csv"
+    _events().to_csv(csv, index=False)
+    ev = parse_events(csv, info, idmap, "t1").set_index("type")
+    # a pass carries the xThreat of its targeted option; shots and engagements have none
+    assert (ev.loc["pass", "xthreat"], ev.loc["pass", "dangerous"]) == (0.04, True)
+    assert ev.loc[["goal", "pressure", "tackle", "foul"], "xthreat"].isna().all()
+    assert list(ev.loc[["pressure", "tackle", "foul"], "subtype"]) == ["pressing", "counter_press", "other"]
+    assert pd.isna(ev.loc["pass", "subtype"])                        # subtype only on engagements and runs
+    assert (ev.loc["run", "speed_band"], ev.loc["goal", "lead_to_shot"]) == ("sprinting", True)
+    assert (ev["phase"] == "build_up").all() and (ev["phase_against"] == "high_block").all()
 
 
 def test_match_row_has_periods_teams_and_directions(info):

@@ -1,7 +1,7 @@
 """Gold models on a tiny hand-made Silver (Parquet files): no Docker, no MinIO, no Spark.
 
 dbt runs for real (target dev, silver_reader=parquet) and the resulting DuckDB tables are checked.
-Silver data of match m1: 4 players (H01, H02 HOME; A01, A02 AWAY), 9 events, final score 1-0.
+Silver data of match m1: 4 players (H01, H02 HOME; A01, A02 AWAY), 9 actions and 2 off-ball runs, final score 1-0.
 Skipped when dbt or duckdb is not installed.
 """
 import json
@@ -26,7 +26,7 @@ def _tracking():
 
     def add(pid, team, series):
         for ts, speed, x, y in series:
-            rows.append((M, pid, team, 1, ts, x, y, speed, bool(speed and speed > 25), False, False))
+            rows.append((M, pid, team, 1, ts, x, y, speed, bool(speed and speed > 25), False, False, True))
 
     # H01: speeds 10,30,30,10,26 then a gap, 27,27, a gap, 28. Positions chosen to hit zone edges.
     h01 = [(0, None, 0.0, 0.0), (1, 10.0, 104.9, 67.9), (2, 30.0, 105.0, 68.0), (3, 30.0, 50.0, 34.0),
@@ -37,7 +37,7 @@ def _tracking():
     add("A01", "AWAY", [(0, None, 80.0, 30.0), (1, 8.0, 80.0, 30.0)])
     add("A02", "AWAY", [(0, None, 70.0, 50.0), (1, 8.0, 70.0, 50.0)])
     cols = ["match_id", "player_id", "team_id", "period", "ts", "x", "y", "speed_kmh",
-            "is_sprint", "was_corrected", "is_after_gap"]
+            "is_sprint", "was_corrected", "is_after_gap", "is_detected"]
     return pd.DataFrame(rows, columns=cols)
 
 
@@ -50,12 +50,24 @@ def _events():
          ("e6", 6, "A01", None, "AWAY", "shot", 10, 34, 0, 34, "shot"),
          ("e7", 7, "A02", None, "AWAY", "pressure", 60, 30, 60, 30, "n/a"),
          ("e8", 7, "H02", None, "HOME", "tackle", 55, 30, 55, 30, "direct_regain"),
-         ("e9", 8, "A01", None, "AWAY", "foul", 50, 30, 50, 30, "foul_committed")]
+         ("e9", 8, "A01", None, "AWAY", "foul", 50, 30, 50, 30, "foul_committed"),
+         # runs are not actions: neither may change a count, and r2 (no tracking, no action that window)
+         # must not open a 5-minute row
+         ("r1", 3, "H01", None, "HOME", "run", 60, 30, 80, 20, "n/a"),
+         ("r2", 400, "A02", None, "AWAY", "run", 60, 30, 40, 20, "n/a")]
     cols = ["event_id", "ts", "player_id", "receiver_id", "team_id", "type",
             "x_start", "y_start", "x_end", "y_end", "outcome"]
     df = pd.DataFrame(e, columns=cols)
     df.insert(0, "match_id", M)
     df["period"] = 1
+    is_run = df["type"] == "run"
+    df["phase"], df["phase_against"] = "create", "medium_block"
+    df["xthreat"] = [0.05 if t == "pass" else 0.1 if t == "run" else None for t in df["type"]]
+    df["dangerous"] = pd.array([None] * len(df), dtype="boolean")
+    df["speed_band"], df["subtype"] = "running", None
+    df["lead_to_shot"] = False
+    df["targeted"] = pd.array([True if r else None for r in is_run], dtype="boolean")
+    df["received"] = pd.array([False if r else None for r in is_run], dtype="boolean")
     return df
 
 
@@ -65,6 +77,7 @@ def _players():
     df = pd.DataFrame(rows, columns=["match_id", "player_id", "team_id", "name", "short_name", "position",
                                      "shirt_number"])
     df["start_ts"], df["end_ts"] = 0, 600
+    df["source_player_id"] = [101, 102, 201, 202]
     return df
 
 
@@ -78,7 +91,8 @@ def _matches(home_score=1):
 
 
 def _write_silver(root: Path, home_score=1):
-    ball = pd.DataFrame({"match_id": [M], "ts": [0], "period": [1], "x": [52.5], "y": [34.0], "z": [0.0]})
+    ball = pd.DataFrame({"match_id": [M], "ts": [0], "period": [1], "x": [52.5], "y": [34.0], "z": [0.0],
+                         "possession": ["HOME"]})
     for name, df in (("tracking", _tracking()), ("events", _events()), ("players", _players()),
                      ("matches", _matches(home_score)), ("ball", ball)):
         (root / name).mkdir(parents=True)
@@ -170,6 +184,16 @@ def test_player_5min_window(gold):
     assert len(w) == 1 and (w[0]["window_start_ts"], w[0]["window_end_ts"]) == (0, 300)
     assert w[0]["tracked_seconds"] == 10 and w[0]["coverage"] == 0.033
     assert (w[0]["passes"], w[0]["goals"]) == (2, 1)
+
+
+def test_runs_never_count_as_actions_nor_open_a_window(gold):
+    assert rows(gold, "select count(*) as n from stg_events where type = 'run'")[0]["n"] == 2
+    assert rows(gold, "select count(*) as n from gold_player_5min where window_start_ts = 300") == [{"n": 0}]
+    a02 = rows(gold, "select * from gold_player_5min where player_id = 'A02'")
+    assert [r["window_start_ts"] for r in a02] == [0]
+    total = rows(gold, "select sum(passes + shots + goals + tackles + fouls + pressures) as n "
+                       "from gold_player_match_stats")[0]["n"]
+    assert total == 9                                                # the 9 actions, not 11 rows
 
 
 def test_reconciliation_tests_catch_a_wrong_score(tmp_path):

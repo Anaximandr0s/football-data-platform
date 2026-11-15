@@ -16,7 +16,7 @@ the data you replayed yourself, and the match ids are pinned, so it is identical
 | Table | Grain | m001 rows | m002 rows | Dedup key |
 |---|---|---|---|---|
 | tracking | player x second | 97,416 | 105,534 | match_id, player_id, ts |
-| events | one action | 1,741 | 1,878 | event_id |
+| events | one action or off-ball run | 2,276 (1,741 actions + 535 runs) | 2,376 (1,878 + 498) | event_id |
 | ball | second | 4,428 | 4,797 | match_id, ts |
 | players | player | 32 | 32 | match_id, player_id |
 | matches | match | 1 | 1 | match_id |
@@ -63,7 +63,7 @@ is_sprint, was_corrected` (+ `is_after_gap` if you want it). The final shape is 
 - **Score.** `matches` only has the final score. For the live score count `goal` events with
   `ts` up to the current second, per `team_id`. Final check: goals equal 5 in m001 (2-3) and 1 in m002 (0-1).
 - **Passes** have a `receiver_id` (null for other types): use it for the pass network.
-- **Event types:** pass, shot, goal, tackle, foul, pressure. There is no corner.
+- **Event types:** pass, shot, goal, tackle, foul, pressure, and `run` (an off-ball run, not an action: never count it with them). There is no corner.
 - **Names are real** (players, teams, league) and kit colours are in `matches`, so use them in the app.
   Technical keys stay `H01` / `HOME`.
 
@@ -72,7 +72,7 @@ is_sprint, was_corrected` (+ `is_after_gap` if you want it). The final shape is 
 - Every second that exists has exactly 22 tracking rows per match.
 - Positions are inside 105 x 68 in Silver (before correction you will find the rows from step 5).
 - `speed_kmh` <= 40 (bronze has none above; null is allowed).
-- Event types are in {pass, shot, goal, tackle, foul, pressure}.
+- Event types are in {pass, shot, goal, tackle, foul, pressure, run}.
 - Goals in events = `home_score + away_score` of `matches`.
 - Row counts after deduplication equal the table in section 2.
 

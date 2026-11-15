@@ -77,7 +77,7 @@ def clean_matches(matches: DataFrame) -> DataFrame:
 
 def clean_tracking(tracking: DataFrame, players: DataFrame, matches: DataFrame) -> DataFrame:
     """silver.tracking: grain player x second (FOO-03). Columns: match_id, player_id, team_id,
-    period, ts, x, y, speed_kmh, is_sprint, was_corrected, is_after_gap.
+    period, ts, x, y, speed_kmh, is_sprint, was_corrected, is_after_gap, is_detected.
     `players` and `matches` are the Silver (already deduplicated) tables."""
     t = dedup(tracking, KEYS["tracking"])
 
@@ -109,7 +109,7 @@ def clean_tracking(tracking: DataFrame, players: DataFrame, matches: DataFrame) 
 
     return (t.withColumn("period", F.col("period").cast("int"))
              .select("match_id", "player_id", "team_id", "period", "ts", "x", "y", "speed_kmh",
-                     "is_sprint", "was_corrected", "is_after_gap")
+                     "is_sprint", "was_corrected", "is_after_gap", "is_detected")
              .orderBy("player_id", "ts"))
 
 
@@ -118,7 +118,7 @@ def clean_ball(ball: DataFrame, matches: DataFrame) -> DataFrame:
     Not clipped: the ball really leaves the pitch (throw-ins, goal kicks)."""
     b = normalise_direction(dedup(ball, KEYS["ball"]), matches, ["x"], ["y"])
     return (b.withColumn("period", F.col("period").cast("int"))
-             .select("match_id", "ts", "period", "x", "y", "z")
+             .select("match_id", "ts", "period", "x", "y", "z", "possession")
              .orderBy("ts"))
 
 
@@ -126,7 +126,8 @@ EVENT_DIRECTIONS = ("guide", "per_team")
 
 
 def clean_events(events: DataFrame, matches: DataFrame, direction: str = "per_team") -> DataFrame:
-    """silver.events: one row per game action, direction normalised on start and end points.
+    """silver.events: one row per game action or off-ball run (type "run"), direction normalised on start and
+    end points.
     Not clipped: a shot ending behind the goal line is real information.
 
     direction="per_team" (default, decided): mirror the AWAY events only, in every period. Measured on
@@ -145,5 +146,6 @@ def clean_events(events: DataFrame, matches: DataFrame, direction: str = "per_te
         e = _mirror(e, F.col("team_id") == "AWAY", x_cols, y_cols)
     return (e.withColumn("period", F.col("period").cast("int"))
              .select("match_id", "event_id", "ts", "period", "player_id", "receiver_id", "team_id",
-                     "type", "x_start", "y_start", "x_end", "y_end", "outcome")
+                     "type", "x_start", "y_start", "x_end", "y_end", "outcome", "phase", "phase_against",
+                     "xthreat", "dangerous", "speed_band", "subtype", "lead_to_shot", "targeted", "received")
              .orderBy("ts", "event_id"))

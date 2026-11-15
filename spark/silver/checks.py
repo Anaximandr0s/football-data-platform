@@ -28,9 +28,12 @@ def measure(raw_counts: dict[str, int], tracking: DataFrame, events: DataFrame, 
                | (F.col("y") > PITCH_W)).cast("int")).alias("outside_after"),
         F.max("speed_kmh").alias("speed_max"),
         F.countDistinct("ts").alias("seconds"),
+        F.sum(F.col("is_detected").cast("int")).alias("detected"),
     ).first()
     e = events.agg(F.count("*").alias("rows"), F.countDistinct("event_id").alias("distinct_keys")).first()
-    b = ball.agg(F.count("*").alias("rows"), F.countDistinct("ts").alias("distinct_keys")).first()
+    by_type = {r["type"]: r["n"] for r in events.groupBy("type").agg(F.count("*").alias("n")).collect()}
+    b = ball.agg(F.count("*").alias("rows"), F.countDistinct("ts").alias("distinct_keys"),
+                 F.count("possession").alias("with_possession")).first()
     p = players.agg(F.count("*").alias("rows"), F.countDistinct("match_id", "player_id").alias("distinct_keys")).first()
     m = matches.first()
     shots = {r["team_id"]: [r["avg_x"], r["n"]] for r in
@@ -47,7 +50,10 @@ def measure(raw_counts: dict[str, int], tracking: DataFrame, events: DataFrame, 
         "tracking": {"was_corrected": t["corrected"] or 0, "speed_null": t["speed_null"] or 0,
                      "sprints": t["sprints"] or 0, "after_gap": t["after_gap"] or 0,
                      "team_null": t["team_null"] or 0, "outside_after_clip": t["outside_after"] or 0,
-                     "speed_max": t["speed_max"], "seconds_with_data": t["seconds"]},
+                     "speed_max": t["speed_max"], "seconds_with_data": t["seconds"],
+                     "detected": t["detected"] or 0},
+        "events_by_type": by_type,
+        "ball_with_possession": b["with_possession"],
         "shot_avg_x": shots,      # {team: [mean x_start of its shots and goals, how many]}
         "goals_home_away": [int(goals.get("HOME", 0)), int(goals.get("AWAY", 0))],
         "score_home_away": [int(m["home_score"]), int(m["away_score"])] if m else None,
@@ -92,6 +98,14 @@ def evaluate(metrics: dict, manifest: dict | None) -> list[tuple[str, bool, str]
     out.append(("tracking: null speeds untouched (null stays null)",
                 tr["speed_null"] == manifest["rows_speed_null"],
                 f"{tr['speed_null']} vs {manifest['rows_speed_null']}"))
+    out.append(("tracking: detected rows = manifest rows_detected",
+                tr["detected"] == manifest["rows_detected"], f"{tr['detected']} vs {manifest['rows_detected']}"))
+    out.append(("ball: seconds with possession = manifest",
+                metrics["ball_with_possession"] == manifest["ball_rows_with_possession"],
+                f"{metrics['ball_with_possession']} vs {manifest['ball_rows_with_possession']}"))
+    # per type, so a run can never hide inside an action count
+    out.append(("events: rows per type = manifest", metrics["events_by_type"] == manifest["events_by_type"],
+                f"{metrics['events_by_type']} vs {manifest['events_by_type']}"))
     return out
 
 

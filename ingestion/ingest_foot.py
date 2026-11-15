@@ -11,7 +11,8 @@ Done here (structure only)             Never done here (Silver's job)
 - origin bottom-left, metres           - deduplication
 - player ids H01.. / A01.. (names kept)
 - speed derived from positions
-- events mapped to our vocabulary: pass, shot, goal, tackle, foul, pressure
+- events mapped to our vocabulary: pass, shot, goal, tackle, foul, pressure,
+  and off-ball runs as type run (not an action: never counted with them)
 
 The SkillCorner format knowledge lives in skillcorner.py; the table schemas in schemas.py.
 Names, teams, league and kit colours are copied from match.json as they are.
@@ -75,6 +76,10 @@ def main() -> None:
         "rows_outside_pitch": int(outside.sum()),
         "rows_speed_over_40": int((tracking["speed_kmh"] > 40).sum()),
         "rows_speed_null": int(tracking["speed_kmh"].isna().sum()),
+        "rows_detected": int(tracking["is_detected"].eq(True).sum()),
+        "ball_rows_with_possession": int(ball["possession"].notna().sum()),
+        "possession_seconds_home_away": [int(ball["possession"].eq("HOME").sum()),
+                                         int(ball["possession"].eq("AWAY").sum())],
         "events_by_type": {k: int(v) for k, v in events["type"].value_counts().items()},
         "goals_derived_home_away": [int(goals.get("HOME", 0)), int(goals.get("AWAY", 0))],
         "score_real_home_away": [int(info["home_team_score"]), int(info["away_team_score"])],

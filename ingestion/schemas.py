@@ -7,23 +7,25 @@ from pathlib import Path
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-S, I32, I8, F = pa.string(), pa.int32(), pa.int8(), pa.float64()
+S, I32, I64, I8, F, B = pa.string(), pa.int32(), pa.int64(), pa.int8(), pa.float64(), pa.bool_()
 SCHEMAS = {
     # one row = one player at one second (players on the pitch only)
     "tracking": pa.schema([("match_id", S), ("player_id", S), ("ts", I32), ("period", I8),
-                           ("x", F), ("y", F), ("speed_kmh", F)]),
-    # one row = one game action
+                           ("x", F), ("y", F), ("speed_kmh", F), ("is_detected", B)]),
+    # one row = one game action, or one off-ball run (type "run")
     "events": pa.schema([("match_id", S), ("event_id", S), ("ts", I32), ("period", I8),
                          ("player_id", S), ("receiver_id", S), ("team_id", S), ("type", S),
                          ("x_start", F), ("y_start", F), ("x_end", F), ("y_end", F),
-                         ("outcome", S)]),
+                         ("outcome", S), ("phase", S), ("phase_against", S), ("xthreat", F),
+                         ("dangerous", B), ("speed_band", S), ("subtype", S), ("lead_to_shot", B),
+                         ("targeted", B), ("received", B)]),
     # one row = the ball at one second
     "ball": pa.schema([("match_id", S), ("ts", I32), ("period", I8),
-                       ("x", F), ("y", F), ("z", F)]),
+                       ("x", F), ("y", F), ("z", F), ("possession", S)]),
     # one row = one player of the match (starters and substitutes who played)
     "players": pa.schema([("match_id", S), ("player_id", S), ("team_id", S),
                           ("name", S), ("short_name", S), ("position", S), ("shirt_number", I32),
-                          ("start_ts", I32), ("end_ts", I32)]),
+                          ("start_ts", I32), ("end_ts", I32), ("source_player_id", I64)]),
     # one row = one match
     "matches": pa.schema([("match_id", S), ("competition", S), ("season", S), ("round", S),
                           ("kickoff_utc", S), ("stadium", S),

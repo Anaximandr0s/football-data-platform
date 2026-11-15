@@ -13,3 +13,8 @@ def test_read_records_turns_nan_into_null(tmp_path):
     path = tmp_path / "t.parquet"
     pd.DataFrame({"ts": [1], "speed_kmh": [float("nan")]}).to_parquet(path)
     assert read_records(path) == [{"ts": 1, "speed_kmh": None}]
+
+def test_read_records_sends_missing_booleans_as_null(tmp_path):
+    path = tmp_path / "t.parquet"
+    pd.DataFrame({"ts": [1, 2], "targeted": pd.array([True, None], dtype="boolean")}).to_parquet(path)
+    assert read_records(path) == [{"ts": 1, "targeted": True}, {"ts": 2, "targeted": None}]

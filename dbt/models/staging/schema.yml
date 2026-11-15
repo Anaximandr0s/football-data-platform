@@ -18,7 +18,7 @@ models:
       - name: is_sprint
         data_tests: [not_null]
   - name: stg_events
-    description: "Silver events. Grain: one game action. Coordinates in the Silver frame (HOME attacks toward x = 105, AWAY toward x = 0)."
+    description: "Silver events. Grain: one game action, or one off-ball run (type run, never counted as an action). Coordinates in the Silver frame (HOME attacks toward x = 105, AWAY toward x = 0)."
     columns:
       - name: event_id
         data_tests: [unique, not_null]
@@ -26,7 +26,7 @@ models:
         data_tests:
           - accepted_values:
               arguments:
-                values: ["pass", "shot", "goal", "tackle", "foul", "pressure"]
+                values: ["pass", "shot", "goal", "tackle", "foul", "pressure", "run"]
       - name: team_id
         data_tests:
           - accepted_values:
@@ -38,6 +38,12 @@ models:
       - unique_combination:
           arguments:
             columns: [match_id, ts]
+    columns:
+      - name: possession
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["HOME", "AWAY"]
   - name: stg_players
     description: "Silver players. Grain: player of a match (only players who were on the pitch)."
     data_tests:

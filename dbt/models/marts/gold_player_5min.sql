@@ -21,6 +21,7 @@ act as (
            count(*) filter (where type = 'foul')     as fouls,
            count(*) filter (where type = 'pressure') as pressures
     from {{ ref('stg_events') }}
+    where type != 'run'   -- a run is not an action: it must not open a window row of its own
     group by 1, 2, 3
 )
 

@@ -13,6 +13,8 @@ import pandas as pd
 
 from ingestion.config import FPS, PITCH_L, PITCH_W
 
+POSSESSION = {"home team": "HOME", "away team": "AWAY"}   # tracking `possession.group` -> our team keys
+
 
 def first_frame(info: dict) -> int:
     return min(p["start_frame"] for p in info["match_periods"])
@@ -47,9 +49,9 @@ def build_players(info: dict, match_id: str):
             spans[p["id"]] = (start, end)
             rows.append((match_id, pid, side, full_name(p), p.get("short_name") or full_name(p),
                          p["player_role"]["acronym"], p["number"],
-                         (start - first) // FPS, (end - first) // FPS))
+                         (start - first) // FPS, (end - first) // FPS, p["id"]))
     cols = ["match_id", "player_id", "team_id", "name", "short_name", "position",
-            "shirt_number", "start_ts", "end_ts"]
+            "shirt_number", "start_ts", "end_ts", "source_player_id"]
     return pd.DataFrame(rows, columns=cols), idmap, spans
 
 
@@ -68,8 +70,9 @@ def parse_tracking(lines, info: dict, idmap: dict, spans: dict, match_id: str):
         if b.get("x") is None or b.get("y") is None:
             drops["ball_without_position"] += 1
         else:
+            group = (fr.get("possession") or {}).get("group")
             ball_rows.append((match_id, ts, int(period), b["x"] + PITCH_L / 2,
-                              b["y"] + PITCH_W / 2, b.get("z")))
+                              b["y"] + PITCH_W / 2, b.get("z"), POSSESSION.get(group)))
         for p in fr.get("player_data") or []:
             sid = p.get("player_id")
             if sid not in idmap:
@@ -83,9 +86,9 @@ def parse_tracking(lines, info: dict, idmap: dict, spans: dict, match_id: str):
                 drops["player_outside_playing_time"] += 1
                 continue
             rows.append((match_id, idmap[sid][0], ts, int(period),
-                         p["x"] + PITCH_L / 2, p["y"] + PITCH_W / 2))
+                         p["x"] + PITCH_L / 2, p["y"] + PITCH_W / 2, p.get("is_detected")))
 
-    tracking = pd.DataFrame(rows, columns=["match_id", "player_id", "ts", "period", "x", "y"])
+    tracking = pd.DataFrame(rows, columns=["match_id", "player_id", "ts", "period", "x", "y", "is_detected"])
     tracking = tracking.sort_values(["player_id", "ts"]).reset_index(drop=True)
     g = tracking.groupby("player_id")
     step = np.hypot(g["x"].diff(), g["y"].diff())
@@ -94,7 +97,7 @@ def parse_tracking(lines, info: dict, idmap: dict, spans: dict, match_id: str):
     tracking[["x", "y", "speed_kmh"]] = tracking[["x", "y", "speed_kmh"]].round(2)
     tracking = tracking.sort_values(["ts", "player_id"]).reset_index(drop=True)
 
-    ball = pd.DataFrame(ball_rows, columns=["match_id", "ts", "period", "x", "y", "z"]).round(2)
+    ball = pd.DataFrame(ball_rows, columns=["match_id", "ts", "period", "x", "y", "z", "possession"]).round(2)
     return tracking, ball, drops
 
 
@@ -131,11 +134,14 @@ def parse_events(csv_path: Path, info: dict, idmap: dict, match_id: str) -> pd.D
     kind.loc[eng] = "pressure"
     kind.loc[eng & d["end_type"].isin(["direct_regain", "direct_disruption"])] = "tackle"
     kind.loc[eng & (d["end_type"] == "foul_committed")] = "foul"
+    kind.loc[d["event_type"] == "off_ball_run"] = "run"
     d["type"] = kind
     d = d[d["type"].notna()]
 
     # pass destination = where the targeted player received the ball, else the possession end point
     is_pass = d["type"].eq("pass")
+    is_run = d["type"].eq("run")
+    is_engagement = d["event_type"].eq("on_ball_engagement")
     x_end = np.where(is_pass & d["player_targeted_x_reception"].notna(),
                      d["player_targeted_x_reception"], d["x_end"])
     y_end = np.where(is_pass & d["player_targeted_y_reception"].notna(),
@@ -156,8 +162,23 @@ def parse_events(csv_path: Path, info: dict, idmap: dict, match_id: str) -> pd.D
         "x_end": (pd.Series(x_end, index=d.index) + PITCH_L / 2).round(2),
         "y_end": (pd.Series(y_end, index=d.index) + PITCH_W / 2).round(2),
         "outcome": d["pass_outcome"].fillna(d["end_type"]).fillna("n/a"),
+        "phase": d["team_in_possession_phase_type"],
+        "phase_against": d["team_out_of_possession_phase_type"],
+        # a pass carries the xThreat of the option it aimed at; a run has its own
+        "xthreat": d["player_targeted_xthreat"].where(is_pass, d["xthreat"].where(is_run)),
+        "dangerous": d["player_targeted_dangerous"].where(is_pass, d["dangerous"].where(is_run)).astype("boolean"),
+        "speed_band": d["speed_avg_band"],
+        "subtype": d["event_subtype"].where(is_engagement | is_run),
+        "lead_to_shot": d["lead_to_shot"].astype("boolean"),
+        "targeted": d["targeted"].where(is_run).astype("boolean"),
+        "received": d["received"].where(is_run).astype("boolean"),
     }).sort_values("ts", kind="stable").reset_index(drop=True)
-    out.insert(1, "event_id", [f"{match_id}-e{i:05d}" for i in range(1, len(out) + 1)])
+    # actions keep the numbering they had before runs existed (e), runs get their own sequence (r)
+    is_run = out["type"].eq("run")
+    ids = pd.Series(index=out.index, dtype=object)
+    ids[~is_run] = [f"{match_id}-e{i:05d}" for i in range(1, int((~is_run).sum()) + 1)]
+    ids[is_run] = [f"{match_id}-r{i:05d}" for i in range(1, int(is_run.sum()) + 1)]
+    out.insert(1, "event_id", ids)
     return out
 
 
