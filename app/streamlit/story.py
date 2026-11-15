@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 
 import pandas as pd
 
+import clock
+
 
 @dataclass(frozen=True)
 class Sentence:
@@ -15,9 +17,11 @@ class Sentence:
     facts: dict = field(default_factory=dict)
 
 
-def minute(ts: int) -> int:
-    """Match clock minute of a second, as on the live page (ts 0-59 is minute 1)."""
-    return int(ts) // 60 + 1
+Bounds = tuple[int, int | None]   # (p1_start_ts, p2_start_ts): what the football clock needs
+
+
+def _spell(window_index: int, bounds: Bounds) -> str:
+    return clock.span(window_index * 300, window_index * 300 + 300, *bounds)
 
 
 def _other(team: str) -> str:
@@ -28,22 +32,26 @@ def _pct(v: float) -> str:
     return f"{v:.0%}"
 
 
-def goals(shots: pd.DataFrame, short: dict, score: tuple[int, int]) -> Sentence:
-    """The goals in order: who scored first, who scored last, the final score."""
+def goals(shots: pd.DataFrame, short: dict, score: tuple[int, int], bounds: Bounds) -> Sentence:
+    """The goals in order: who scored first, who scored last, the final score. Minutes on the football clock."""
     g = shots[shots.is_goal].sort_values(["ts", "event_id"])
     final = f"{score[0]}-{score[1]}"
-    facts = {"goals": [(minute(r.ts), r.team_id, r.player_short_name) for r in g.itertuples()], "final": final}
+
+    def minute(r) -> str:
+        return clock.label(r.ts, r.period, *bounds, mark="")
+
+    facts = {"goals": [(minute(r), r.team_id, r.player_short_name) for r in g.itertuples()], "final": final}
     if g.empty:
         return Sentence(f"No goal: the match ended {final}.", facts)
     first, last = g.iloc[0], g.iloc[-1]
     if len(g) == 1:
-        return Sentence(f"One goal: {short[first.team_id]} scored it in minute {minute(first.ts)} "
+        return Sentence(f"One goal: {short[first.team_id]} scored it in minute {minute(first)} "
                         f"({first.player_short_name}), final score {final}.", facts)
-    return Sentence(f"{len(g)} goals. {short[first.team_id]} scored first (minute {minute(first.ts)}), "
-                    f"{short[last.team_id]} scored the last one (minute {minute(last.ts)}): final score {final}.", facts)
+    return Sentence(f"{len(g)} goals. {short[first.team_id]} scored first (minute {minute(first)}), "
+                    f"{short[last.team_id]} scored the last one (minute {minute(last)}): final score {final}.", facts)
 
 
-def momentum(timeline: pd.DataFrame, short: dict) -> Sentence:
+def momentum(timeline: pd.DataFrame, short: dict, bounds: Bounds) -> Sentence:
     """E2: SkillCorner xThreat of successful passes per 5-minute window, HOME minus AWAY."""
     w = timeline.pivot(index="window_index", columns="team_id", values="xthreat_successful_passes").fillna(0)
     diff = (w["HOME"] - w["AWAY"]).round(4)
@@ -54,10 +62,10 @@ def momentum(timeline: pd.DataFrame, short: dict) -> Sentence:
              "best_window": int(best), "best_value": float(diff[best])}
     ahead = home_ahead if leader == "HOME" else away_ahead
     return Sentence(f"{short[leader]} created more danger with its passes in {ahead} of the {len(diff)} five-minute "
-                    f"spells; its strongest spell was minutes {best * 5}-{best * 5 + 5}.", facts)
+                    f"spells; its strongest spell was minutes {_spell(best, bounds)}.", facts)
 
 
-def possession(timeline: pd.DataFrame, profile: pd.DataFrame, short: dict) -> Sentence:
+def possession(timeline: pd.DataFrame, profile: pd.DataFrame, short: dict, bounds: Bounds) -> Sentence:
     """F2: the match share, the best reliable spell of the team with more of the ball, and the greyed windows."""
     share = profile.set_index("team_id").possession_share
     greyed = int(timeline[timeline.team_id == "HOME"].possession_greyed.sum())
@@ -72,7 +80,7 @@ def possession(timeline: pd.DataFrame, profile: pd.DataFrame, short: dict) -> Se
     else:
         best = mine.loc[mine.possession_share.idxmax()]
         facts |= {"best_window": int(best.window_index), "best_share": float(best.possession_share)}
-        text += (f"; its best spell was minutes {int(best.window_index) * 5}-{int(best.window_index) * 5 + 5} with "
+        text += (f"; its best spell was minutes {_spell(int(best.window_index), bounds)} with "
                  f"{_pct(best.possession_share)}.")
     if greyed:
         text += f" {greyed} spell{'s are' if greyed > 1 else ' is'} greyed: under 60 seconds with a known owner."

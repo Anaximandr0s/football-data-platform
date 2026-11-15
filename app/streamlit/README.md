@@ -84,6 +84,7 @@ green 5.0:1); `sitemap.style()` holds the few shared classes, and the charts use
 | `pitch.py`, `../web3d/pitch.js` | the pitch component: layers (players and ball, a whole match played in the browser, heatmap, shots, passes, attack arrows, a message), the selected player ringed, clicks sent back |
 | `playerstats.py` | the per-player formulas shared by Live (and later Replay): Silver frame, distance, sprint efforts, top speed from detected positions, 6 x 4 heatmap. Pure, tested against Gold |
 | `cards.py` | the shirt and the badges of the player cards |
+| `clock.py` | the football clock fans see on TV, from the replay second and its period: 6', 45+2', 46' at the second kick-off, 90+1'. Every time shown in the app goes through it |
 | `story.py` | the sentences of the Match story: each one keeps the Gold numbers it was built from; differences, never causes |
 | `charts.py` | the Altair timelines of the Match story (goals, momentum, possession, territory), aligned on the same minutes |
 | `data.py` | reading Gold (cached for a minute), the current match, the match library, the Soda result reader, shared texts |

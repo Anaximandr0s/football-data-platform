@@ -3,15 +3,16 @@ build-up and attack side come in step 5."""
 import matplotlib.pyplot as plt
 import streamlit as st
 
+import clock
 import sitemap
 import viz
-from data import CAVEAT, current_match, mmss, require_gold, table
+from data import CAVEAT, clock_bounds, current_match, require_gold, table
 
 sitemap.header("team_analysis")
 teams = require_gold()
 match = current_match(teams)
 colors = viz.team_colors(teams, match)
-name = {r.team_id: r.team_name for r in teams[teams.match_id == match].itertuples()}
+name = {r.team_id: r.team_short for r in teams[teams.match_id == match].itertuples()}
 
 shots_tab, network_tab = st.tabs(["Shot map", "Pass network"])
 
@@ -31,7 +32,9 @@ with shots_tab:
         plt.close(fig)
         st.caption("Star = goal, circle = other shot. Arrow = direction of attack. HOME shoots at the right goal, AWAY "
                    "at the left goal. The line goes from the shot to where the action ended.")
-        table_view = view.assign(time=view.ts.map(mmss), team=view.team_id.map(name),
+        bounds = clock_bounds(match)
+        table_view = view.assign(time=[clock.label(r.ts, r.period, *bounds) for r in view.itertuples()],
+                                 team=view.team_id.map(name),
                                  distance_m=view.distance_to_goal_m.round(1),
                                  score=view.score_home_after.astype(str) + "-" + view.score_away_after.astype(str))
         st.dataframe(table_view[["time", "team", "player_name", "type", "distance_m", "score"]]

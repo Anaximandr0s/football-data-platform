@@ -102,8 +102,23 @@ def library() -> pd.DataFrame | None:
         return None
 
 
-def mmss(ts: int) -> str:
-    return f"{int(ts) // 60:02d}:{int(ts) % 60:02d}"
+def clock_bounds(match_id: str) -> tuple[int, int | None]:
+    """(p1_start_ts, p2_start_ts) of a stored match for the football clock; (0, None) if the library predates them."""
+    lib = library()
+    if lib is None or "p2_start_ts" not in lib or match_id not in set(lib.match_id):
+        return 0, None
+    row = lib[lib.match_id == match_id].iloc[0]
+    return int(row.p1_start_ts), int(row.p2_start_ts)
+
+
+def fan_names(match_id: str) -> dict[str, str] | None:
+    """{"HOME": "Brisbane Roar", "AWAY": ...}: the names fans use, for a match stored in Gold; None otherwise."""
+    try:
+        teams = table("gold_team_match_stats")
+    except duckdb.Error:
+        return None
+    rows = teams[teams.match_id == match_id]
+    return dict(zip(rows.team_id, rows.team_short, strict=True)) or None
 
 
 def soda_results() -> dict[str, dict]:
