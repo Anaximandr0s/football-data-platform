@@ -215,6 +215,7 @@ Not proposed: EPV, xLoss and xShot. They are model outputs no question uses.
 | `gold_space_control` | match x team x 5-min window | mean space share over tracked seconds, by phase (in possession / opponent in possession / unknown), seconds used. Built from `int_space_control_second` (match x second: HOME share, AWAY = 1 - HOME) | S1 |
 | `gold_replay_frames` | match x second x object (players and ball) | x, y, team, shirt number, `is_detected`, possession, HOME space share of the second | R1, S1 |
 | `gold_events` | one row per event, runs included | the Silver event columns plus player names, `x_att`, `y_att`, third and lane, phase, `xthreat`, `dangerous`, `speed_band`, `subtype` | E1, E2 |
+| `gold_match_library` | match | teams, colours, score, kick-off date, competition, round, stadium, tracked share | Match library, Home |
 
 `gold_match_timeline` also gets `xthreat_successful_passes` per team and window, the input of E2.
 
@@ -223,35 +224,42 @@ the formulas of this document, and writes them to the Kafka topic `foot-live-sta
 other service is added). C1 on the live page is the current second only, computed in the page from the Kafka
 positions, without Spark. F1, C6 and every other question are post-match only, read from the Gold tables above.
 
-## 8. Page map
+## 8. App map
 
-Home plus ten pages. Each page answers one main question; the ids point to sections 3, 4 and 8.1.
+MatchLens is one website (one Streamlit app, `st.navigation` with sections). Home is the door; LIVE and MATCHES serve
+both personas; FAN VIEW and COACH VIEW answer the questions of sections 3 and 4 for the match chosen on Home;
+BEHIND THE DATA is for the jury. The ids point to sections 3, 4 and 8.1; FOO-xx are the requirements of the brief.
 
-| Page | Main question | Questions | For | When | Reads |
+| Section | Page | Question it answers | Persona | Source | Metric ids |
 |---|---|---|---|---|---|
-| Home | Which match do I look at, and how did it end? | score, teams, date, links | both | post (live badge while a match plays) | `gold_team_match_stats` |
-| Live match | What is happening right now? | positions and score now, C1 (current second), F2, F4, F5, C3 per 5 min | both | live | Kafka topics, and `foot-live-stats` written by the streaming job (FOO-08) |
-| Match story | How did the match go, and why did it end this way? | F1, F2, F7 | fans | post | `gold_match_timeline`, `gold_team_profile` |
-| Player cards | Who played well, and how does my player do across matches? | F3, F4, F5, F8 | fans | post | `gold_player_card` |
-| Shots & passes | Where did the team shoot from, and how did the ball move? | shot map, F6, C4, C5 | both | post | `gold_shots`, `gold_pass_network`, `gold_team_build_up` |
-| Match replay | What did the match look like at any moment? | R1, S1 | both | post | `gold_replay_frames`, `gold_space_control` |
-| Team shape & pressing | How does the team organise with and without the ball? | C1, C2, C3, S1 by phase | coaches | post | `gold_team_shape`, `gold_pressing`, `gold_space_control` |
-| Event explorer | Which actions happened where, by whom, and how dangerous were they? | E1, E2 | coaches | post | `gold_events`, `gold_match_timeline` |
-| Physical & fatigue | Who ran how much, and who faded? | F4 per 5 min, C6 | coaches | post | `gold_player_5min`, `gold_player_fatigue` |
-| Compare matches | Is this how the team usually plays? | C7 | coaches | post | `gold_team_profile` |
-| Data quality | Can I trust these numbers? | Soda results, tracked and detected share per match | both | post | `data/soda/*.json`, `gold_replay_frames` |
+| | Home | Who am I, and which match do I look at? | both | MatchLens logo, "I am a Fan / I am a Coach" (opens FAN VIEW or COACH VIEW), match picked from the Match library | |
+| LIVE | Live match | What is happening right now, and how is this player doing so far? | both | Kafka topics `foot-tracking`, `foot-ball`, `foot-events`, `foot-players`, `foot-matches`; `foot-live-stats` written by Spark Streaming | pitch, score, clock, possession (F2 now), C1 (current second); click a player: distance, top speed, sprints and heatmap so far (F4, F5, FOO-07); per 5 min: F2, F4, F5, C3 (FOO-08) |
+| MATCHES | Match library | Which matches are stored, and how did they end? | both | `gold_match_library` | |
+| MATCHES | Replay | What did a stored match look like at any moment? | both | `gold_replay_frames`, `gold_space_control`; the stats panel reads `gold_player_5min`, `gold_match_timeline` up to the replay time | R1, S1; panel: the same as Live (F4, F5, sprints, heatmap so far, F2, C3 per 5 min) |
+| MATCHES | Compare matches | Is this how a team usually plays? (any matches) | both | `gold_team_profile` | C7, F7 gaps |
+| FAN VIEW | Match story | How did the match go, and why did it end this way? | fans | `gold_match_timeline`, `gold_shots`, `gold_team_profile` | F1 (goals on the timeline), E2 (momentum), F2, F7 (3 key differences) |
+| FAN VIEW | Squad | Who played? | fans | `gold_player_card` | players as cards: shirt colour, number, name; click -> Player page |
+| FAN VIEW | Player page | How did this player play? | fans | `gold_player_card`, `gold_zone_occupancy`, `gold_shots`, `gold_events` (passes) | F3 (5 scores), F4, F5 (top speed), F6 (hub badge), F8 (across matches), FOO-07 (heatmap, shots) |
+| COACH VIEW | Team analysis | How does the team organise, press and attack? | coaches | `gold_team_shape`, `gold_pressing`, `gold_team_build_up`, `gold_space_control`, `gold_shots`, `gold_pass_network` | C1, C2 (shape), C3 (pressing), C4 (build-up), C5 (attack side), S1 by phase, F6 (pass network) |
+| COACH VIEW | Physical & fatigue | Who ran how much, and who faded? | coaches | `gold_player_5min`, `gold_player_fatigue` | F4 per 5 min, C6 |
+| COACH VIEW | Event explorer | Which actions happened where, by whom, and how dangerous were they? | coaches | `gold_events`, `gold_match_timeline` | E1, E2 |
+| COACH VIEW | Player page (detailed) | What exactly did this player do? | coaches | the fan sources plus `gold_player_fatigue`, `gold_player_5min`, `gold_events` | F3 with raw values and per-minute rates and the eligibility thresholds, C6, F4 per 5 min, E1 for this player |
+| BEHIND THE DATA | Data quality | Can I trust these numbers? | jury | `data/soda/*.json`; tracked and detected share per match from `gold_space_control` | FOO-05 |
+| BEHIND THE DATA | Pipeline & lineage | How does a number get from the camera to the screen? | jury | dbt docs (`dbt docs generate`: lineage of every Gold table) and the Dagster asset graph | |
+| BEHIND THE DATA | Sources & limits | Where does the data come from, and what can it not tell? | jury | sections 1 and 5 of this document, `contrat_donnees.md` known characteristics, credits | |
 
-The existing pages map onto this: the overview becomes Home and Match story, Players splits into Player cards and
-Physical & fatigue, and Shots and passes, Compare matches and Data quality keep their place.
+The Player page is one page in two modes: the fan mode shows the card and the pitch layers; the coach mode adds the raw
+values, rates, thresholds, fatigue and the player's events. Both views reach it from a click on a player (Squad, Live,
+Replay, Team analysis).
 
 ### 8.1 Questions added with the replay and the explorer
 
 | # | Question | Metric | Formula | Page | When |
 |---|---|---|---|---|---|
-| R1 | What did the match look like at minute X? | Replay of the 1 Hz positions | `gold_replay_frames` played at 0.25x to 8x, with trails (last N seconds), shirt labels, one highlighted player, Voronoi cells, and a toggle that greys out the positions with `is_detected = false` | Match replay | post |
-| S1 | Which team controlled more of the pitch, and when? | Space control | per tracked second: a 1 m grid over the pitch (105 x 68 = 7,140 cell centres), each cell owned by the nearest of the 22 players; `space(T, s) = cells owned by T / 7,140`. Then the mean over the tracked seconds of each 5-min window, split by phase | Match replay, Team shape & pressing | post |
+| R1 | What did the match look like at minute X? | Replay of the 1 Hz positions | `gold_replay_frames` played at 0.25x to 8x, with play/pause, trails (last N seconds), shirt labels, one highlighted player (click), Voronoi cells, and a toggle that greys out the positions with `is_detected = false` | Replay | post |
+| S1 | Which team controlled more of the pitch, and when? | Space control | per tracked second: a 1 m grid over the pitch (105 x 68 = 7,140 cell centres), each cell owned by the nearest of the 22 players; `space(T, s) = cells owned by T / 7,140`. Then the mean over the tracked seconds of each 5-min window, split by phase | Replay, Team analysis | post |
 | E1 | Which actions happened where, by whom? | Filtered events | `gold_events` filtered by team, player, type (runs included), phase, period and time range; shown as arrows (start to end), a heatmap of start points or average positions, with a summary table (count, success rate, mean xThreat) and a head-to-head of two players on the same filters | Event explorer | post |
-| E2 | Which team was on top, minute by minute? | Momentum | `momentum(w5) = xthreat_successful_passes(HOME, w5) - xthreat_successful_passes(AWAY, w5)`, the sum of `xthreat` over successful passes; passes without a value (about 5 %) add nothing | Event explorer | post |
+| E2 | Which team was on top, minute by minute? | Momentum | `momentum(w5) = xthreat_successful_passes(HOME, w5) - xthreat_successful_passes(AWAY, w5)`, the sum of `xthreat` over successful passes; passes without a value (about 5 %) add nothing | Match story, Event explorer | post |
 
 Space control uses all 22 positions, detected or not: leaving out the estimated ones would give their cells to the
 wrong team. The detected share is shown next to it. The 1 m grid is an approximation of the exact Voronoi areas; it
@@ -259,27 +267,86 @@ needs only numpy (already installed with pandas) instead of a geometry library. 
 built: above about 60 s per match, the grid becomes 2 m (1,785 cells). The replay draws exact Voronoi cells
 for the eye, but every number it shows comes from `gold_replay_frames`, so the replay and the Gold tables agree.
 
+### 8.2 One pitch component
+
+Rule: one pitch component, reused by Live, Replay and the Player page, with clickable players.
+
+Technology (approved): a **Streamlit custom component v2** (`st.components.v2.component`,
+available in our Streamlit 1.67): our own HTML, CSS and JavaScript passed as strings, drawn on a `<canvas>`, no npm
+build, libraries vendored as files in `app/web3d`. It sends a click back to Python (`setTriggerValue("player", id)`),
+and it animates in the browser between two data updates. Layers, each switched on by the page: players and ball,
+trails, Voronoi cells, heatmap grid, shots, pass arrows, detected-only toggle.
+
+| Option | Click on a player | Moves smoothly | One component for Live, Replay, Player | Verdict |
+|---|---|---|---|---|
+| Custom component v2 + canvas | yes (tested) | yes, in the browser (tested) | yes | chosen |
+| Plotly (`st.plotly_chart`, `on_select="rerun"`) | yes (tested) | no: each move is a Python rerun; Voronoi and trails are heavy (section 9) | Live and Player yes, Replay no | fallback |
+| mplsoccer image (today's Live page) | no | no | no | kept for static charts only |
+| `st.components.v1.html` (section 9's first choice) | no: one-way | yes | no | replaced |
+
+Both click tests ran on 2026-11-15 in headless Chrome against a throwaway Streamlit 1.67 app (not committed):
+
+- Plotly: a click on the dot of player 9 returned `H09` to Python.
+- Component v2: the dot moved from x = 122 to 174, 222 and 270 px in 0.6 s without any Python rerun, and a click on the
+  other player returned `A04` to Python.
+
+Its first test, in step 3: a full match (22 players and the ball over m001's 4,428 tracked seconds) inside the 1 s
+refresh of the Live page. What the throwaway test does not show yet: a full match in the component (size and frame rate), the component inside
+`st.fragment` refreshes (Live), and a click test that runs in CI (it needs a browser; `streamlit.testing` cannot click
+inside a component).
+
+### 8.3 Where the existing pages go, and what is dropped
+
+| Existing page | Goes to |
+|---|---|
+| Home (`app.py`: average position, team comparison) | Home becomes the door (logo, persona, library); the team comparison becomes F7 in Match story; the average-position chart is dropped (Team analysis shows the shape) |
+| Live match | LIVE / Live match: same page, the mplsoccer pitch replaced by the pitch component, plus the player click and the FOO-08 panel |
+| Players (key numbers, heatmap, intensity per 5 min, ranking) | key numbers, heatmap and ranking -> Player page and Squad; intensity per 5 min -> Physical & fatigue |
+| Shots and passes | team shot map and pass network -> Team analysis; a player's shots and passes -> Player page |
+| Compare matches | MATCHES / Compare matches, reading `gold_team_profile` instead of `gold_team_match_stats`, any number of matches |
+| Data quality | BEHIND THE DATA / Data quality |
+
+Dropped from the old plan (section 8 before this version): the pages "Player cards" (now Squad + Player page), "Shots &
+passes" (split above) and "Team shape & pressing" (now part of Team analysis, with build-up and attack side); "Data
+quality reads `gold_replay_frames`" (it reads `gold_space_control`); the one-way `st.components.v1.html` replay
+(section 9). No Gold table is dropped: all 15 are read by a page, and
+`gold_replay_frames` is still built in the Replay step. Section 6 items 6 and 7 (`phases_of_play` as a table, passing
+options) stay out: no page needs them.
+
+Decisions (review of 2026-11-15):
+
+1. **Match library**: a new table `gold_match_library` (one row per match: teams, colours, score, kick-off date,
+   competition, round, stadium, tracked share), built in step 2.
+2. **Live player stats "so far"** (distance, top speed, sprints, heatmap): computed in the page from the Kafka
+   positions, like C1, with the formulas of F4, F5 and FOO-07 (top speed with both positions detected). The formulas
+   live in one shared Python module used by the page, with a test that the live values at full time equal Gold. Spark
+   computes only the 5-minute windows.
+3. **Player page**: one page with a fan mode and a coach mode.
+4. **Demo start time**: the producer takes `mm:ss`.
+
 ## 9. Smooth replay
 
 | Option | How it plays | Verdict |
 |---|---|---|
-| Streamlit HTML component (`st.components.v1.html`) with our JavaScript in `app/web3d` | the page sends the match once; the browser animates on a canvas, interpolating between seconds | chosen |
+| Pitch component (custom component v2, canvas, our JavaScript in `app/web3d`) | the page sends the match once; the browser animates, interpolating between seconds, and sends clicks back | chosen (section 8.2) |
+| Streamlit HTML component (`st.components.v1.html`) with our JavaScript in `app/web3d` | the same animation, but one-way: a click cannot reach Python, so no stats panel on click | first choice, replaced |
 | Streamlit loop redrawing an mplsoccer figure | one server render per frame, no interpolation between seconds | too slow for 0.25x to 8x |
 | Plotly animation frames | built-in play button, but every frame and every Voronoi polygon lives in the figure | too heavy with Voronoi and trails |
-| Two-way custom Streamlit component (React + npm) | same rendering, plus messages back to Python | a build step for a feature we do not need |
+| Two-way custom Streamlit component (React + npm) | same rendering, plus messages back to Python | a build step we do not need: component v2 does it without one |
 | Separate web app on its own port | full freedom, 3D possible | a second server and an API to maintain |
 
-The chosen design: the Match replay page reads one match from `gold_replay_frames`, serialises it as compact JSON
-(positions in decimetres as integers, one array per second), and passes it with the HTML and JavaScript of
-`app/web3d` to `st.components.v1.html`. Playback speed, trails, labels, highlight, the Voronoi layer and the
-detected-only toggle are handled in the browser, so playing never reruns the Python page. Voronoi cells come from
-d3-delaunay, kept as a file in `app/web3d` so the demo works offline. No npm build: every library is vendored as a
-file in `app/web3d`.
+The design: the Replay page reads one match from `gold_replay_frames`, serialises it as compact JSON (positions in
+decimetres as integers, one array per second), and passes it to the pitch component. Play/pause, playback speed,
+trails, labels, highlight, the Voronoi layer and the detected-only toggle are handled in the browser, so playing never
+reruns the Python page; a click on a player sends his id and the replay time to Python, which fills the stats panel.
+Voronoi cells come from d3-delaunay, kept as a file in `app/web3d` so the demo works offline. No npm build: every
+library is vendored as a file in `app/web3d`. The Replay takes its ideas from SkillCorner's tracking viewer (section
+11); the code and the design are ours.
 
 Size, measured on m001 at 1 Hz (4,428 tracked seconds, 32 player slots plus the ball, 101,844 positions): 1.12 MB of
 JSON, 0.38 MB gzipped. `is_detected`, possession and the space share add a few columns to that.
 
-The Live match page reuses the drawing code but gets one frame per refresh, so it moves once per second; only the
+The Live match page uses the same component but gets one frame per refresh, so it moves once per second; only the
 replay is interpolated.
 
 ## 10. Why someone would pay
@@ -294,8 +361,75 @@ explained and its limits stated, so one coach can prepare the next match without
 
 ## 11. Credits
 
-Data: SkillCorner open data (<https://github.com/SkillCorner/opendata>, MIT licence). The Match replay and Event
+Data: SkillCorner open data (<https://github.com/SkillCorner/opendata>, MIT licence). The Replay and Event
 explorer pages take their ideas from SkillCorner's `viz_tools/SkillCorner_Tracking_Viewer.html` and
 `viz_tools/Dynamic_Events_Explorer.html` in the same repository: playback speeds, trails, Voronoi and the detected
 toggle for the first; filters, arrows, heatmaps, summary table, head-to-head and the xThreat momentum chart for the
 second. Our pages use our own code and design; no code is copied from those files.
+
+## 12. Build steps
+
+In this order. Each step is one branch, merged before the next starts; "check" is what you run or look at to accept it.
+
+| # | Step | What you will see | How you check it |
+|---|---|---|---|
+| 1 | Gold metrics (current, merged) | 15 Gold tables answering sections 3, 4 and 8.1 | `make gold` and `make soda` green; the independent pandas recomputations in `requirements-coverage.md` |
+| 2 | Site skeleton | one app with the sections Home, LIVE, MATCHES, FAN VIEW or COACH VIEW (the one chosen), BEHIND THE DATA; existing pages moved to their place (section 8.3), new pages "coming soon" with their question; Home with a text logo, the Fan / Coach choice and a match chooser; the chosen view and match follow you from page to page; `gold_match_library` and the Match library page | headless page tests (`streamlit.testing`): every page renders without error, the chosen match and persona are kept, each page shows its question; you click through every page in a browser |
+| 3 | Player pages + pitch component | first, a full match (22 players and the ball, 4,428 s) in the pitch component inside the 1 s Live refresh; then the pitch component (section 8.2) on the Player page with heatmap, shots and passes layers; Squad as cards; a click on a card or a dot opens the Player page, fan or coach mode | Python tests of the data sent to each layer (counts equal Gold); one browser test (Playwright) that clicks a player and checks the page that opens; you click three players |
+| 4 | Fan pages | Match story (goals on the timeline, momentum, possession per 5 min with greyed windows, 3 key differences as sentences) and the finished Squad | page tests that read the numbers shown and compare them with Gold; screenshots of m001 and m002 |
+| 5 | Coach pages + Compare + 2 matches | Team analysis, Physical & fatigue, Event explorer, Player page coach mode; Compare matches with any matches; the Match library lists 2007448 and 1996435 (2011166 only if time allows) | `make data`, `make replay`, `make silver`, `make gold`, `make soda` green for every match; page tests; Compare shows Brisbane Roar in 3 matches |
+| 6 | Spark Streaming (FOO-08) | on Live, the 5-minute panel fills while the replay runs (F2, F4, F5, C3), and the player click shows his live stats so far | the streaming windows of a full replay compared with the batch twins (`gold_player_5min`, `gold_match_timeline`) of the same match, value by value; a test that the live stats so far at full time equal Gold (shared formula module); you watch a replay at x5 |
+| 7 | Replay | a stored match played at 0.25x to 8x with play/pause, trails, Voronoi, detected-only toggle, and the stats panel on click | frames sent = tracked seconds of the match; the panel at the last second equals the Gold totals; payload size measured; you play goal 5 of m001 at 4x |
+| 8 | Dagster + Behind the data | a Dagster asset graph (ingestion to Bronze, Silver, Gold, Soda checks) where a failing check blocks what follows; the Data quality, Pipeline & lineage and Sources & limits pages | one green Dagster run for a match; one run with a damaged table that stops at the check; the three pages in a browser |
+| 9 | Design and logo | MatchLens logo, colours and type, light and dark, cards and pitch in the same style | screenshots of every page in light and dark; no horizontal scroll at phone width (390 px) |
+| 10 | Demo preparation | the producer option "start at `mm:ss`" (so a replay can start 30 s before a goal), a command that empties the Kafka topics before a demo, and the demo script of section 13 | two timed dry runs of section 13 with a stopwatch, each under 10 minutes; a fresh start shows only the demo replay |
+
+## 13. Demo script (10 minutes)
+
+Before the jury arrives: stack up, Kafka topics emptied (step 10), Gold built for every match, the app open on Home.
+
+| Time | Where | What happens | What we say |
+|---|---|---|---|
+| 0:00 - 0:30 | Home | the logo, "I am a Fan / I am a Coach", the Match library | one website, two personas, the same data |
+| 0:30 - 2:30 | LIVE / Live match | start `make replay` of m001 at x1 from 04:56; at 05:26 K. Jelacic scores, the score turns 1-0 within a second; click a Brisbane player: distance, top speed, sprints and heatmap so far; the 5-minute panel fills from Spark Streaming | Kafka at the speed of the real match; the live pitch and the streaming job read the same topics |
+| 2:30 - 4:00 | FAN VIEW | Match story of m001 (goals, momentum, possession, 3 key differences); Squad; open a player's page (scores, heatmap, top speed); his column in another match (F8) | every number answers a fan's question and says its limits |
+| 4:00 - 5:45 | COACH VIEW | Team analysis (shape with and without the ball, pressing by third, build-up, attack side); Physical & fatigue (who faded); Event explorer filtered on one player's runs | the same tables, read by a coach |
+| 5:45 - 6:45 | MATCHES / Compare matches | Brisbane Roar in three matches side by side, opponents named | "is this how the team usually plays?" |
+| 6:45 - 8:00 | MATCHES / Replay | m001 from 64:30, the 2-3 goal of A. Goodwin at 64:50, at 2x then 0.5x, Voronoi on, detected-only on; click the scorer: the stats panel | the replay of a stored match, our own viewer |
+| 8:00 - 9:30 | BEHIND THE DATA | Pipeline & lineage (Dagster graph, dbt lineage); Data quality: run the damaged-data demo and show the failing Soda check and the step it blocks | we trust a number because a check would stop it |
+| 9:30 - 10:00 | Sources & limits | SkillCorner open data, 1 Hz, estimated positions, no xG | what the data cannot say |
+
+The live clock is the replay clock (`ts`); the goal at 05:26 is `ts` 326 in Gold. The producer takes the start as `mm:ss`
+(step 10), so the replay starts at 04:56, 30 s before the goal.
+
+## 14. More matches
+
+SkillCorner open data has 20 A-League 2024/25 matches today (not 14): 10 on a 105 x 68 pitch, ours included, 4 on
+104 x 68 and 6 on 106 x 68 (read from each `match.json` on 2026-11-15). Silver puts every match on 105 x 68 and the
+Soda checks enforce it, so only the 8 other 105 x 68 matches can be added without changing Silver:
+
+| SkillCorner id | Date | Match | Score |
+|---|---|---|---|
+| 1927964 | 2024-12-22 | Western Sydney - Wellington Phoenix | 4-1 |
+| 1953632 | 2024-12-31 | Central Coast Mariners - Melbourne City | 1-1 |
+| 1986691 | 2025-01-26 | Western Sydney - Auckland FC | 0-1 |
+| 1996435 | 2025-02-01 | Sydney FC - Adelaide United | 4-1 |
+| 2006229 | 2025-03-07 | Melbourne City - Macarthur FC | 2-0 |
+| 2007448 | 2025-03-15 | Perth Glory - Brisbane Roar | 1-3 |
+| 2011166 | 2025-04-12 | Wellington Phoenix - Melbourne Victory | 2-3 |
+| 2017461 | 2025-05-17 | Melbourne Victory - Auckland FC | 0-1 |
+
+Decided (review of 2026-11-15): 2007448 and 1996435 are added in step 5; 2011166 only if time allows; 1927964 is not added.
+
+1. **2007448, Perth Glory 1-3 Brisbane Roar.** The demo team's third match, its only away match, and a rematch of m002
+   (Brisbane 0-1 Perth). It gives F8 three columns and C7 a home/away comparison against the same opponent.
+2. **1996435, Sydney FC 4-1 Adelaide United.** Adelaide, the winner of m001, in a second match: Compare can then show
+   the opponent too, and 5 goals give the fan pages something to tell.
+3. **2011166, Wellington Phoenix 2-3 Melbourne Victory.** 5 goals and a one-goal finish: a second match to demo the
+   live page and the replay, with two new teams.
+4. Optional: **1927964, Western Sydney 4-1 Wellington Phoenix.** It already went through ingestion and Gold once (the
+   "m002" of the first zip, `dbt/README.md`), so it is the lowest-risk fourth match; it also brings Wellington twice
+   with 3.
+
+Not proposed: the 104 x 68 and 106 x 68 matches. They would need Silver to keep each match's own pitch size, and every
+x_att, third, lane and space-control grid to follow it.
