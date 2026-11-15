@@ -22,7 +22,7 @@ def test_match_story_tells_the_match_in_sentences(app_env):
     at = run("sections/match_story.py")
     assert not at.exception
     page = texts(at)
-    assert "Home FC" in page and "<span class='score'>1 - 0</span>" in page
+    assert "<span class='team'>Home</span>" in page and "<span class='score'>1 - 0</span>" in page
     assert "One goal: Home scored it in minute 1 (H. One), final score 1-0." in page      # ts 5
     assert "H. One and H. Two shared the hub role of Home" in page
     assert "won because" not in page and page.count("class='ml-say'") >= 6

@@ -10,6 +10,7 @@ ends at half-time).
 """
 from dataclasses import dataclass, field, replace
 
+import clock as football_clock  # live.clock (below) is the replay second now
 import playerstats
 
 FULL_FRAME = 22
@@ -204,17 +205,26 @@ def team_shape(state: MatchState, positions: dict) -> dict[str, tuple[float, flo
     return out
 
 
-def team_name(state: MatchState, team: str) -> str:
+def team_name(state: MatchState, team: str, names: dict | None = None) -> str:
+    """The name fans use when the page knows it (`names`, from Gold), else the source's full name."""
+    if names and names.get(team):
+        return names[team]
     return state.info.get("home_team" if team == "HOME" else "away_team") or team
 
 
-def event_line(state: MatchState) -> str | None:
-    """'Goal, 54', Brisbane Roar FC (K. Jelacic)': the latest goal, shot, tackle or foul."""
+def bounds(state: MatchState) -> tuple[int, int | None]:
+    """(p1_start_ts, p2_start_ts) of the replayed match: what the football clock needs."""
+    return state.info.get("p1_start_ts") or 0, state.info.get("p2_start_ts")
+
+
+def event_line(state: MatchState, names: dict | None = None) -> str | None:
+    """'Goal, 46', Adelaide United (Z. Clough)': the latest goal, shot, tackle or foul, on the football clock."""
     if state.last_event is None:
         return None
     ts, _, kind, team, pid, _ = state.last_event
     who = state.players.get(pid, {}).get("short_name")
-    return f"{KEY_EVENTS[kind]}, {ts // 60 + 1}', {team_name(state, team)}" + (f" ({who})" if who else "")
+    return (f"{KEY_EVENTS[kind]}, {football_clock.label(ts, None, *bounds(state))}, {team_name(state, team, names)}"
+            + (f" ({who})" if who else ""))
 
 
 def player_stats(state: MatchState, player_id: str) -> playerstats.PlayerStats:

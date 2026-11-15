@@ -7,10 +7,11 @@ import pandas as pd
 import streamlit as st
 
 import cards
+import clock
 import pitch
 import sitemap
 import viz
-from data import CAVEAT, current_match, library, require_gold, table
+from data import CAVEAT, clock_bounds, current_match, library, require_gold, table
 
 SCORES = [("score_work_rate", "Work rate", "ground covered per minute"),
           ("score_sprints", "Sprints", "sprint efforts per minute"),
@@ -25,8 +26,9 @@ coach = st.session_state.get("view") == "coach"
 colors = viz.team_colors(teams, match)
 card = table("gold_player_card")
 squad = card[card.match_id == match].sort_values(["team_id", "shirt_number"], ascending=[False, True])
-name = {r.team_id: r.team_name for r in teams[teams.match_id == match].itertuples()}
 short = {r.team_id: r.team_short for r in teams[teams.match_id == match].itertuples()}
+name = short
+bounds = clock_bounds(match)
 
 chosen = st.session_state.get("player", {}).get(match)
 if chosen not in set(squad.player_id):
@@ -153,15 +155,17 @@ if coach:
         win = table("gold_player_5min")
         win = win[(win.match_id == match) & (win.player_id == pid)].sort_values("window_start_ts")
         if not win.empty:
-            st.bar_chart(win.assign(minute=win.window_start_ts // 60).set_index("minute")["distance_m"], color=color,
-                         height=180)
+            st.bar_chart(win.assign(minutes=[clock.span(r.window_start_ts, r.window_end_ts, *bounds)
+                                             for r in win.itertuples()]).set_index("minutes")["distance_m"],
+                         color=color, height=180, sort=False)
             st.caption("Distance per 5-minute window (m); a window with little tracking is under-estimated.")
     st.markdown("**Events of this player** (E1)")
     mine = events[(events.match_id == match) & (events.player_id == pid)].sort_values("ts")
     kinds = sorted(mine.type.unique())
     picked = st.pills("Types", kinds, default=[k for k in kinds if k != "run"], selection_mode="multi", key="ev_types")
     shown = mine[mine.type.isin(picked or [])]
-    st.dataframe(shown.assign(minute=shown.ts // 60 + 1)[["minute", "type", "outcome", "third", "lane", "phase",
+    st.dataframe(shown.assign(minute=[clock.label(r.ts, r.period, *bounds) for r in shown.itertuples()])[
+                 ["minute", "type", "outcome", "third", "lane", "phase",
                                                          "xthreat", "receiver_short_name"]]
                  .assign(xthreat=lambda d: d.xthreat.map(lambda v: "" if pd.isna(v) else f"{v:.3f}"),
                          receiver_short_name=lambda d: d.receiver_short_name.fillna(""))

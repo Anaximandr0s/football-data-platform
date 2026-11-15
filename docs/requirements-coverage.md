@@ -13,3 +13,17 @@
 | FOO-09 | Compare two matches, or cluster player profiles | OPT | Silver / Gold | in progress: team-level compare page done (clustering not done) | `make app`, page Compare matches (to add a screenshot) |
 
 Status: todo · in progress · done (with proof: command, file or screenshot).
+## External check against official sources
+
+Goal minutes come from `clock.py` (football clock: the second half restarts at 45:00 from its own kick-off,
+`p2_start_ts`, which is exactly the kick-off frame of `match.json`: m001 frame 29000 = ts 2899, m002 frame 30250 = ts
+3024). Possession is ours from `gold_team_profile.possession_share`. Checked on 2026-11-15.
+
+| Match | Ours | Official source | Agrees |
+|---|---|---|---|
+| m001 Brisbane Roar 2-3 Adelaide United, goals | 6' Jelacic, 33' Mauk, 43' O'Shea, 46' Clough, 62' Goodwin | [Brisbane Roar match wrap](https://brisbaneroar.com.au/news/alm-united-round-match-wrap-brisbane-roar-2-3-adelaide-united/): 6', 33', 43', 46', 63' | 4 of 5 exact; Goodwin one minute apart: his shot is 16:31.8 into the second half in the data (the 62nd minute); the club writes 63' |
+| m001 possession | Brisbane Roar 40 %, Adelaide United 60 % | [FBref match report](https://fbref.com/en/matches/9d2e447a/Brisbane-Roar-Adelaide-United): 39 % / 61 % | yes, within 1 point |
+| m002 Brisbane Roar 0-1 Perth Glory, goal | 69' Williams | [Brisbane Roar match wrap](https://brisbaneroar.com.au/news/alm-r9-match-wrap-brisbane-roar-0-1-perth-glory/), [AAP](https://aapnews.aap.com.au/news/glory-defeat-roar-to-end-18-game-alm-winless-streak): 69' (Perth Glory's own report: 70') | yes |
+| m002 possession | Brisbane Roar 63 %, Perth Glory 37 % | [FBref match report](https://aws.fbref.com/en/matches/f328e2b6/Brisbane-Roar-Perth-Glory-December-21-2024-A-League-Men): 64 % for Brisbane | yes, within 1 point |
+
+Tested in `tests/app/test_clock.py` (m001 goals, stoppage time, the running clock, 5-minute windows).

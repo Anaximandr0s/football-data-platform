@@ -5,11 +5,12 @@ import pandas as pd
 import streamlit as st
 
 import charts
+import clock
 import pitch
 import sitemap
 import story
 import viz
-from data import CAVEAT, CREDIT, current_match, require_gold, table
+from data import CAVEAT, CREDIT, clock_bounds, current_match, require_gold, table
 
 MIN_PASSES = 3   # a pass-network line needs at least this many passes between two players
 
@@ -33,12 +34,15 @@ shots = table("gold_shots")
 shots = shots[shots.match_id == match]
 card = table("gold_player_card")
 card = card[card.match_id == match]
-end_minute = int(timeline.window_end_ts.max() // 60)
+bounds = clock_bounds(match)
+end_minute = float(timeline.window_end_ts.max() / 60)
+ticks = clock.axis_ticks(*bounds, end_ts=int(timeline.window_end_ts.max()))
+kickoff2 = bounds[1] / 60 if bounds[1] is not None else None
 goal_rows = shots[shots.is_goal].sort_values(["ts", "event_id"])
-goals = pd.DataFrame({"minute": goal_rows.ts.map(story.minute), "team": goal_rows.team_id,
+goals = pd.DataFrame({"minute": goal_rows.ts / 60, "team": goal_rows.team_id,
                       "team_name": goal_rows.team_id.map(short),
-                      "label": [f"{story.minute(r.ts)}' {r.player_short_name} {r.score_home_after}-{r.score_away_after}"
-                                for r in goal_rows.itertuples()]})
+                      "label": [f"{clock.label(r.ts, r.period, *bounds)} {r.player_short_name} "
+                                f"{r.score_home_after}-{r.score_away_after}" for r in goal_rows.itertuples()]})
 
 
 def say(sentence: story.Sentence | None) -> None:
@@ -47,32 +51,34 @@ def say(sentence: story.Sentence | None) -> None:
 
 
 # ---------------------------------------------------------------- score and goals (F1)
-st.markdown(f"<div class='ml-scoreline'><span class='team'>{home.team_name}</span>"
+st.markdown(f"<div class='ml-scoreline'><span class='team'>{short['HOME']}</span>"
             f"<span class='score'>{home.score} - {away.score}</span>"
-            f"<span class='team'>{away.team_name}</span></div>", unsafe_allow_html=True)
+            f"<span class='team'>{short['AWAY']}</span></div>", unsafe_allow_html=True)
 if goals.empty:
     st.caption("No goal in this match.")
 else:
-    st.altair_chart(charts.goal_timeline(goals, colors, short, end_minute), width="stretch")
-say(story.goals(shots, short, (int(home.score), int(away.score))))
+    st.altair_chart(charts.goal_timeline(goals, colors, short, end_minute, ticks, kickoff2), width="stretch")
+say(story.goals(shots, short, (int(home.score), int(away.score)), bounds))
 
 # ---------------------------------------------------------------- who was on top (E2, F2, F1)
 st.subheader("Who was on top")
 st.markdown("**Danger created with passes**, per 5 minutes")
-st.altair_chart(charts.momentum(timeline, goals, colors, names, end_minute), width="stretch")
+st.altair_chart(charts.momentum(timeline, goals, colors, names, end_minute, ticks, kickoff2), width="stretch")
 st.caption("SkillCorner xThreat of the successful passes: how threatening the targeted spot was. It is not xG (expected "
-           "goals). Above the line: " + short["HOME"] + " on top; below: " + short["AWAY"] + ". Dotted lines: goals.")
-say(story.momentum(timeline, short))
+           "goals). Above the line: " + short["HOME"] + " on top; below: " + short["AWAY"] + ". Dotted lines: goals; "
+           "solid line: second-half kick-off.")
+say(story.momentum(timeline, short, bounds))
 
 st.markdown("**Possession**, per 5 minutes")
-st.altair_chart(charts.shares(timeline, "possession_share", goals, colors, names, end_minute,
+st.altair_chart(charts.shares(timeline, "possession_share", goals, colors, names, end_minute, ticks, kickoff2,
                               greyed="possession_greyed"), width="stretch")
 st.caption(f"{short['HOME']} from the bottom, {short['AWAY']} from the top. Grey: fewer than 60 seconds with a known "
            "owner in that spell, too few to trust.")
-say(story.possession(timeline, profile, short))
+say(story.possession(timeline, profile, short, bounds))
 
 st.markdown("**Territory**: passes played from the final third, per 5 minutes")
-st.altair_chart(charts.shares(timeline, "field_tilt", goals, colors, names, end_minute), width="stretch")
+st.altair_chart(charts.shares(timeline, "field_tilt", goals, colors, names, end_minute, ticks, kickoff2),
+                width="stretch")
 st.caption("Field tilt: the share of the passes made near the opponent's goal. An empty spell had no such pass.")
 say(story.field_tilt(timeline, profile, short))
 
@@ -125,7 +131,7 @@ table_rows = {
     "Sprint efforts": [f"{int(rows.loc[t, 'sprint_count'])}" for t in ("HOME", "AWAY")],
     "Top speed (km/h, detected)": [f"about {top[t]:.0f}" if pd.notna(top.get(t)) else "n/a" for t in ("HOME", "AWAY")],
 }
-st.dataframe(pd.DataFrame(table_rows, index=[names["HOME"], names["AWAY"]]).T, width="stretch")
+st.dataframe(pd.DataFrame(table_rows, index=[short["HOME"], short["AWAY"]]).T, width="stretch")
 say(story.fastest(card, short))
 with st.expander("How to read these numbers"):
     st.markdown(CAVEAT)

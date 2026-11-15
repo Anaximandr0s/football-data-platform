@@ -191,3 +191,12 @@ models:
         data_tests: [not_null]
       - name: tracked_share
         data_tests: [not_null]
+
+seeds:
+  - name: team_names
+    description: "The name fans use for each team of the SkillCorner open data (13 teams, checked in every match.json)."
+    columns:
+      - name: skillcorner_name
+        data_tests: [unique, not_null]
+      - name: fan_name
+        data_tests: [unique, not_null]

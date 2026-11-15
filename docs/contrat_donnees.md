@@ -326,7 +326,8 @@ warn the dashboard owner. Definitions and examples: [`../dbt/README.md`](../dbt/
 | Column | Type | Meaning |
 |---|---|---|
 | match_id, team_id | VARCHAR | keys |
-| team_name, team_short, team_color | VARCHAR | from `matches` (colour may be null or too dark to draw) |
+| team_name, team_color | VARCHAR | from `matches` (colour may be null or too dark to draw) |
+| team_short | VARCHAR | the name fans use (seed `team_names.csv`), else the source short name |
 | score, opponent_score | INTEGER | final score from this team's point of view |
 | distance_km | DOUBLE | sum of the players |
 | sprint_count, sprint_seconds | BIGINT | sums |
@@ -492,7 +493,9 @@ a 1 m grid whose nearest player, detected or not, is HOME).
 | Column | Type | Meaning |
 |---|---|---|
 | match_id | VARCHAR | |
-| home_team, away_team, home_team_short, away_team_short, home_color, away_color | VARCHAR | from `matches` |
+| home_team, away_team, home_color, away_color | VARCHAR | from `matches` |
+| home_team_short, away_team_short | VARCHAR | the name fans use (dbt seed `team_names.csv`: "Brisbane Roar", not the source's "Brisbane FC"); the source short name for a team not in the seed |
+| p1_start_ts, p1_end_ts, p2_start_ts, p2_end_ts | INTEGER | first and last second of each period: the app's football clock restarts the second half at 45:00 from `p2_start_ts` |
 | home_score, away_score | INTEGER | final score |
 | kickoff_utc | VARCHAR | ISO 8601, as in `matches` |
 | match_date | DATE | kick-off day (UTC) |
