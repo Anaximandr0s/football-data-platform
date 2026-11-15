@@ -1,0 +1,25 @@
+version: 2
+
+# Intermediate models: inputs of several Gold tables, kept in the DuckDB file, not exported, not in the contract.
+models:
+  - name: int_team_shape_second
+    description: "GRAIN: one row per team per tracked second per match (outfield players). Input of gold_team_shape and gold_team_profile."
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [match_id, team_id, ts]
+    columns:
+      - name: phase
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["in_possession", "out_of_possession", "unknown"]
+  - name: int_space_control_second
+    description: "GRAIN: one row per tracked second per match: HOME share of the 1 m cells (AWAY = 1 - home_share)."
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [match_id, ts]
+    columns:
+      - name: home_share
+        data_tests: [not_null]

@@ -2,13 +2,15 @@
 
 Silver is clean but still row-level (a player at a second, an action). Gold turns it into the numbers the app and the
 report need: distances, sprints, pass networks, shot maps, heatmaps. dbt-core + dbt-duckdb read the Silver Iceberg
-tables, build six Gold tables, test them against Silver, and export them to the MinIO bucket `gold`.
+tables, build 15 Gold tables, test them against Silver, and export them to the MinIO bucket `gold`.
 The specification is [`docs/gold-guide.md`](../docs/gold-guide.md); this folder implements it.
 
 ```mermaid
 flowchart LR
     S[(Iceberg lake.silver.*<br/>s3://silver/warehouse)] -->|iceberg_scan| ST[staging<br/>5 stg_* tables]
-    ST --> M[marts<br/>6 gold_* tables]
+    ST --> I[intermediate<br/>3 int_* tables]
+    ST --> M[marts<br/>15 gold_* tables]
+    I --> M
     M --> D[(data/football.duckdb)]
     M -->|COPY ... PARQUET| G[(s3://gold/*.parquet)]
     T[grain tests<br/>+ 5 reconciliation tests] -.-> M
@@ -24,7 +26,7 @@ containers and keeps the tables in the file `data/football.duckdb` (git-ignored)
 Needs the stack (`make up`) and Silver written for the matches (`make silver MATCH="m001 m002"`). Only Docker is needed:
 
 ```bash
-make gold                                   # dbt build: staging + 6 Gold tables + all tests + Parquet export to s3://gold
+make gold                                   # dbt build: staging + 15 Gold tables + all tests + Parquet export to s3://gold
 make gold ARGS="--select gold_shots"        # one model (+gold_shots also builds its parents)
 make gold-sql                               # list the Gold tables with their row counts
 make gold-sql Q="select name, distance_km, sprint_count from gold_player_match_stats order by distance_km desc limit 5"
@@ -56,14 +58,16 @@ dbt build --vars "{silver_reader: parquet, silver_parquet_root: /path/to/silver_
 | `macros/silver_table.sql` | the one place that says how a Silver table is read (`iceberg_scan` or `read_parquet`) |
 | `macros/export_gold.sql` | `on-run-end`: copies each Gold table to `<gold_export_root>/<table>.parquet` when `export_gold` is true |
 | `models/staging/` | `stg_tracking, stg_events, stg_ball, stg_players, stg_matches`: Silver scanned once, same columns |
-| `models/marts/` | the six Gold tables and their `schema.yml` |
+| `macros/attack_frame.sql` | `x_att`, `y_att`, thirds and lanes as seen by the team of a row (docs/product.md, section 2) |
+| `models/intermediate/` | `int_events` (events + `x_att` + progressive and defensive flags), `int_team_shape_second`, `int_space_control_second` (a Python model: numpy) |
+| `models/marts/` | the 15 Gold tables and their `schema.yml` |
 | `tests/` | `unique_combination` generic test and five `assert_*` reconciliation tests |
 | `scripts/duckdb_query.py` | read-only SQL on the Gold file (behind `make gold-sql`) |
 | `Dockerfile` | image shared by the `dbt` and `duckdb` services of `docker-compose.yml` (DuckDB pinned to 2.0, like the Soda and dashboard images) |
 
 Tests of the SQL on a tiny hand-made Silver: `tests/dbt/` (`python -m pytest tests/dbt`).
 
-## The six Gold tables
+## The Gold tables
 
 All are rebuilt in full at each run (`table` materialization): two matches take seconds, and a full rebuild can never
 leave a stale row. Move to `incremental` (`delete+insert` on `match_id`) if the number of matches grows.
@@ -76,6 +80,21 @@ leave a stale row. Move to `incremental` (`delete+insert` on `match_id`) if the 
 | `gold_pass_network` | passer x receiver x match | `passes`, `passes_successful`, average start and end points, player names (nodes: `avg_x / avg_y` of the player table) |
 | `gold_shots` | one shot or goal | position, `is_goal`, `attacking_goal_x`, `distance_to_goal_m`, running score `score_home_after / score_away_after` (shot map, FOO-07) |
 | `gold_player_5min` | player x 5-minute window x match | tracked seconds, `coverage`, distance, sprint seconds, max speed, actions (batch twin of the streaming job) |
+
+The MatchLens tables answer the questions of [`docs/product.md`](../docs/product.md) (section 7); their formulas are
+there and their columns in [`docs/contrat_donnees.md`](../docs/contrat_donnees.md), section 10.3:
+
+| Table | Grain | Answers |
+|---|---|---|
+| `gold_match_timeline` | team x 5-minute window x match | F1, F2, F7, E2: field tilt, possession (greyed under 60 known seconds), shots, goals, score, defensive actions, xThreat |
+| `gold_player_card` | player x match | F3-F6, F8: dpm, top speed, rates per tracked minute, 5 scores ranked within the match (eligible players only), involvement, hub |
+| `gold_team_shape` | team x phase x match | C1, C2: width, length, area, defensive line, detected share |
+| `gold_pressing` | team x 15-minute window x match | C3: defensive actions per opponent pass, by third |
+| `gold_team_build_up` | team x match | C4, C5: progressive passes, final-third entries by lane |
+| `gold_player_fatigue` | player x match | C6: dpm in the first 15 and last 5 minutes on the pitch, drop, eligibility |
+| `gold_space_control` | team x 5-minute window x match | S1: share of a 1 m grid nearest to the team, by phase (about 8 s per match) |
+| `gold_team_profile` | team x match | C7, F7: whole-match team metrics and the gaps between the two teams |
+| `gold_events` | one event, runs included | E1: Silver events + names, `x_att`, `y_att`, third, lane |
 
 Definitions that matter:
 

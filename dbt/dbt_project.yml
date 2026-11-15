@@ -24,6 +24,8 @@ models:
   football:
     staging:
       +materialized: table                # Silver is scanned once, the marts read this copy
+    intermediate:
+      +materialized: table                # inputs of several marts, not exported and not part of the contract
     marts:
       +materialized: table
 

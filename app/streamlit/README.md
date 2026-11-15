@@ -6,7 +6,7 @@ data read-only. The Live match page rebuilds the score, possession and positions
 
 ```mermaid
 flowchart LR
-    G[(data/football.duckdb<br/>6 Gold tables)] -->|short read-only queries| D[data.py]
+    G[(data/football.duckdb<br/>Gold tables)] -->|short read-only queries| D[data.py]
     Q[(data/soda/*.json)] --> D
     D --> P[5 pages]
     V[viz.py<br/>mplsoccer figures] --> P

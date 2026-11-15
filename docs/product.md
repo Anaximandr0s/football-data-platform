@@ -70,8 +70,9 @@ and 59.5 min of m002, the ball-in-play time.
 | Thirds | own third `x_att < 35`, middle `35 <= x_att < 70`, final third `x_att >= 70` |
 | `w5`, `w15` | 5- and 15-minute windows of the match clock: `ts // 300`, `ts // 900` |
 | Outfield | `silver.players.position != 'GK'` |
-| Tracked minutes | `count(*) / 60` of the player's (or team's) rows in `silver.tracking` |
-| `dpm` | distance per tracked minute = `sum(speed_kmh / 3.6) / (count(speed_kmh) / 60)` (null speeds count in neither part) |
+| Tracked minutes | player: `count(*) / 60` of the player's rows in `silver.tracking`; team: its distinct tracked seconds / 60 (not the sum of its players' minutes) |
+| Team rate | a team count per 90 tracked minutes: `count / team tracked minutes x 90` |
+| `dpm` | distance per tracked minute = `sum(speed_kmh / 3.6) / (count(speed_kmh) / 60)` (null speeds count in neither part). Label: "per minute of tracked play (mostly ball in play)": the camera loses the play mostly when the ball is dead, so tracked time is richer in running than the whole match (m001 outfield: 148 m/min while a team owns the ball, 85 when nobody does, 131 overall) |
 | Opponent | the other team of the same match |
 | Progressive pass | `type = 'pass'` and `x_att(x_end) - x_att(x_start) >= 10` |
 | Defensive action | `type in ('pressure', 'tackle', 'foul')`: the whole engagement family of the source (tackles and fouls are carved out of it at ingestion) |
@@ -88,10 +89,14 @@ team won or lost. Every metric has one plain sentence under it, numbers are roun
 | F2 | Who had the ball? | Possession % per team and per 5 min | `possession_seconds(T, w5) / (possession_seconds(HOME, w5) + possession_seconds(AWAY, w5))`; match total over all seconds. A window with under 60 known seconds is greyed out | Match story, Live | live (per 5 min) + post |
 | F3 | Who played well? | Player card: 5 scores ranked within the match (section 3.1) | `gold_player_card` | Player cards | post |
 | F4 | Who worked the hardest? | Distance per tracked minute | `dpm` per player from `silver.tracking` | Player cards, Live | live (per 5 min) + post |
-| F5 | Who was the fastest? | Top speed (approximate) | `max(speed_kmh)` per player, shown as "about N km/h" | Player cards, Live | live (per 5 min) + post |
+| F5 | Who was the fastest? | Top speed (approximate) | `max(speed_kmh)` per player over the speeds whose two positions (this second and the one before) are both detected, shown as "about N km/h" | Player cards, Live | live (per 5 min) + post |
 | F6 | Who made the team play? | Pass network hub | `involvement(p) = (successful passes made by p + successful passes received by p) / (2 x successful passes of the team)`; hub = player with the highest `involvement` in their team | Passing | post |
 | F7 | Why did we win or lose? | Three biggest differences between the teams | for each team metric `m` in {possession %, field tilt, shots + goals, progressive passes, defensive actions per opponent pass, dpm of outfield players}: `gap = (m_T - m_O) / ((m_T + m_O) / 2)`; show the 3 largest `abs(gap)` as sentences ("Brisbane had 63 % of the ball") | Match story | post |
 | F8 | How is my player doing across matches? | The player's card in each match, side by side | `gold_player_card` rows sharing one `source_player_id` (11 Brisbane Roar players in m001 and m002), one column per match; scores stay ranked within their own match, and each column names the opponent | Player cards | post |
+
+F5 uses detected positions only because a speed joins two positions one second apart, and every speed above 33 km/h
+in m001 and m002 (up to 39.2 km/h) had an estimated position at one end; with both ends detected the fastest second is
+33.0 km/h in m001 and 31.7 km/h in m002. The other Gold tables keep `max_speed_kmh` over all positions.
 
 F7 states differences, not causes: the sentences say "had more", never "won because". F8 compares ranks, not raw
 values: a score of 80 means "better than 80 % of the eligible players of that match", and the opponent differs.
@@ -120,13 +125,24 @@ and weaknesses, and how one match compares with another.
 
 | # | Question | Metric | Formula (Silver / Gold) | Page | When |
 |---|---|---|---|---|---|
-| C1 | What shape does the team take, with and without the ball? | Width, length, compactness | per tracked second `s` and team T, over outfield players: `width = max(y) - min(y)`, `length = max(x_att) - min(x_att)`, `area = width x length` (smaller = more compact); then the mean over seconds, split by phase (T in possession / opponent in possession / unknown). Live: the current second only, computed in the page from the Kafka positions | Team shape, Live | live (current second) + post |
+| C1 | What shape does the team take, with and without the ball? | Width, length, compactness | per tracked second `s` and team T, over outfield players: `width = max(y) - min(y)`, `length = max(x_att) - min(x_att)` (label: "outfield block length"), `area = width x length` (smaller = more compact); then the mean over seconds, split by phase (T in possession / opponent in possession / unknown). Live: the current second only, computed in the page from the Kafka positions | Team shape, Live | live (current second) + post |
 | C2 | How high does the team defend? | Defensive line height | per second: mean `x_att` of the 4 outfield players with the smallest `x_att` (assumes a back four); mean over seconds when the opponent has the ball | Team shape | post |
 | C3 | How hard and where does the team press? | Defensive actions per opponent pass per 15 min; pressing zones | `ppp(T, w15) = defensive actions of T in w15 / passes of the opponent in w15` (higher = more intense); zones: share of T's defensive actions by third of `x_att(x_start)`, `high_press_share` = final third. Live: the same ratio per 5-min window | Pressing, Live (ppp) | live (per 5 min) + post |
-| C4 | How does the team move the ball forward? | Progressive passes | count, successful count and success rate of progressive passes per team and per player; per tracked minute for comparison | Build-up and attack | post |
+| C4 | How does the team move the ball forward? | Progressive passes | count and successful count of progressive passes per team and per player; per 90 tracked minutes for comparison (team rate). No success rate (see below) | Build-up and attack | post |
 | C5 | Which side does the team attack? | Attack side | successful passes of T ending in the final third (`x_att(x_end) >= 70`), by lane of `y_att(y_end)`: left `> 45.33`, centre, right `< 22.67`; shares of the three lanes | Build-up and attack | post |
 | C6 | Who is getting tired? | Fatigue | per outfield player with at least 30 minutes on the pitch: `dpm` in their first 15 minutes on the pitch (`start_ts <= ts < start_ts + 900`) vs their last 5 (`end_ts - 300 < ts <= end_ts`); `drop = 1 - dpm_last5 / dpm_first15`. Shown only with at least 5 tracked minutes in the first window and 2 in the last | Fatigue | post |
-| C7 | Is this how the team usually plays? | Team profile m001 vs m002 | one row per match and team with: possession %, field tilt, width, length, defensive line height, `ppp`, `high_press_share`, progressive passes and `dpm` per tracked minute, attack side shares; shown side by side for the same team (Brisbane Roar in both matches) | Compare matches | post |
+| C7 | Is this how the team usually plays? | Team profile m001 vs m002 | one row per match and team with: possession %, field tilt, width, length, defensive line height, `ppp`, `high_press_share`, progressive passes per 90 tracked minutes, `dpm`, attack side shares; shown side by side for the same team (Brisbane Roar in both matches) | Compare matches | post |
+
+C1 length is the outfield block: SkillCorner's own team length (`phases_of_play.csv`) includes the goalkeeper.
+Cross-check on m001, 1,650 phase starts and ends: width matches SkillCorner (median gap 0.24 m); our outfield length is
+about 21 m shorter, and the same measure with the goalkeeper added matches SkillCorner (median gap 0.26 m, correlation
+0.988). The goalkeeper is left out on purpose: he stretches the length without telling how compact the block is.
+
+C4 has no success rate: a failed pass has no reception point in the source (0 of 137 in m001, 0 of 132 in m002), so its
+stored end is the end of the passer's own possession, a median 1.5 m (m001) from where it started. Failed passes then
+rarely look progressive (8.8 % in m001, against 27.7 % when measured to where the target stood), and the rate came out
+at 89 % to 96 %. Successful progressive passes are reliable (their end is the reception point) and are kept; the total
+count misses most failed attempts and is shown as such.
 
 C6 is a signal for the bench, not a diagnosis: the last minutes also contain stoppages and changes in game state.
 
@@ -193,7 +209,7 @@ Not proposed: EPV, xLoss and xShot. They are model outputs no question uses.
 | `gold_player_card` | match x player | `source_player_id`, eligibility, `dpm`, top speed, sprint efforts, passes, progressive passes, defensive actions (all per tracked minute), 5 scores, `involvement`, `is_hub` | F3, F4, F5, F6, F8 |
 | `gold_team_shape` | match x team x phase | width, length, area, defensive line height, seconds used, detected share of the positions. Built from an intermediate model `int_team_shape_second` (match x team x second) | C1, C2 |
 | `gold_pressing` | match x team x 15-min window | defensive actions, opponent passes, `ppp`, defensive actions by third, `high_press_share` | C3 |
-| `gold_team_build_up` | match x team | progressive passes (count, successful, rate, per tracked minute), final-third entries and shares by lane | C4, C5 |
+| `gold_team_build_up` | match x team | progressive passes (count, successful, per 90 tracked minutes), final-third entries and shares by lane | C4, C5 |
 | `gold_player_fatigue` | match x player | `dpm_first15`, `dpm_last5`, `drop`, tracked minutes in each window, eligibility | C6 |
 | `gold_team_profile` | match x team | one wide row joining the team metrics above, plus the F7 gaps | C7, F7 |
 | `gold_space_control` | match x team x 5-min window | mean space share over tracked seconds, by phase (in possession / opponent in possession / unknown), seconds used. Built from `int_space_control_second` (match x second: HOME share, AWAY = 1 - HOME) | S1 |

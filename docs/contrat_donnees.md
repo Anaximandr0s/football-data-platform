@@ -279,7 +279,9 @@ warn the dashboard owner. Definitions and examples: [`../dbt/README.md`](../dbt/
 
 - DuckDB file `data/football.duckdb` (git-ignored), tables `main.gold_*`; copy as Parquet in `s3://gold/<table>.parquet`.
   The `stg_*` tables in the same file are copies of Silver used by dbt: they are not part of the contract.
-- Rebuilt in full by `make gold` (dbt build): staging, six tables, tests. Read it with `make gold-sql` or open it read-only.
+- Rebuilt in full by `make gold` (dbt build): staging, intermediate models, 15 Gold tables, tests. Read it with `make gold-sql`
+  or open it read-only. The `int_*` tables (`int_events`, `int_team_shape_second`, `int_space_control_second`) are inputs of
+  several Gold tables: they are in the file but not exported and not part of the contract.
 
 ### 10.2 Conventions
 
@@ -293,6 +295,13 @@ warn the dashboard owner. Definitions and examples: [`../dbt/README.md`](../dbt/
 | Counts | a player with no event has 0, never null. Ratios and speeds are null when there is nothing to compute them from. Event counts cover actions only: a `run` is never counted and never creates a row (a 5-minute window with only runs has no row) |
 | `shots` | type `shot` only. Goals are separate: shots on the shot map = shots + goals (`gold_shots` holds both) |
 | Successful pass | `outcome = 'successful'` |
+| `x_att`, `y_att` | coordinates seen by the team of the row: `x_att` = `x` for HOME, `105 - x` for AWAY (distance from its own goal line); `y_att` = `y` for HOME, `68 - y` for AWAY (`y_att > 45.33` is its left) |
+| Thirds, lanes | own `x_att < 35`, middle, final `x_att >= 70`; left `y_att > 45.33`, centre, right `y_att < 22.67` |
+| Defensive action | `pressure`, `tackle` or `foul`; a `run` never counts |
+| Progressive pass | a pass with `x_att(end) - x_att(start) >= 10` |
+| Rates | `dpm` = distance / (seconds with a speed / 60), "per minute of tracked play (mostly ball in play)"; player per-minute values divide by the player's tracking rows / 60; team rates are per 90 minutes of the team's distinct tracked seconds |
+| Eligibility | flags, never filters: a row below its threshold stays, with `is_eligible = false` or `possession_greyed = true`, and the app greys it out |
+| Formulas | [`product.md`](product.md), sections 2 to 4 and 8.1 (ids F1-F8, C1-C7, S1, E1-E2) |
 
 ### 10.3 Tables
 
@@ -377,14 +386,131 @@ The source gives no saved / blocked / off-target outcome: there is no expected-g
 | sprint_seconds | BIGINT | |
 | passes, shots, goals, tackles, fouls, pressures | BIGINT | event counts in the window |
 
-### 10.4 Known characteristics (m001 measured; m002 to fill after the first run on SkillCorner 1925299)
+**gold_match_timeline** (F1, F2, F7, E2): one row per team per 5-minute window per match, every window from 0 to
+`p2_end_ts // 300` even if empty. Key (match_id, team_id, window_index).
 
-| Item | m001 |
-|---|---|
-| Rows: player stats / team stats / zones / pass network / shots / 5-minute windows | 32 / 2 / 638 / 261 / 26 / 469 |
-| Shots table | 21 shots + 5 goals; running score ends 2-3 (= real score) |
-| Passes | 837 (700 successful, 135 unsuccessful, 2 offside), all with a receiver |
-| Team distance and sprint efforts | HOME 101.2 km and 108; AWAY 97.3 km and 106 (tracked time only) |
+| Column | Type | Meaning |
+|---|---|---|
+| match_id, team_id | VARCHAR | |
+| window_index, window_start_ts, window_end_ts | INTEGER | `ts // 300`; start = index x 300, end = start + 300 |
+| passes, final_third_passes | BIGINT | passes of the team; those starting at `x_att >= 70` |
+| field_tilt | DOUBLE | final_third_passes / those of both teams in the window; null if neither has one |
+| possession_seconds, known_seconds | BIGINT | ball seconds owned by the team; owned by either team |
+| possession_share | DOUBLE | possession_seconds / known_seconds, null if 0 |
+| possession_greyed | BOOLEAN | `known_seconds < 60`: shown greyed out |
+| shots, goals, defensive_actions | BIGINT | `shots` is type `shot` only |
+| xthreat_successful_passes | DOUBLE | sum of SkillCorner `xthreat` of successful passes (a pass without a value adds 0) |
+| score_home_end, score_away_end | INTEGER | score at the end of the window |
+
+**gold_player_card** (F3, F4, F5, F6, F8): one row per player per match. Key (match_id, player_id).
+
+| Column | Type | Meaning |
+|---|---|---|
+| match_id, player_id, team_id, name, short_name, position, opponent_name | VARCHAR | |
+| source_player_id | BIGINT | SkillCorner id: the same player across matches |
+| shirt_number | INTEGER | |
+| is_outfield, is_eligible | BOOLEAN | eligible = outfield and `tracked_minutes >= 20` |
+| tracked_minutes, dpm, top_speed_kmh | DOUBLE | tracking rows / 60; m per minute with a speed; fastest speed whose two positions (this second and the one before) are both detected, shown "about N km/h" (`gold_player_match_stats.max_speed_kmh` keeps all positions) |
+| sprint_count, passes_successful, progressive_passes, progressive_passes_successful, defensive_actions, goals, passes_received_successful | BIGINT | |
+| sprints_per_min, passes_successful_per_min, progressive_passes_successful_per_min, defensive_actions_per_min | DOUBLE | per tracked minute |
+| score_work_rate, score_sprints, score_passing, score_progression, score_defending | INTEGER | `round(100 x percent_rank())` among the eligible players of the match, of dpm and the four rates above; null if not eligible |
+| involvement | DOUBLE | (successful passes made + received) / (2 x successful passes of the team) |
+| is_hub | BOOLEAN | highest involvement of the team (several only on a tie) |
+
+**gold_team_shape** (C1, C2): one row per team per phase per match. Key (match_id, team_id, phase). Built from
+`int_team_shape_second` (team x tracked second, outfield players only).
+
+| Column | Type | Meaning |
+|---|---|---|
+| match_id, team_id | VARCHAR | |
+| phase | VARCHAR | `in_possession`, `out_of_possession` (opponent owns the ball) or `unknown` (nobody, or no ball row) |
+| seconds_used | BIGINT | tracked seconds in that phase |
+| width, length, area | DOUBLE | means over the seconds of `max(y) - min(y)`, `max(x_att) - min(x_att)` ("outfield block length": SkillCorner's length includes the goalkeeper and is about 21 m longer) and their product, outfield players |
+| defensive_line_height | DOUBLE | mean `x_att` of the 4 deepest outfield players (assumes a back four); C2 reads the `out_of_possession` row |
+| detected_share | DOUBLE | positions seen by the camera / positions used |
+
+**gold_pressing** (C3): one row per team per 15-minute window per match, every window from 0 to `p2_end_ts // 900`.
+Key (match_id, team_id, window_index).
+
+| Column | Type | Meaning |
+|---|---|---|
+| match_id, team_id | VARCHAR | |
+| window_index, window_start_ts, window_end_ts | INTEGER | `ts // 900` |
+| defensive_actions, opponent_passes | BIGINT | |
+| ppp | DOUBLE | defensive_actions / opponent_passes, null if no opponent pass |
+| defensive_actions_own_third, defensive_actions_middle_third, defensive_actions_final_third | BIGINT | by third of `x_att` at the start |
+| high_press_share | DOUBLE | final third / all, null if none |
+
+**gold_team_build_up** (C4, C5): one row per team per match. Key (match_id, team_id).
+
+| Column | Type | Meaning |
+|---|---|---|
+| match_id, team_id | VARCHAR | |
+| progressive_passes, progressive_passes_successful | BIGINT | |
+| tracked_minutes, progressive_passes_per90 | DOUBLE | distinct tracked seconds of the team / 60; progressive_passes / tracked_minutes x 90. No success rate: a failed pass has no reception point, so failed passes rarely look progressive (`product.md`, C4) |
+| final_third_entries, entries_left, entries_centre, entries_right | BIGINT | successful passes ending at `x_att >= 70` (those starting there too), by lane of the end |
+| share_left, share_centre, share_right | DOUBLE | lane / final_third_entries, null if none |
+
+**gold_player_fatigue** (C6): one row per player per match. Key (match_id, player_id).
+
+| Column | Type | Meaning |
+|---|---|---|
+| match_id, player_id, team_id, short_name, position | VARCHAR | |
+| start_ts, end_ts | INTEGER | on the pitch from / to |
+| is_outfield, is_eligible | BOOLEAN | eligible = outfield, `minutes_on_pitch >= 30`, `tracked_minutes_first15 >= 5` and `tracked_minutes_last5 >= 2` |
+| minutes_on_pitch | DOUBLE | (end_ts - start_ts) / 60 |
+| dpm_first15, dpm_last5 | DOUBLE | dpm for `start_ts <= ts < start_ts + 900` and `end_ts - 300 < ts <= end_ts`; null without a speed |
+| drop | DOUBLE | `1 - dpm_last5 / dpm_first15`; negative = ran more at the end |
+| tracked_minutes_first15, tracked_minutes_last5 | DOUBLE | tracking rows in each window / 60 |
+
+**gold_space_control** (S1): one row per team per 5-minute window with at least one tracked second per match. Key
+(match_id, team_id, window_index). Built from `int_space_control_second` (one row per tracked second: share of the 7,140 cells of
+a 1 m grid whose nearest player, detected or not, is HOME).
+
+| Column | Type | Meaning |
+|---|---|---|
+| match_id, team_id | VARCHAR | |
+| window_index, window_start_ts, window_end_ts | INTEGER | `ts // 300` |
+| seconds_used, seconds_in_possession, seconds_out_of_possession, seconds_unknown | BIGINT | tracked seconds, and by owner of the ball |
+| space_share, space_share_in_possession, space_share_out_of_possession, space_share_unknown | DOUBLE | mean share of the pitch nearest to the team; HOME + AWAY = 1 |
+| detected_share | DOUBLE | positions seen by the camera / positions used |
+
+**gold_team_profile** (C7, F7): one row per team per match. Key (match_id, team_id).
+
+| Column | Type | Meaning |
+|---|---|---|
+| match_id, team_id, team_name, opponent_name | VARCHAR | |
+| possession_share, field_tilt | DOUBLE | whole match, same formulas as the timeline |
+| shots_and_goals, progressive_passes | BIGINT | |
+| width, length, defensive_line_height | DOUBLE | means over all tracked seconds; the line over the seconds the opponent owns the ball |
+| ppp, high_press_share | DOUBLE | whole match |
+| progressive_passes_per90, dpm_outfield, share_left, share_centre, share_right | DOUBLE | from `gold_team_build_up`; dpm over outfield rows |
+| gap_possession_share, gap_field_tilt, gap_shots_and_goals, gap_progressive_passes, gap_ppp, gap_dpm_outfield | DOUBLE | F7: `(m_team - m_opponent) / ((m_team + m_opponent) / 2)`, null if both are 0; the two teams have opposite gaps |
+
+**gold_events** (E1, E2): one row per event, runs included. Key `event_id`.
+
+| Column | Type | Meaning |
+|---|---|---|
+| all columns of `silver.events` | | unchanged (section 9.3) |
+| x_att_start, y_att_start, x_att_end, y_att_end | DOUBLE | coordinates seen by the team of the event |
+| player_short_name, receiver_short_name | VARCHAR | |
+| shirt_number | INTEGER | of the player |
+| third, lane | VARCHAR | of the start: `own` / `middle` / `final`, `left` / `centre` / `right`; null without a start |
+
+### 10.4 Known characteristics (measured on 2026-11-15 after one clean replay of each match)
+
+| Item | m001 | m002 |
+|---|---|---|
+| Rows: player stats / team stats / zones / pass network / shots / 5-minute windows | 32 / 2 / 638 / 261 / 26 / 469 | 32 / 2 / 627 / 258 / 30 / 471 |
+| Rows: timeline / cards / shape / pressing / build-up / fatigue / space / profile / events | 42 / 32 / 6 / 14 / 2 / 32 / 42 / 2 / 2,276 | 42 / 32 / 6 / 14 / 2 / 32 / 42 / 2 / 2,376 |
+| Shots table | 21 shots + 5 goals; running score ends 2-3 (= real score) | 29 shots + 1 goal; ends 0-1 |
+| Passes | 837 (700 successful, 135 unsuccessful, 2 offside), all with a receiver | 912 |
+| Possession HOME / AWAY (seconds with an owner) | 39.5 % / 60.5 % | 62.9 % / 37.1 % |
+| Greyed possession windows (under 60 known seconds) | 1 of 21 (the last, 10 s) | 0 of 21 |
+| Eligible player cards / fatigue rows | 26 / 24 of 32 | 27 / 27 of 32 |
+| Space control HOME / AWAY (mean over tracked seconds) | 45.5 % / 54.5 % | 55.8 % / 44.2 % |
+| Width, length (outfield, all seconds) HOME / AWAY | 38.1 m, 30.2 m / 41.7 m, 32.2 m | 39.0 m, 32.9 m / 34.3 m, 29.2 m |
+| Length against SkillCorner `phases_of_play` | ours is about 21 m shorter: SkillCorner includes the goalkeeper; with him, ours matches (median gap 0.26 m) | not compared |
 
 ## 11. Quality gates
 
@@ -393,5 +519,5 @@ The source gives no saved / blocked / off-target outcome: there is no expected-g
 | Counts after deduplication (events per type), keys, goals = score, detected rows and possession seconds = manifest, frame of events: HOME shots on the right half and AWAY shots on the left half (nothing is written if one fails) | Silver job, before writing (`spark/silver/checks.py`) | Silver |
 | Silver contract, keys, 22 players per second, inside the pitch, speed <= 40, event types, orientation of events, consistency | Soda on Silver (`soda/checks/silver.yml`, `make soda-silver`) | Silver / Gold |
 | Gold counts, goals, passes and tracked seconds reconciled with Silver | dbt tests (`dbt/tests/assert_*.sql`, run by `make gold`) | Gold |
-| Gold contract, ranges, consistency between Gold tables | Soda on Gold (`soda/checks/gold.yml`, `make soda-gold`) | Gold |
+| Gold contract, ranges, consistency between Gold tables (including: shares add up, greyed flags follow their thresholds, defensive actions never include runs) | Soda on Gold (`soda/checks/gold.yml`, `make soda-gold`) | Gold |
 | Last result of the Soda runs | dashboard page "Data quality" (`data/soda/*.json`) | Gold |

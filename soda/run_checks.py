@@ -29,7 +29,9 @@ ROOT = Path(__file__).resolve().parents[1]
 CHECKS_DIR = Path(__file__).resolve().parent / "checks"
 SILVER_TABLES = ("tracking", "events", "ball", "players", "matches")
 GOLD_TABLES = ("gold_player_match_stats", "gold_team_match_stats", "gold_zone_occupancy",
-               "gold_pass_network", "gold_shots", "gold_player_5min")
+               "gold_pass_network", "gold_shots", "gold_player_5min", "gold_match_timeline", "gold_player_card",
+               "gold_team_shape", "gold_pressing", "gold_team_build_up", "gold_player_fatigue", "gold_space_control",
+               "gold_team_profile", "gold_events")
 
 
 def _sql_str(value: str) -> str:

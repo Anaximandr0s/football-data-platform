@@ -8,8 +8,8 @@ section 5 of [`docs/silver-guide.md`](../docs/silver-guide.md), the column lists
 flowchart LR
     S[(Iceberg lake.silver.*)] -->|iceberg_scan views| R[run_checks.py<br/>DuckDB connection]
     G[(data/football.duckdb<br/>attached read-only)] -->|gold_* views| R
-    C1[checks/silver.yml<br/>66 checks] --> R
-    C2[checks/gold.yml<br/>57 checks] --> R
+    C1[checks/silver.yml<br/>71 checks] --> R
+    C2[checks/gold.yml<br/>121 checks] --> R
     R -->|exit 0 / 1| D[Dagster: block or go on]
     R -->|data/soda/layer.json| A[dashboard: Data quality page]
 ```
@@ -40,7 +40,7 @@ presence differs from the contract (`attacking_goal_x expected(DOUBLE) actual(de
 The Gold tables are also reconciled with Silver by dbt (`dbt/tests/assert_*.sql`): Soda guards the published tables,
 dbt guards the transformation.
 
-Measured on m001 (re-converted from SkillCorner 1874553): Silver 66 of 66 and Gold 57 of 57 pass. On the "m002" of the
+Measured on 2026-11-15 on m001 and m002 after one clean replay each: Silver 71 of 71 and Gold 121 of 121 pass. On the "m002" of the
 original zip (SkillCorner 1927964, not the 1925299 of the docs) the row-count check fails, as it should: the data is not
 the match the guide describes.
 

@@ -24,15 +24,15 @@ M = "m1"
 def _tracking():
     rows = []
 
-    def add(pid, team, series):
+    def add(pid, team, series, estimated=()):
         for ts, speed, x, y in series:
-            rows.append((M, pid, team, 1, ts, x, y, speed, bool(speed and speed > 25), False, False, True))
+            rows.append((M, pid, team, 1, ts, x, y, speed, bool(speed and speed > 25), False, False, ts not in estimated))
 
     # H01: speeds 10,30,30,10,26 then a gap, 27,27, a gap, 28. Positions chosen to hit zone edges.
     h01 = [(0, None, 0.0, 0.0), (1, 10.0, 104.9, 67.9), (2, 30.0, 105.0, 68.0), (3, 30.0, 50.0, 34.0),
            (4, 10.0, 50.0, 34.0), (5, 26.0, 50.0, 34.0), (8, None, 50.0, 34.0), (9, 27.0, 50.0, 34.0),
            (10, 27.0, 50.0, 34.0), (12, 28.0, 50.0, 34.0)]
-    add("H01", "HOME", h01)
+    add("H01", "HOME", h01, estimated={2})          # the camera did not see H01 at ts 2
     add("H02", "HOME", [(0, None, 20.0, 10.0), (1, 5.0, 20.0, 10.0), (2, 5.0, 20.0, 10.0)])
     add("A01", "AWAY", [(0, None, 80.0, 30.0), (1, 8.0, 80.0, 30.0)])
     add("A02", "AWAY", [(0, None, 70.0, 50.0), (1, 8.0, 70.0, 50.0)])
@@ -202,3 +202,83 @@ def test_reconciliation_tests_catch_a_wrong_score(tmp_path):
     run = _dbt(tmp_path, silver, "build")
     assert run.returncode != 0
     assert "assert_goals_equal_score" in run.stdout and "FAIL" in run.stdout
+
+
+# ------------------------------------------------------------------ MatchLens tables (docs/product.md, section 7)
+def test_pressing_counts_pressure_tackle_foul_and_never_runs(gold):
+    p = {r["team_id"]: r for r in rows(gold, "select * from gold_pressing")}
+    assert (p["HOME"]["defensive_actions"], p["AWAY"]["defensive_actions"]) == (1, 2)       # tackle; pressure + foul
+    assert p["HOME"]["ppp"] is None                                   # AWAY made no pass: no division by zero
+    assert (p["AWAY"]["opponent_passes"], p["AWAY"]["ppp"]) == (3, 0.6667)
+    assert p["AWAY"]["defensive_actions_middle_third"] == 2           # x_att of AWAY = 105 - x: 45 and 55
+    t = {r["team_id"]: r for r in rows(gold, "select * from gold_match_timeline")}
+    assert (t["HOME"]["defensive_actions"], t["AWAY"]["defensive_actions"]) == (1, 2)
+
+
+def test_timeline_possession_is_greyed_under_60_known_seconds(gold):
+    t = {r["team_id"]: r for r in rows(gold, "select * from gold_match_timeline")}
+    assert len(t) == 2                                                # one window (p2_end_ts = 200), two teams
+    assert (t["HOME"]["possession_share"], t["HOME"]["known_seconds"], t["HOME"]["possession_greyed"]) == (1.0, 1, True)
+    assert (t["HOME"]["score_home_end"], t["HOME"]["score_away_end"]) == (1, 0)
+    assert t["HOME"]["field_tilt"] is None and t["AWAY"]["field_tilt"] is None   # no pass from x_att >= 70: no tilt
+
+
+def test_card_progressive_passes_involvement_and_hub(gold):
+    c = {r["player_id"]: r for r in rows(gold, "select * from gold_player_card")}
+    assert (c["H01"]["progressive_passes"], c["H01"]["progressive_passes_successful"]) == (2, 1)   # +10 m counts
+    assert c["H02"]["progressive_passes"] == 0                                                   # a backward pass
+    assert c["H01"]["involvement"] == c["H02"]["involvement"] == 0.5 and c["H01"]["is_hub"] and c["H02"]["is_hub"]
+    assert not any(r["is_eligible"] for r in c.values())                     # under 20 tracked minutes: no score
+    assert c["H01"]["score_passing"] is None and c["H01"]["source_player_id"] == 101
+
+
+def test_team_shape_uses_outfield_positions_and_the_ball_owner(gold):
+    s = {(r["team_id"], r["ts"]): r for r in rows(gold, "select * from int_team_shape_second")}
+    home, away = s[("HOME", 0)], s[("AWAY", 0)]
+    assert (home["phase"], home["width"], home["length"], home["defensive_line_height"]) == ("in_possession", 10, 20, 10)
+    assert (away["phase"], away["width"], away["length"]) == ("out_of_possession", 20, 10)    # x_att 25 and 35
+    assert s[("HOME", 1)]["phase"] == "unknown"                                               # no ball row
+
+
+def test_fatigue_without_a_last_window_is_not_eligible(gold):
+    f = rows(gold, "select * from gold_player_fatigue where player_id = 'H01'")[0]
+    assert f["dpm_first15"] == round(188 / 3.6 / (8 / 60), 1) and f["tracked_minutes_first15"] == round(10 / 60, 2)
+    assert (f["dpm_last5"], f["drop"], f["is_eligible"]) == (None, None, False)
+
+
+def test_space_control_gives_each_cell_to_the_nearest_player(gold):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("space", DBT_DIR / "models" / "intermediate" / "int_space_control_second.py")
+    space = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(space)
+    import numpy as np
+    cells = space.cell_centres()
+    assert len(cells[0]) == 105 * 68
+    # border at x = 52: the 52 columns of cells left of it are HOME's
+    share = space.home_share(np.array([20.0, 84.0]), np.array([34.0, 34.0]), np.array([True, False]), cells)
+    assert share == pytest.approx(52 / 105)
+    s = {r["ts"]: r for r in rows(gold, "select * from int_space_control_second")}
+    assert s[2]["home_share"] == 1.0 and s[2]["players"] == 2               # only HOME players at ts 2
+    w = {r["team_id"]: r for r in rows(gold, "select * from gold_space_control")}
+    assert w["HOME"]["space_share"] + w["AWAY"]["space_share"] == pytest.approx(1)
+
+
+def test_events_keep_runs_and_see_the_pitch_from_their_team(gold):
+    e = {r["event_id"]: r for r in rows(gold, "select * from gold_events")}
+    assert len(e) == 11 and e["r1"]["type"] == "run"
+    assert (e["e6"]["x_att_start"], e["e6"]["third"]) == (95.0, "final")    # AWAY shot at x = 10
+    assert (e["e1"]["player_short_name"], e["e1"]["receiver_short_name"], e["e1"]["lane"]) == ("H. One", "H. Two", "centre")
+
+
+def test_card_top_speed_uses_two_detected_positions(gold):
+    c = rows(gold, "select c.top_speed_kmh, s.max_speed_kmh from gold_player_card c "
+                   "join gold_player_match_stats s using (match_id, player_id) where player_id = 'H01'")[0]
+    # 30 km/h at ts 2 and 3 joins the estimated position of ts 2: left out; the fastest left is 28 at ts 12
+    assert (c["max_speed_kmh"], c["top_speed_kmh"]) == (30.0, 28.0)
+
+
+def test_team_rates_are_per_90_tracked_minutes_of_the_team(gold):
+    b = {r["team_id"]: r for r in rows(gold, "select * from gold_team_build_up")}
+    assert b["HOME"]["tracked_minutes"] == round(10 / 60, 1)            # 10 distinct seconds, not 13 player rows
+    assert b["HOME"]["progressive_passes_per90"] == 1080.0              # 2 / (10 / 60) x 90
+    assert "progressive_success_rate" not in b["HOME"]

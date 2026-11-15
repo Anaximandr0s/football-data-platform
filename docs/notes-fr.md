@@ -54,3 +54,74 @@ pitch ») au lieu de laisser des points figés.
   messages en 16 s au plus, mesuré) ; la page montre des états intermédiaires pendant ce temps.
 - Deux replays du même match lancés en même temps se mélangent.
 - La page bouge une fois par seconde : le mouvement fluide est prévu pour la page « Match replay ».
+
+## Les tables Gold de MatchLens (section 7 de `product.md`)
+
+### Ce qui a été ajouté
+
+Neuf tables Gold qui répondent chacune à des questions de `product.md` (F1 à F8 pour les fans, C1 à C7 pour les
+entraîneurs, S1 et E1-E2), et trois tables intermédiaires qui les préparent.
+
+| Fichier | Rôle |
+|---|---|
+| `dbt/macros/attack_frame.sql` | `x_att` et `y_att` : le terrain vu par l'équipe de la ligne (distance à son propre but, sa gauche), plus les tiers et les couloirs. Écrit une fois, utilisé partout |
+| `models/intermediate/int_events.sql` | les événements Silver avec `x_att` et deux drapeaux : passe progressive (+10 m vers l'avant) et action défensive (pressure + tackle + foul, jamais une course) |
+| `models/intermediate/int_team_shape_second.sql` | pour chaque équipe et chaque seconde filmée : largeur, longueur, ligne défensive des joueurs de champ, et qui a le ballon |
+| `models/intermediate/int_space_control_second.py` | un modèle **Python** dans dbt : chaque case d'une grille de 1 m appartient au joueur le plus proche ; part de HOME par seconde |
+| `gold_match_timeline`, `gold_pressing`, `gold_space_control` | les chiffres par fenêtre de 5 ou 15 minutes (possession, field tilt, pressing, espace) |
+| `gold_player_card`, `gold_player_fatigue` | un joueur par ligne : scores classés dans le match, fatigue entre le début et la fin |
+| `gold_team_shape`, `gold_team_build_up`, `gold_team_profile` | une équipe par ligne : forme, progression du ballon, profil complet et écarts F7 |
+| `gold_events` | tous les événements, courses comprises, prêts pour l'explorateur |
+
+### Pourquoi c'est construit ainsi
+
+- **Les formules viennent du document, pas du code.** Chaque table cite la question qu'elle sert. Pour vérifier qu'on
+  n'a rien inventé, 27 chiffres ont été recalculés en pandas directement depuis les fichiers Parquet de Silver, sans dbt :
+  tous identiques.
+- **Les petits échantillons sont signalés, pas cachés.** Un joueur de moins de 20 minutes garde sa ligne, avec
+  `is_eligible = false` et sans score ; une fenêtre avec moins de 60 secondes de possession connue a
+  `possession_greyed = true`. L'application décidera comment griser.
+- **Les tables intermédiaires évitent de répéter le calcul.** `x_att` ou la forme d'équipe par seconde servent à
+  plusieurs tables ; on les calcule une fois. Elles ne sont pas exportées : ce ne sont pas des produits.
+- **Le contrôle d'espace en Python, pas en SQL.** En SQL il faudrait comparer 7 140 cases x 22 joueurs x 4 400 secondes,
+  soit 690 millions de lignes. En numpy, une seconde est une petite matrice : 8 s par match. Une première version qui
+  traitait 64 secondes d'un coup était plus lente (43 s) car elle créait d'énormes tableaux temporaires : la version
+  simple, seconde par seconde, est aussi la plus rapide.
+
+### Les deux idées à retenir
+
+1. **Une vérification indépendante vaut mieux qu'une relecture.** Recalculer quelques chiffres par un autre chemin
+   (pandas au lieu de SQL, une autre formulation pour l'espace) attrape les erreurs que l'on ne voit pas en relisant son
+   propre code.
+2. **Comparer avec une source externe révèle les définitions cachées.** La largeur d'équipe est identique à celle de
+   SkillCorner (écart médian 0,24 m). La longueur est 21 m plus courte : SkillCorner compte le gardien, notre formule
+   (C1) ne compte que les joueurs de champ. Ce n'est pas une erreur, c'est une définition différente, à trancher.
+
+### Ce qu'on n'a pas choisi
+
+- **Une grille de 2 m** : prévue seulement si le calcul dépassait 60 s par match ; il prend 8 s.
+- **Une bibliothèque de géométrie (Voronoi exact)** : une dépendance de plus pour une précision dont aucune question n'a
+  besoin ; la grille de 1 m suffit.
+- **Filtrer les joueurs non éligibles** : on perdrait l'information « ce joueur a trop peu joué », que la page doit
+  montrer.
+
+### Corrections après la revue
+
+- **Longueur d'équipe** : on garde les joueurs de champ seulement, sous le nom « outfield block length ». SkillCorner
+  compte le gardien ; avec lui, notre mesure retombe sur la sienne (écart médian 0,26 m). Ce n'est donc pas une erreur
+  de calcul mais un choix de définition, écrit dans `product.md`.
+- **Taux d'équipe** : divisés par les minutes filmées de l'équipe (secondes distinctes / 60), pas par la somme des
+  minutes de ses joueurs, et montrés pour 90 minutes. Avant, le chiffre était 11 fois trop petit et sans unité parlante.
+- **Vitesse maximale** : une vitesse relie deux positions à une seconde d'écart. Toutes les vitesses au-dessus de
+  33 km/h avaient une position estimée à un bout. La carte joueur n'utilise plus que les vitesses dont les deux
+  positions sont vues par la caméra : 33,0 km/h au plus dans m001 au lieu de 39,2.
+- **Taux de réussite des passes progressives** : supprimé. Une passe ratée n'a pas de point de réception ; on garde
+  alors la fin de la possession du passeur, à 1,5 m de son départ. Une passe ratée n'a donc presque jamais l'air
+  « progressive », et le taux était gonflé (89 à 96 %). Les passes progressives réussies restent fiables.
+- **Distance par minute** : gardée, avec le libellé « par minute de jeu filmé (surtout ballon en jeu) ».
+
+### L'idée à retenir
+
+**Un chiffre bizarre est souvent une question de définition des données sources.** Pour la vitesse comme pour les
+passes, le calcul était juste ; c'est ce que la donnée contient (une position estimée, une fin de passe manquante) qui
+faussait le résultat. Avant de corriger une formule, on regarde d'où vient chaque valeur.

@@ -1,4 +1,5 @@
-# Soda checks on the GOLD layer (FOO-05): the six tables of the DuckDB file written by dbt (`make gold`).
+# Soda checks on the GOLD layer (FOO-05): the Gold tables of the DuckDB file written by dbt (`make gold`): the six
+# first tables and the MatchLens tables of docs/product.md, section 7.
 # Columns and types: docs/contrat_donnees.md section 10. dbt already reconciles Gold with Silver (dbt/tests/assert_*.sql);
 # these checks guard the published tables themselves: contract, ranges, and consistency between Gold tables.
 
@@ -260,3 +261,349 @@ checks for gold_player_5min:
         from (select match_id, player_id, sum(tracked_seconds) as seconds from gold_player_5min group by match_id, player_id) w
         join gold_player_match_stats p on p.match_id = w.match_id and p.player_id = w.player_id
         where w.seconds != p.tracked_seconds
+
+checks for gold_match_timeline:
+  - schema:
+      name: gold_match_timeline follows the data contract
+      fail:
+        when required column missing: [match_id, team_id, window_index, window_start_ts, window_end_ts, passes, final_third_passes, field_tilt, possession_seconds, known_seconds, possession_share, possession_greyed, shots, goals, defensive_actions, xthreat_successful_passes, score_home_end, score_away_end]
+        when wrong column type:
+          match_id: VARCHAR
+          team_id: VARCHAR
+          window_index: INTEGER
+          window_start_ts: INTEGER
+          passes: BIGINT
+          field_tilt: DOUBLE
+          possession_seconds: BIGINT
+          possession_share: DOUBLE
+          possession_greyed: BOOLEAN
+          defensive_actions: BIGINT
+          xthreat_successful_passes: DOUBLE
+          score_home_end: INTEGER
+  - row_count > 0
+  - duplicate_count(match_id, team_id, window_index) = 0:
+      name: one row per team per 5-minute window
+  - missing_count(possession_greyed) = 0
+  - failed rows:
+      name: possession and field tilt are shares between 0 and 1
+      fail condition: possession_share < 0 or possession_share > 1 or field_tilt < 0 or field_tilt > 1
+  - failed rows:
+      name: a window is greyed exactly when it has fewer than 60 known seconds
+      fail condition: possession_greyed != (known_seconds < 60) or known_seconds > 300
+  - failed rows:
+      name: the two teams of a window share the same known seconds and add up to them
+      fail query: |
+        select h.match_id, h.window_index, h.possession_seconds as home, a.possession_seconds as away, h.known_seconds
+        from gold_match_timeline h join gold_match_timeline a using (match_id, window_index)
+        where h.team_id = 'HOME' and a.team_id = 'AWAY'
+          and (h.known_seconds != a.known_seconds or h.possession_seconds + a.possession_seconds != h.known_seconds)
+  - failed rows:
+      name: the score at the end of the last window is the final score
+      fail query: |
+        select t.match_id, t.score_home_end, t.score_away_end, h.score as home_score, a.score as away_score
+        from gold_match_timeline t
+        join gold_team_match_stats h on h.match_id = t.match_id and h.team_id = 'HOME'
+        join gold_team_match_stats a on a.match_id = t.match_id and a.team_id = 'AWAY'
+        where t.window_index = (select max(window_index) from gold_match_timeline w where w.match_id = t.match_id)
+          and (t.score_home_end != h.score or t.score_away_end != a.score)
+  - failed rows:
+      name: timeline passes add up to the passes of the team table
+      fail query: |
+        select t.match_id, t.team_id, t.passes as timeline_passes, s.passes
+        from (select match_id, team_id, sum(passes) as passes from gold_match_timeline group by 1, 2) t
+        join gold_team_match_stats s using (match_id, team_id)
+        where t.passes != s.passes
+
+checks for gold_player_card:
+  - schema:
+      name: gold_player_card follows the data contract
+      fail:
+        when required column missing: [match_id, player_id, team_id, source_player_id, name, short_name, position, shirt_number, opponent_name, is_outfield, tracked_minutes, is_eligible, dpm, top_speed_kmh, sprint_count, sprints_per_min, passes_successful, passes_successful_per_min, progressive_passes, progressive_passes_successful, progressive_passes_successful_per_min, defensive_actions, defensive_actions_per_min, goals, passes_received_successful, score_work_rate, score_sprints, score_passing, score_progression, score_defending, involvement, is_hub]
+        when wrong column type:
+          match_id: VARCHAR
+          player_id: VARCHAR
+          source_player_id: BIGINT
+          is_eligible: BOOLEAN
+          tracked_minutes: DOUBLE
+          dpm: DOUBLE
+          defensive_actions: BIGINT
+          score_work_rate: INTEGER
+          score_defending: INTEGER
+          involvement: DOUBLE
+          is_hub: BOOLEAN
+  - row_count > 0
+  - duplicate_count(match_id, player_id) = 0:
+      name: one card per player per match
+  - missing_count(source_player_id) = 0
+  - failed rows:
+      name: an eligible player is outfield with at least 20 tracked minutes
+      fail condition: is_eligible != (is_outfield and tracked_minutes >= 20)
+  - failed rows:
+      name: an eligible player has 5 scores between 0 and 100, the others none
+      fail condition: |
+        (is_eligible and (score_work_rate is null or score_sprints is null or score_passing is null
+                          or score_progression is null or score_defending is null))
+        or (not is_eligible and coalesce(score_work_rate, score_sprints, score_passing, score_progression, score_defending) is not null)
+        or least(score_work_rate, score_sprints, score_passing, score_progression, score_defending) < 0
+        or greatest(score_work_rate, score_sprints, score_passing, score_progression, score_defending) > 100
+  - failed rows:
+      name: involvement is a share between 0 and 1
+      fail condition: involvement < 0 or involvement > 1
+  - failed rows:
+      name: each team with a successful pass has a hub (several only when they tie)
+      fail query: |
+        select match_id, team_id, count(*) filter (where is_hub) as hubs, max(involvement) as top_involvement
+        from gold_player_card group by 1, 2
+        having count(*) filter (where is_hub) = 0 and max(involvement) > 0
+  - failed rows:
+      name: the card top speed never exceeds the fastest speed of the player table
+      fail query: |
+        select c.match_id, c.player_id, c.top_speed_kmh, s.max_speed_kmh
+        from gold_player_card c join gold_player_match_stats s using (match_id, player_id)
+        where c.top_speed_kmh > round(s.max_speed_kmh, 1)
+  - failed rows:
+      name: the card agrees with the player table
+      fail query: |
+        select c.match_id, c.player_id, c.sprint_count, s.sprint_count as stats_sprints, c.goals, s.goals as stats_goals
+        from gold_player_card c join gold_player_match_stats s using (match_id, player_id)
+        where c.sprint_count != s.sprint_count or c.goals != s.goals or c.passes_successful != s.passes_successful
+           or c.tracked_minutes != round(s.tracked_seconds / 60.0, 1)
+
+checks for gold_team_shape:
+  - schema:
+      name: gold_team_shape follows the data contract
+      fail:
+        when required column missing: [match_id, team_id, phase, seconds_used, width, length, area, defensive_line_height, detected_share]
+        when wrong column type:
+          match_id: VARCHAR
+          team_id: VARCHAR
+          phase: VARCHAR
+          seconds_used: BIGINT
+          width: DOUBLE
+          length: DOUBLE
+          area: DOUBLE
+          defensive_line_height: DOUBLE
+          detected_share: DOUBLE
+  - row_count > 0
+  - duplicate_count(match_id, team_id, phase) = 0:
+      name: one row per team per phase per match
+  - invalid_count(phase) = 0:
+      name: phase is in_possession, out_of_possession or unknown
+      valid values: [in_possession, out_of_possession, unknown]
+  - failed rows:
+      name: width, length and the defensive line fit inside the pitch
+      fail condition: width < 0 or width > 68 or length < 0 or length > 105 or defensive_line_height < 0 or defensive_line_height > 105 or detected_share < 0 or detected_share > 1
+  - failed rows:
+      name: the seconds of one team in possession are the seconds of the other out of possession
+      fail query: |
+        select a.match_id, a.team_id, a.seconds_used as in_possession, b.seconds_used as opponent_out_of_possession
+        from gold_team_shape a
+        join gold_team_shape b on b.match_id = a.match_id and b.team_id != a.team_id and b.phase = 'out_of_possession'
+        where a.phase = 'in_possession' and a.seconds_used != b.seconds_used
+
+checks for gold_pressing:
+  - schema:
+      name: gold_pressing follows the data contract
+      fail:
+        when required column missing: [match_id, team_id, window_index, window_start_ts, window_end_ts, defensive_actions, opponent_passes, ppp, defensive_actions_own_third, defensive_actions_middle_third, defensive_actions_final_third, high_press_share]
+        when wrong column type:
+          match_id: VARCHAR
+          team_id: VARCHAR
+          window_index: INTEGER
+          window_start_ts: INTEGER
+          defensive_actions: BIGINT
+          opponent_passes: BIGINT
+          ppp: DOUBLE
+          high_press_share: DOUBLE
+  - row_count > 0
+  - duplicate_count(match_id, team_id, window_index) = 0:
+      name: one row per team per 15-minute window
+  - failed rows:
+      name: a window lasts 900 seconds and starts on a multiple of 900
+      fail condition: window_end_ts - window_start_ts != 900 or window_start_ts != window_index * 900
+  - failed rows:
+      name: the three thirds add up to the defensive actions
+      fail condition: defensive_actions_own_third + defensive_actions_middle_third + defensive_actions_final_third > defensive_actions or high_press_share < 0 or high_press_share > 1 or ppp < 0
+  - failed rows:
+      name: opponent passes add up to the passes of the opponent
+      fail query: |
+        select p.match_id, p.team_id, p.opponent_passes, s.passes as opponent_total
+        from (select match_id, team_id, sum(opponent_passes) as opponent_passes from gold_pressing group by 1, 2) p
+        join gold_team_match_stats s on s.match_id = p.match_id and s.team_id != p.team_id
+        where p.opponent_passes != s.passes
+  - failed rows:
+      name: defensive actions are pressures, tackles and fouls, never runs
+      fail query: |
+        select p.match_id, p.team_id, p.defensive_actions, s.pressures + s.tackles + s.fouls as from_team_table
+        from (select match_id, team_id, sum(defensive_actions) as defensive_actions from gold_pressing group by 1, 2) p
+        join gold_team_match_stats s using (match_id, team_id)
+        where p.defensive_actions != s.pressures + s.tackles + s.fouls
+
+checks for gold_team_build_up:
+  - schema:
+      name: gold_team_build_up follows the data contract
+      fail:
+        when required column missing: [match_id, team_id, progressive_passes, progressive_passes_successful, tracked_minutes, progressive_passes_per90, final_third_entries, entries_left, entries_centre, entries_right, share_left, share_centre, share_right]
+        when wrong column type:
+          match_id: VARCHAR
+          team_id: VARCHAR
+          progressive_passes: BIGINT
+          tracked_minutes: DOUBLE
+          progressive_passes_per90: DOUBLE
+          final_third_entries: BIGINT
+          share_left: DOUBLE
+  - row_count > 0
+  - duplicate_count(match_id, team_id) = 0:
+      name: one build-up row per team per match
+  - failed rows:
+      name: the three lanes add up to the final-third entries and their shares to 1
+      fail condition: entries_left + entries_centre + entries_right != final_third_entries or (final_third_entries > 0 and abs(share_left + share_centre + share_right - 1) > 0.001)
+  - failed rows:
+      name: team tracked minutes are seconds of the match, not player-minutes
+      fail query: |
+        select b.match_id, b.team_id, b.tracked_minutes, m.p2_end_minutes
+        from gold_team_build_up b
+        join (select match_id, max(window_end_ts) / 60.0 as p2_end_minutes from gold_match_timeline group by 1) m using (match_id)
+        where b.tracked_minutes > m.p2_end_minutes
+  - failed rows:
+      name: progressive passes are passes, and the successful ones are fewer
+      fail query: |
+        select b.match_id, b.team_id, b.progressive_passes, b.progressive_passes_successful, s.passes, s.passes_successful
+        from gold_team_build_up b join gold_team_match_stats s using (match_id, team_id)
+        where b.progressive_passes > s.passes or b.progressive_passes_successful > s.passes_successful
+           or b.progressive_passes_successful > b.progressive_passes or b.final_third_entries > s.passes_successful
+
+checks for gold_player_fatigue:
+  - schema:
+      name: gold_player_fatigue follows the data contract
+      fail:
+        when required column missing: [match_id, player_id, team_id, short_name, position, start_ts, end_ts, is_outfield, minutes_on_pitch, dpm_first15, dpm_last5, drop, tracked_minutes_first15, tracked_minutes_last5, is_eligible]
+        when wrong column type:
+          match_id: VARCHAR
+          player_id: VARCHAR
+          start_ts: INTEGER
+          minutes_on_pitch: DOUBLE
+          dpm_first15: DOUBLE
+          drop: DOUBLE
+          tracked_minutes_first15: DOUBLE
+          is_eligible: BOOLEAN
+  - row_count > 0
+  - duplicate_count(match_id, player_id) = 0:
+      name: one fatigue row per player per match
+  - failed rows:
+      name: an eligible player passes the thresholds of C6
+      fail condition: is_eligible and (not is_outfield or minutes_on_pitch < 30 or tracked_minutes_first15 < 5 or tracked_minutes_last5 < 2)
+  - failed rows:
+      name: the windows hold at most 15 and 5 tracked minutes
+      fail condition: tracked_minutes_first15 > 15 or tracked_minutes_last5 > 5 or tracked_minutes_first15 < 0
+  - failed rows:
+      name: an eligible player runs less than 250 m per minute in both windows
+      fail condition: is_eligible and (dpm_first15 > 250 or dpm_last5 > 250 or dpm_first15 <= 0)
+
+checks for gold_space_control:
+  - schema:
+      name: gold_space_control follows the data contract
+      fail:
+        when required column missing: [match_id, team_id, window_index, window_start_ts, window_end_ts, seconds_used, space_share, seconds_in_possession, space_share_in_possession, seconds_out_of_possession, space_share_out_of_possession, seconds_unknown, space_share_unknown, detected_share]
+        when wrong column type:
+          match_id: VARCHAR
+          team_id: VARCHAR
+          window_index: INTEGER
+          seconds_used: BIGINT
+          space_share: DOUBLE
+          detected_share: DOUBLE
+  - row_count > 0
+  - duplicate_count(match_id, team_id, window_index) = 0:
+      name: one space row per team per 5-minute window
+  - failed rows:
+      name: space shares are between 0 and 1 and the phases add up to the seconds used
+      fail condition: space_share < 0 or space_share > 1 or detected_share < 0 or detected_share > 1 or seconds_used > 300 or seconds_in_possession + seconds_out_of_possession + seconds_unknown != seconds_used
+  - failed rows:
+      name: the two teams share the pitch (HOME + AWAY = 1 in every window)
+      fail query: |
+        select h.match_id, h.window_index, h.space_share as home, a.space_share as away
+        from gold_space_control h join gold_space_control a using (match_id, window_index)
+        where h.team_id = 'HOME' and a.team_id = 'AWAY' and (abs(h.space_share + a.space_share - 1) > 0.001 or h.seconds_used != a.seconds_used)
+  - failed rows:
+      name: space control uses every tracked second
+      fail query: |
+        select s.match_id, s.seconds, z.seconds as tracked_seconds
+        from (select match_id, sum(seconds_used) as seconds from gold_space_control where team_id = 'HOME' group by 1) s
+        join (select match_id, max(tracked_seconds) as seconds from gold_player_match_stats group by 1) z using (match_id)
+        where s.seconds < z.seconds
+
+checks for gold_team_profile:
+  - schema:
+      name: gold_team_profile follows the data contract
+      fail:
+        when required column missing: [match_id, team_id, team_name, opponent_name, possession_share, field_tilt, shots_and_goals, width, length, defensive_line_height, ppp, high_press_share, progressive_passes, progressive_passes_per90, dpm_outfield, share_left, share_centre, share_right, gap_possession_share, gap_field_tilt, gap_shots_and_goals, gap_progressive_passes, gap_ppp, gap_dpm_outfield]
+        when wrong column type:
+          match_id: VARCHAR
+          team_id: VARCHAR
+          possession_share: DOUBLE
+          field_tilt: DOUBLE
+          shots_and_goals: BIGINT
+          ppp: DOUBLE
+          dpm_outfield: DOUBLE
+          gap_ppp: DOUBLE
+  - row_count > 0
+  - duplicate_count(match_id, team_id) = 0:
+      name: one profile per team per match
+  - failed rows:
+      name: the two teams of a match have opposite gaps and complementary shares
+      fail query: |
+        select h.match_id, h.gap_possession_share, a.gap_possession_share as away_gap, h.possession_share + a.possession_share as possession_total
+        from gold_team_profile h join gold_team_profile a using (match_id)
+        where h.team_id = 'HOME' and a.team_id = 'AWAY'
+          and (abs(h.gap_possession_share + a.gap_possession_share) > 0.001 or abs(h.gap_dpm_outfield + a.gap_dpm_outfield) > 0.001
+               or abs(h.possession_share + a.possession_share - 1) > 0.001 or abs(h.field_tilt + a.field_tilt - 1) > 0.001)
+  - failed rows:
+      name: a gap lies between -2 and 2
+      fail condition: greatest(abs(gap_possession_share), abs(gap_field_tilt), abs(gap_shots_and_goals), abs(gap_progressive_passes), abs(gap_ppp), abs(gap_dpm_outfield)) > 2
+  - failed rows:
+      name: the profile repeats the build-up and shot numbers of the other tables
+      fail query: |
+        select p.match_id, p.team_id, p.shots_and_goals, s.shots + s.goals as from_team_table, p.progressive_passes, b.progressive_passes as build_up
+        from gold_team_profile p
+        join gold_team_match_stats s using (match_id, team_id)
+        join gold_team_build_up b using (match_id, team_id)
+        where p.shots_and_goals != s.shots + s.goals or p.progressive_passes != b.progressive_passes
+
+checks for gold_events:
+  - schema:
+      name: gold_events follows the data contract
+      fail:
+        when required column missing: [match_id, event_id, ts, period, player_id, receiver_id, team_id, type, x_start, y_start, x_end, y_end, outcome, phase, phase_against, xthreat, dangerous, speed_band, subtype, lead_to_shot, targeted, received, x_att_start, y_att_start, x_att_end, y_att_end, player_short_name, shirt_number, receiver_short_name, third, lane]
+        when wrong column type:
+          match_id: VARCHAR
+          event_id: VARCHAR
+          ts: INTEGER
+          type: VARCHAR
+          x_att_start: DOUBLE
+          xthreat: DOUBLE
+          dangerous: BOOLEAN
+          third: VARCHAR
+          lane: VARCHAR
+  - row_count > 0
+  - duplicate_count(event_id) = 0:
+      name: one row per event
+  - missing_count(player_short_name) = 0
+  - invalid_count(third) = 0:
+      name: third is own, middle or final
+      valid values: [own, middle, final]
+  - invalid_count(lane) = 0:
+      name: lane is left, centre or right
+      valid values: [left, centre, right]
+  - failed rows:
+      name: x_att and y_att are the Silver coordinates seen by the team of the event
+      fail condition: |
+        (team_id = 'HOME' and (x_att_start != x_start or y_att_start != y_start))
+        or (team_id = 'AWAY' and (abs(x_att_start - (105 - x_start)) > 0.001 or abs(y_att_start - (68 - y_start)) > 0.001))
+  - failed rows:
+      name: every action of the player table is in gold_events, and the runs on top
+      fail query: |
+        select e.match_id, e.actions, s.actions as player_table
+        from (select match_id, count(*) filter (where type != 'run') as actions from gold_events group by 1) e
+        join (select match_id, sum(passes + shots + goals + tackles + fouls + pressures) as actions
+              from gold_player_match_stats group by 1) s using (match_id)
+        where e.actions != s.actions

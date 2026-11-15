@@ -18,7 +18,9 @@ RUNNER = ROOT / "soda" / "run_checks.py"
 CHECKS = ROOT / "soda" / "checks"
 SILVER_TABLES = ["tracking", "events", "ball", "players", "matches"]
 GOLD_TABLES = ["gold_player_match_stats", "gold_team_match_stats", "gold_zone_occupancy",
-               "gold_pass_network", "gold_shots", "gold_player_5min"]
+               "gold_pass_network", "gold_shots", "gold_player_5min", "gold_match_timeline", "gold_player_card",
+               "gold_team_shape", "gold_pressing", "gold_team_build_up", "gold_player_fatigue", "gold_space_control",
+               "gold_team_profile", "gold_events"]
 
 
 def test_every_table_has_a_checks_block_with_a_schema_check():
@@ -269,6 +271,7 @@ def gold_db(path: Path, mutate=None) -> None:
             ints=["window_start_ts", "window_end_ts"],
             bigs=["tracked_seconds", "sprint_seconds", "passes", "shots", "goals", "tackles", "fouls", "pressures"]),
     }
+    tables.update(matchlens_tables())
     if mutate:
         mutate(tables)
     con = duckdb.connect(str(path))
@@ -277,6 +280,103 @@ def gold_db(path: Path, mutate=None) -> None:
         con.execute(f"create table {name} as select * from frame")
         con.unregister("frame")
     con.close()
+
+
+def typed(rows: list[dict], types: dict) -> pd.DataFrame:
+    d = pd.DataFrame(rows)
+    return d.astype({c: t for c, t in types.items() if c in d})
+
+
+def matchlens_tables() -> dict:
+    """Healthy rows of the MatchLens tables, consistent with the six tables above (HOME 1-0, one HOME pass)."""
+    i32, i64, f64 = "int32", "int64", "float64"
+    window = {"window_index": i32, "window_start_ts": i32, "window_end_ts": i32}
+    timeline = typed([
+        dict(match_id="mx", team_id=t, window_index=0, window_start_ts=0, window_end_ts=300, passes=p, final_third_passes=0,
+             field_tilt=None, possession_seconds=1, known_seconds=2, possession_share=0.5, possession_greyed=True,
+             shots=1, goals=g, defensive_actions=0, xthreat_successful_passes=x, score_home_end=1, score_away_end=0)
+        for t, p, g, x in (("HOME", 1, 1, 0.05), ("AWAY", 0, 0, 0.0))],
+        {**window, "passes": i64, "final_third_passes": i64, "field_tilt": f64, "possession_seconds": i64,
+         "known_seconds": i64, "shots": i64, "goals": i64, "defensive_actions": i64, "score_home_end": i32,
+         "score_away_end": i32})
+    card = typed([
+        dict(match_id="mx", player_id=pid, team_id=t, source_player_id=src, name=n, short_name=sn, position=pos,
+             shirt_number=sh, opponent_name=opp, is_outfield=True, tracked_minutes=0.1, is_eligible=False, dpm=dpm,
+             top_speed_kmh=top, sprint_count=spr, sprints_per_min=spr * 20.0, passes_successful=ps,
+             passes_successful_per_min=ps * 20.0, progressive_passes=ps, progressive_passes_successful=ps,
+             progressive_passes_successful_per_min=ps * 20.0, defensive_actions=0, defensive_actions_per_min=0.0,
+             goals=g, passes_received_successful=0, score_work_rate=None, score_sprints=None, score_passing=None,
+             score_progression=None, score_defending=None, involvement=inv, is_hub=hub)
+        for pid, t, src, n, sn, pos, sh, opp, dpm, top, spr, ps, g, inv, hub in (
+            ("H01", "HOME", 5000, "Hugo", "H.", "CM", 8, "Away FC", 120.0, 26.0, 1, 1, 1, 0.5, True),
+            ("A01", "AWAY", 5011, "Alex", "A.", "ST", 9, "Home FC", 110.0, 10.0, 0, 0, 0, None, False))],
+        {"source_player_id": i64, "shirt_number": i32, "sprint_count": i64, "passes_successful": i64,
+         "progressive_passes": i64, "progressive_passes_successful": i64, "defensive_actions": i64, "goals": i64,
+         "passes_received_successful": i64, "involvement": f64, **{f"score_{s}": "Int32" for s in
+         ("work_rate", "sprints", "passing", "progression", "defending")}})
+    shape = typed([dict(match_id="mx", team_id=t, phase=ph, seconds_used=1, width=30.0, length=25.0, area=750.0,
+                        defensive_line_height=35.0, detected_share=0.6)
+                   for t in ("HOME", "AWAY") for ph in ("in_possession", "out_of_possession", "unknown")],
+                  {"seconds_used": i64})
+    pressing = typed([
+        dict(match_id="mx", team_id=t, window_index=0, window_start_ts=0, window_end_ts=900, defensive_actions=0,
+             opponent_passes=op, ppp=ppp, defensive_actions_own_third=0, defensive_actions_middle_third=0,
+             defensive_actions_final_third=0, high_press_share=None)
+        for t, op, ppp in (("HOME", 0, None), ("AWAY", 1, 0.0))],
+        {**window, "defensive_actions": i64, "opponent_passes": i64, "ppp": f64, "high_press_share": f64,
+         **{f"defensive_actions_{z}_third": i64 for z in ("own", "middle", "final")}})
+    build_up = typed([
+        dict(match_id="mx", team_id=t, progressive_passes=n, progressive_passes_successful=n,
+             tracked_minutes=0.05, progressive_passes_per90=n * 1800.0,
+             final_third_entries=0, entries_left=0, entries_centre=0, entries_right=0, share_left=None,
+             share_centre=None, share_right=None)
+        for t, n in (("HOME", 1), ("AWAY", 0))],
+        {"progressive_passes": i64, "progressive_passes_successful": i64,
+         "final_third_entries": i64, "entries_left": i64, "entries_centre": i64, "entries_right": i64,
+         "share_left": f64, "share_centre": f64, "share_right": f64})
+    fatigue = typed([
+        dict(match_id="mx", player_id=pid, team_id=t, short_name=sn, position=pos, start_ts=0, end_ts=2, is_outfield=True,
+             minutes_on_pitch=0.0, dpm_first15=100.0, dpm_last5=90.0, drop=0.1, tracked_minutes_first15=0.05,
+             tracked_minutes_last5=0.05, is_eligible=False)
+        for pid, t, sn, pos in (("H01", "HOME", "H.", "CM"), ("A01", "AWAY", "A.", "ST"))],
+        {"start_ts": i32, "end_ts": i32})
+    space = typed([
+        dict(match_id="mx", team_id=t, window_index=0, window_start_ts=0, window_end_ts=300, seconds_used=3,
+             space_share=s, seconds_in_possession=1, space_share_in_possession=s_in, seconds_out_of_possession=1,
+             space_share_out_of_possession=s_out, seconds_unknown=1, space_share_unknown=s, detected_share=0.67)
+        for t, s, s_in, s_out in (("HOME", 0.55, 0.6, 0.5), ("AWAY", 0.45, 0.5, 0.4))],
+        {**window, "seconds_used": i64, "seconds_in_possession": i64, "seconds_out_of_possession": i64,
+         "seconds_unknown": i64})
+    profile = typed([
+        dict(match_id="mx", team_id=t, team_name=n, opponent_name=o, possession_share=0.5, field_tilt=0.5,
+             shots_and_goals=sg, width=30.0, length=25.0, defensive_line_height=35.0, ppp=ppp, high_press_share=None,
+             progressive_passes=pp, progressive_passes_per90=pp * 1800.0, dpm_outfield=dpm, share_left=None,
+             share_centre=None, share_right=None, gap_possession_share=0.0, gap_field_tilt=0.0, gap_shots_and_goals=gs,
+             gap_progressive_passes=gp, gap_ppp=None, gap_dpm_outfield=gd)
+        for t, n, o, sg, ppp, pp, dpm, gs, gp, gd in (
+            ("HOME", "Home FC", "Away FC", 2, None, 1, 120.0, 0.6667, 2.0, 0.087),
+            ("AWAY", "Away FC", "Home FC", 1, 0.0, 0, 110.0, -0.6667, -2.0, -0.087))],
+        {"shots_and_goals": i64, "progressive_passes": i64, "ppp": f64, "high_press_share": f64, "share_left": f64,
+         "share_centre": f64, "share_right": f64, "gap_ppp": f64})
+    events = typed([
+        dict(match_id="mx", event_id=e, ts=ts, period=1, player_id=pid, receiver_id=rec, team_id=t, type=ty,
+             x_start=xs, y_start=ys, x_end=xe, y_end=ye, outcome=out, phase="create", phase_against="medium_block",
+             xthreat=xt, dangerous=None, speed_band="running", subtype=sub, lead_to_shot=False, targeted=tg, received=rv,
+             x_att_start=xs if t == "HOME" else 105 - xs, y_att_start=ys if t == "HOME" else 68 - ys,
+             x_att_end=xe if t == "HOME" else 105 - xe, y_att_end=ye if t == "HOME" else 68 - ye,
+             player_short_name=f"N. {pid}", shirt_number=8, receiver_short_name=f"N. {rec}" if rec else None,
+             third=third, lane="centre")
+        for e, ts, pid, rec, t, ty, xs, ys, xe, ye, out, xt, sub, tg, rv, third in (
+            ("mx-e1", 0, "H01", "H02", "HOME", "pass", 40.0, 30.0, 50.0, 30.0, "successful", 0.05, None, None, None, "middle"),
+            ("mx-e2", 1, "H01", None, "HOME", "shot", 90.0, 30.0, 105.0, 34.0, "shot", None, None, None, None, "final"),
+            ("mx-e3", 2, "H01", None, "HOME", "goal", 100.0, 34.0, 105.0, 34.0, "shot", None, None, None, None, "final"),
+            ("mx-e4", 2, "A01", None, "AWAY", "shot", 10.0, 34.0, 0.0, 34.0, "shot", None, None, None, None, "final"),
+            ("mx-r1", 1, "H03", None, "HOME", "run", 60.0, 30.0, 80.0, 20.0, "n/a", 0.1, "behind", True, False, "middle"))],
+        {"ts": i32, "period": i32, "shirt_number": i32, "xthreat": f64, "dangerous": "boolean", "targeted": "boolean",
+         "received": "boolean"})
+    return {"gold_match_timeline": timeline, "gold_player_card": card, "gold_team_shape": shape,
+            "gold_pressing": pressing, "gold_team_build_up": build_up, "gold_player_fatigue": fatigue,
+            "gold_space_control": space, "gold_team_profile": profile, "gold_events": events}
 
 
 def run_gold(tmp: Path, *extra: str, mutate=None):
@@ -320,6 +420,20 @@ def test_gold_impossible_values_are_caught(tmp_path):
     assert "no negative distance" in names and "no speed above 40 km/h" in names
     assert "sprint efforts never exceed sprint seconds" in names
     assert "the zone shares of a player add up to 1" in names
+
+
+@needs_soda
+def test_gold_matchlens_rules_are_enforced(tmp_path):
+    def damage(t):
+        t["gold_pressing"].loc[0, "defensive_actions"] = 1                    # a run counted as a defensive action
+        t["gold_space_control"].loc[0, "space_share"] = 0.7                  # HOME + AWAY no longer cover the pitch
+        t["gold_player_card"].loc[0, "score_passing"] = 80                   # a score for an ineligible player
+        t["gold_match_timeline"].loc[0, "possession_greyed"] = False         # 2 known seconds shown as reliable
+    names = failed_names(run_gold(tmp_path, mutate=damage))
+    assert "defensive actions are pressures, tackles and fouls, never runs" in names
+    assert "the two teams share the pitch (HOME + AWAY = 1 in every window)" in names
+    assert "an eligible player has 5 scores between 0 and 100, the others none" in names
+    assert "a window is greyed exactly when it has fewer than 60 known seconds" in names
 
 
 @needs_soda
