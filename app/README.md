@@ -1,8 +1,8 @@
 # app
 | Folder | What | Required? |
 |---|---|---|
-| `streamlit/` | dashboard on Gold: heatmap, shot map, pass network, compare page, quality page (mplsoccer) ([guide](streamlit/README.md)); live pitch + score still to do | **Yes** (FOO-06/07) |
+| `streamlit/` | the MatchLens site: Live, Matches, Fan and Coach views, Behind the data ([guide](streamlit/README.md)) | **Yes** (FOO-06/07) |
 | `api/` | FastAPI WebSocket gateway: Kafka (group `live-gateway`) → browser | Bonus |
-| `web3d/` | 3D live page (Three.js): moving players, ball, score, live stats panel | Bonus |
+| `web3d/` | `pitch.js`, the canvas pitch component used by the Streamlit pages | **Yes** |
 
 Data flow of the bonus page: Kafka → `api` → WebSocket → `web3d`. Gold stats come from DuckDB through the API.

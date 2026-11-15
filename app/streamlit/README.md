@@ -36,18 +36,27 @@ to page. A page marked "coming soon" states its question and the build step (pro
 | Section | Page | Reads | Now |
 |---|---|---|---|
 | | Home | `gold_match_library` | wordmark, match cards (teams, score, date, tracked share), "I am a Fan / I am a Coach" |
-| LIVE | Live match | Kafka topics `foot-*`, through one background consumer | the match being replayed (`make replay`): pitch with the 22 players (lighter = estimated position) and the ball, score from goal events, clock and period, possession bar, last goal / shot / tackle / foul, width and length of each team for the current second, "No tracking: camera off the pitch" during a camera gap, a box for the 5-minute stats of FOO-08. Redrawn about once per second (FOO-06) |
+| LIVE | Live match | Kafka topics `foot-*`, through one background consumer | the match being replayed (`make replay`): the pitch component with the 22 players (lighter = estimated position) and the ball; a click on a player shows his distance, top speed, sprints and heatmap so far (`playerstats.py`, equal to Gold at full time); score from goal events, clock and period, possession bar, last goal / shot / tackle / foul, width and length of each team for the current second, "No tracking: camera off the pitch" during a camera gap, a box for the 5-minute stats of FOO-08. Redrawn about once per second (FOO-06) |
 | MATCHES | Match library | `gold_match_library` | every stored match, newest first; selecting a row makes it the match of every page |
 | MATCHES | Replay | | coming soon (step 7) |
 | MATCHES | Compare matches | `gold_team_match_stats` | two or more matches side by side at team level (FOO-09) |
 | FAN VIEW | Match story | `gold_team_match_stats` | scoreboard and side-by-side team numbers (the former overview) |
-| FAN VIEW | Squad | | coming soon (step 3) |
-| FAN VIEW, COACH VIEW | Player page | `gold_player_match_stats`, `gold_zone_occupancy` | pick a team and a player: key numbers, position heatmap (FOO-07), ranking of the match on any metric |
+| FAN VIEW | Squad | `gold_player_card` | shirt cards (team colour, number, short name, position, tracked minutes, goal / hub / substitute badges) grouped by team; a click opens the Player page |
+| FAN VIEW, COACH VIEW | Player page | `gold_player_card`, `gold_zone_occupancy`, `gold_shots`, `gold_events`; coach mode adds `gold_player_fatigue`, `gold_player_5min`, `gold_player_match_stats` | fan mode: card with badges, the 5 scores (F3, greyed when not ranked), top speed from detected positions (F5), heatmap, shots and passes on the pitch component, the same player in other matches (F8). Coach mode: raw values and rates, thresholds, fatigue (C6), distance per 5 minutes, the player's events (E1), ranking of the match |
 | COACH VIEW | Team analysis | `gold_shots`, `gold_pass_network`, `gold_player_match_stats` | shot map of both teams with filters and a shot table; pass network of one team (FOO-07) |
 | COACH VIEW | Physical & fatigue | `gold_player_5min` | distance and sprint seconds per 5 minutes of one player, with the coverage of each window |
 | COACH VIEW | Event explorer | | coming soon (step 5) |
 | BEHIND THE DATA | Data quality | `data/soda/silver.json`, `gold.json` | passed / failed / warnings / errors of the last `make soda` per layer, and the list of checks (FOO-05) |
 | BEHIND THE DATA | Pipeline & lineage, Sources & limits | | coming soon (step 8) |
+
+One pitch component (docs/product.md, section 8.2) draws every pitch of Live and the Player page: `pitch.py` shapes the
+data, `app/web3d/pitch.js` draws it on a canvas (a Streamlit custom component v2, no build step) and sends a clicked
+player back to Python. Measured on 2026-11-15 with m001 inside a 1 s refresh fragment for 160 s (headless Chrome,
+this machine): one frame per refresh (the Live pattern, all 4,428 tracked seconds shown): 2-3 ms of server time per
+refresh, 13 % of one CPU for the whole Streamlit server, 220 MB resident, 12.5 kB/s over the websocket, 60 frames per
+second, 11 MB of JavaScript heap, flat over time. The whole match sent each refresh (1.9 MB of JSON, played in the
+browser at 30x): 60 frames per second and no restart of the animation across 160 refreshes, but about 150 ms of server
+time per refresh, so Replay will send the match once, outside a refresh fragment.
 
 Look: a stadium at night (`.streamlit/config.toml`, colours checked for contrast: body text 16:1, white on the primary
 green 5.0:1); `sitemap.style()` holds the few shared classes, and the charts use the same background (`viz.BG`).
@@ -71,7 +80,10 @@ green 5.0:1); `sitemap.style()` holds the few shared classes, and the charts use
 |---|---|
 | `app.py` | the router: `st.navigation` menu for the chosen view, the sidebar (view switch, match picker), the move to a view's first page |
 | `sitemap.py` | every page with its section, question and persona; the menu per view; the page header and the "coming soon" box. Pure data, tested without Streamlit |
-| `pages/*.py` | the pages |
+| `sections/*.py` | the pages (not `pages/`, see Tests) |
+| `pitch.py`, `../web3d/pitch.js` | the pitch component: layers (players and ball, a whole match played in the browser, heatmap, shots, passes, attack arrows, a message), the selected player ringed, clicks sent back |
+| `playerstats.py` | the per-player formulas shared by Live (and later Replay): Silver frame, distance, sprint efforts, top speed from detected positions, 6 x 4 heatmap. Pure, tested against Gold |
+| `cards.py` | the shirt and the badges of the player cards |
 | `data.py` | reading Gold (cached for a minute), the current match, the match library, the Soda result reader, shared texts |
 | `viz.py` | the figures: zone heatmap, shot map, pass network, ranking bars, live pitch (pure functions, tested without Streamlit) |
 | `live.py` | the live state of a replayed match: `apply(state, table, record, kafka_ms)` returns a new state, plus the readers (score, possession, clock, status, team shape, event line). Pure, tested without Kafka |
@@ -96,8 +108,8 @@ open by the dashboard would block the next `make gold`.
 `tests/app/`: every page runs headless (Streamlit `AppTest`) on a real Gold file built by dbt from the tiny fixture, plus the
 case "Gold does not exist yet" and the colour rules; `test_site.py` checks the menu of each view, that every page has a
 file, and through the router that choosing a view asks for its first page and that pages keep the view and the match
-(`python -m pytest tests/app`). After its first run `AppTest` reruns only the page, not the router, so the move to a
-view's first page and the sidebar view switch are checked in a browser instead (Playwright, see the step 2 proof). The graphics were also rendered on the real
+(`python -m pytest tests/app`). The pages live in `sections/`, not `pages/`: Streamlit serves a `pages/` folder in its
+legacy multipage mode until the router has run once, which showed a bare page list after a restart. The graphics were also rendered on the real
 m001 data and looked at: the shot map shows HOME's 2 goals at the right goal and AWAY's 3 at the left one (final score 2-3),
 and the pass network puts AWAY's goalkeeper near x = 100, as expected for a team attacking to the left.
 

@@ -1,12 +1,14 @@
-"""Live match (FOO-06): the match being replayed into Kafka (`make replay`), redrawn about once per second."""
+"""Live match (FOO-06): the match being replayed into Kafka (`make replay`), redrawn about once per second.
+A click on a player shows his stats so far, with the formulas of Gold (playerstats.py)."""
 import time
 
-import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
 
 import live
 import live_feed
+import pitch
+import playerstats
 import sitemap
 import viz
 from data import CREDIT, mmss
@@ -27,6 +29,28 @@ def colors_of(state: live.MatchState) -> dict[str, str]:
     teams = pd.DataFrame([{"match_id": state.match_id, "team_id": t, "team_color": state.info.get(f"{t.lower()}_color")}
                           for t in ("HOME", "AWAY")])
     return viz.team_colors(teams, state.match_id)
+
+
+def player_panel(state: live.MatchState, player_id: str, colors: dict[str, str]) -> None:
+    """Stats so far of the clicked player: distance, top speed, sprints and his heatmap."""
+    info = state.players.get(player_id, {})
+    team = info.get("team_id", "HOME")
+    stats = live.player_stats(state, player_id)
+    st.markdown(f"<div class='ml-kicker'>SELECTED PLAYER</div>"
+                f"<h3 style='margin:.1rem 0 .4rem 0'>#{info.get('shirt_number', '')} {info.get('short_name', player_id)}</h3>"
+                f"<div class='ml-meta'>{live.team_name(state, team)} · {info.get('position', '')}</div>",
+                unsafe_allow_html=True)
+    top = "not yet" if stats.top_speed_kmh is None else f"about {stats.top_speed_kmh:.0f} km/h"
+    st.markdown("<div class='ml-stats'>"
+                f"<div><span>Distance</span><b>{stats.distance_m / 1000:.2f} km</b></div>"
+                f"<div><span>Top speed</span><b>{top}</b></div>"
+                f"<div><span>Sprints</span><b>{stats.sprint_count}</b></div></div>", unsafe_allow_html=True)
+    pitch.show(key="live_heat", players={}, colors=colors, clickable=False,
+               heat={"nx": 6, "ny": 4, "cells": playerstats.heat_cells(stats.zones), "color": colors[team]},
+               arrows={"home": "right"})
+    st.caption(f"So far: {stats.tracked_seconds / 60:.0f} tracked minutes. Heatmap with HOME attacking to the right; "
+               "top speed counts only speeds whose two positions the camera saw.")
+    st.button("Close", key="live_close", on_click=lambda: st.session_state.pop("live_player", None))
 
 
 def possession_bar(state: live.MatchState, colors: dict[str, str]) -> None:
@@ -72,21 +96,31 @@ def live_view() -> None:
     with left:
         frame = live.current_frame(state)
         ball = (state.ball[2], state.ball[3]) if state.ball else None
-        fig = viz.live_pitch(frame[1] if frame else {}, state.players, ball, colors,
-                             live.home_attacks_right(state), message=message)
-        st.pyplot(fig, width="stretch")
-        plt.close(fig)
-        st.caption("As the camera sees it: teams switch ends at half-time (arrows: direction of attack). "
-                   "Lighter dots are positions estimated by SkillCorner, not seen by the camera.")
+        side = live.home_attacks_right(state)
+        selected = st.session_state.get("live_player", {}).get(match)
+        clicked = pitch.show(
+            key="live_pitch", colors=colors, selected=selected, message=message,
+            players={pid: [p.get("team_id"), p.get("shirt_number"), p.get("short_name")] for pid, p in state.players.items()},
+            frame=pitch.frame_list(frame[0], ball, frame[1]) if frame and status != "gap" else None,
+            arrows=None if side is None else {"home": "right" if side else "left"})
+        if clicked:
+            st.session_state["live_player"] = {**st.session_state.get("live_player", {}), match: clicked}
+            selected = clicked
+        st.caption("Click a player for his stats so far. As the camera sees it: teams switch ends at half-time (arrows: "
+                   "direction of attack). Lighter dots are positions estimated by SkillCorner, not seen by the camera.")
     with right:
+        if selected and selected in state.players:
+            player_panel(state, selected, colors)
+            st.divider()
         possession_bar(state, colors)
         st.markdown("**Last event**")
         st.write(live.event_line(state) or "Nothing yet")
-        st.markdown("**Team shape now** (outfield players)")
+        st.markdown("**Team shape now** (outfield players, C1)")
         shape = live.team_shape(state, frame[1]) if frame and status == "live" else {}
         if shape:
             st.dataframe(pd.DataFrame([{"team": live.team_name(state, t), "width (m)": w, "length (m)": ln}
-                                       for t, (w, ln) in shape.items()]), hide_index=True)
+                                       for t, (w, ln) in shape.items()]).rename(columns={"length (m)": "outfield block length (m)"}),
+                         hide_index=True)
         else:
             st.caption("Shown while positions arrive.")
         with st.container(border=True):

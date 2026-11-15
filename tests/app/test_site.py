@@ -27,7 +27,7 @@ def test_menu_shows_only_the_chosen_view():
 
 def test_every_page_has_a_file_and_every_unfinished_page_says_what_comes():
     for page in sitemap.PAGES:
-        assert (APP / "pages" / f"{page.key}.py").exists(), page.key
+        assert (APP / "sections" / f"{page.key}.py").exists(), page.key
         assert page.ready or page.key in sitemap.COMING
     for view in (None, "fan", "coach"):              # one URL per page in any menu
         keys = [p.key for pages in sitemap.menu(view).values() for p in pages]
@@ -53,13 +53,13 @@ def test_home_offers_a_match_and_both_views(app_env):
     assert at.session_state["match_id"] == "m1"                # the first match until one is chosen
 
 
-def test_choosing_a_view_asks_for_its_first_page_and_pages_keep_view_and_match(app_env):
+def test_choosing_a_view_opens_its_first_page_and_pages_keep_view_and_match(app_env):
     at = router().run()
     next(b for b in at.button if b.label == "Open the coach view").click().run()
     assert not at.exception
-    # AppTest reruns only the page after its first run, so the router's move to the page is checked in a browser
-    assert at.session_state["view"] == "coach" and at.session_state["go_to"] == "pages/team_analysis.py"
-    at.switch_page("pages/physical_fatigue.py").run()
+    assert at.session_state["view"] == "coach" and "go_to" not in at.session_state
+    assert any("How does the team organise, press and attack?" in m.value for m in at.markdown)   # Team analysis
+    at.switch_page("sections/physical_fatigue.py").run()
     assert not at.exception
     assert at.session_state["view"] == "coach" and at.session_state["match_id"] == "m1"
     assert any("Who ran how much" in m.value for m in at.markdown)
@@ -69,8 +69,17 @@ def test_choosing_a_view_asks_for_its_first_page_and_pages_keep_view_and_match(a
 def test_unfinished_pages_say_coming_soon_with_their_question(key, app_env):
     at = router()
     at.session_state["view"] = "coach" if key == "event_explorer" else "fan"
-    at.run().switch_page(f"pages/{key}.py").run()
+    at.run().switch_page(f"sections/{key}.py").run()
     assert not at.exception
     shown = " ".join(m.value for m in at.markdown)
     assert "Coming soon" in shown and sitemap.spec(key).question in shown
 
+
+
+def test_switching_view_on_the_player_page_stays_on_it(app_env):
+    at = router()
+    at.session_state["view"], at.session_state["match_id"] = "fan", "m1"
+    at.run().switch_page("sections/player.py").run()
+    at.sidebar.segmented_control[0].set_value("coach").run()
+    assert not at.exception
+    assert at.session_state["view"] == "coach" and "COACH MODE" in " ".join(m.value for m in at.markdown)
