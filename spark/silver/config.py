@@ -12,6 +12,7 @@ load_env()
 # --- Football rules (docs/silver-guide.md, section 3) ---
 PITCH_L, PITCH_W = 105.0, 68.0   # metres, origin bottom-left (ingestion already checked the size)
 SPRINT_KMH = 25.0                # is_sprint = speed_kmh > 25
+MAX_SPEED_KMH = 40.0             # above: impossible for a player, a jump from an estimated position; set to null
 MAX_SPEED_KMH = 40.0             # plausibility limit (the Soda check of FOO-05 uses the same value)
 RIGHT_TO_LEFT = "right_to_left"  # value of matches.home_side_pN when HOME attacks toward x = 0
 DECIMALS = 2                     # coordinates keep 2 decimals, like bronze
