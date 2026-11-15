@@ -8,7 +8,7 @@ import live
 import live_feed
 
 AppTest = pytest.importorskip("streamlit.testing.v1").AppTest
-PAGE = str(Path(__file__).resolve().parents[2] / "app" / "streamlit" / "pages" / "0_Live_match.py")
+PAGE = str(Path(__file__).resolve().parents[2] / "app" / "streamlit" / "pages" / "live_match.py")
 MATCH = {"match_id": "m1", "home_team": "Home FC", "away_team": "Away FC", "home_color": "#ff0000",
          "away_color": "#0000ff", "p2_end_ts": 6000, "home_side_p1": "left_to_right", "home_side_p2": "right_to_left"}
 

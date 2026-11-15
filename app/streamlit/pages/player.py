@@ -1,19 +1,20 @@
-"""Players: key numbers, position heatmap, intensity per 5 minutes, ranking inside the match (FOO-07)."""
+"""Player page (FAN VIEW and COACH VIEW): key numbers, position heatmap, ranking inside the match (FOO-07).
+The pitch component, the 5 scores and the coach mode come in step 3."""
 import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
 
+import sitemap
 import viz
-from data import CAVEAT, require_gold, sidebar_match, table
+from data import CAVEAT, current_match, require_gold, table
 
-st.set_page_config(page_title="Players", page_icon="🏃", layout="wide")
+sitemap.header("player")
 teams = require_gold()
-match = sidebar_match(teams)
+match = current_match(teams)
 colors = viz.team_colors(teams, match)
 players = table("gold_player_match_stats")
 players = players[players.match_id == match].sort_values(["team_id", "shirt_number"])
 
-st.title("🏃 Players")
 side = st.radio("Team", ["HOME", "AWAY"], horizontal=True,
                 format_func=lambda t: teams[(teams.match_id == match) & (teams.team_id == t)].team_name.iloc[0])
 squad = players[players.team_id == side]
@@ -40,7 +41,7 @@ d[3].metric("Fouls", f"{p.fouls}")
 d[4].metric("Tracked", f"{p.tracked_seconds / 60:.0f} min")
 d[5].metric("Avg position x", "n/a" if pd.isna(p.avg_x) else f"{p.avg_x:.0f} m")
 
-heat, intensity, ranking = st.tabs(["Heatmap", "Intensity (5 min)", "Ranking in the match"])
+heat, ranking = st.tabs(["Heatmap", "Ranking in the match"])
 with heat:
     zones = table("gold_zone_occupancy")
     zones = zones[(zones.match_id == match) & (zones.player_id == pid)]
@@ -52,20 +53,6 @@ with heat:
         plt.close(fig)
         st.caption("Share of this player's tracked time in each cell of a 6 x 4 grid. Pitch seen with HOME attacking "
                    "to the right: an AWAY player attacks to the left.")
-with intensity:
-    win = table("gold_player_5min")
-    win = win[(win.match_id == match) & (win.player_id == pid)].sort_values("window_start_ts")
-    if win.empty:
-        st.info("No window for this player.")
-    else:
-        win = win.assign(minute=(win.window_start_ts // 60).astype(str) + "-" + (win.window_end_ts // 60).astype(str))
-        st.markdown("**Distance per 5-minute window (m)**")
-        st.bar_chart(win.set_index("minute")["distance_m"], color=colors[side])
-        st.markdown("**Sprint seconds per window**")
-        st.bar_chart(win.set_index("minute")["sprint_seconds"], color=colors[side])
-        st.caption("A window with low coverage (below) is incomplete: its distance is under-estimated.")
-        st.dataframe(win[["minute", "coverage", "distance_m", "sprint_seconds", "max_speed_kmh", "passes", "pressures"]],
-                     hide_index=True, width="stretch")
 with ranking:
     metrics = {"distance_km": "Distance (km)", "sprint_count": "Sprints", "max_speed_kmh": "Top speed (km/h)",
                "passes": "Passes", "passes_received": "Passes received", "pressures": "Pressures",
@@ -74,4 +61,5 @@ with ranking:
     fig = viz.ranking_bars(players.dropna(subset=[metric]), metric, colors)
     st.pyplot(fig, width="content")
     plt.close(fig)
+sitemap.still_to_come("player")
 st.caption(CAVEAT)

@@ -2,10 +2,10 @@
 import pandas as pd
 import streamlit as st
 
+import sitemap
 from data import soda_results
 
-st.set_page_config(page_title="Data quality", page_icon="✅", layout="wide")
-st.title("✅ Data quality")
+sitemap.header("data_quality")
 st.markdown("Soda checks run on the Silver and Gold layers (`make soda`). This page shows the **last run**.")
 
 results = soda_results()

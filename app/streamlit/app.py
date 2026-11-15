@@ -1,46 +1,61 @@
-"""Football analytics dashboard: match overview (home page). Run: `make app` or `streamlit run app/streamlit/app.py`.
+"""MatchLens: one website, five sections (docs/product.md, section 8). Run: `make app` or
+`streamlit run app/streamlit/app.py`.
 
-Pages (left menu): Players, Shots and passes, Compare matches, Data quality. Everything reads the Gold tables.
+This script is the router: it builds the menu for the view chosen on Home (fan or coach), keeps the view and the match
+in st.session_state so they follow the visitor from page to page, and runs the page.
 """
+import duckdb
 import streamlit as st
 
-from data import CAVEAT, CREDIT, match_label, require_gold, sidebar_match
+import sitemap
+from data import CREDIT, library, match_label, table
 
-st.set_page_config(page_title="Football analytics", page_icon="⚽", layout="wide")
+st.set_page_config(page_title="MatchLens", page_icon=":material/sports_soccer:", layout="wide")
+sitemap.style()
 
-teams = require_gold()
-match = sidebar_match(teams)
-rows = teams[teams.match_id == match].set_index("team_id")
 
-st.title("⚽ Match overview")
-if {"HOME", "AWAY"} - set(rows.index):
-    st.warning(f"{match} does not have both teams in Gold: run `make gold` again.")
-    st.stop()
-home, away = rows.loc["HOME"], rows.loc["AWAY"]
+def match_choices() -> tuple[list[str], dict[str, str]]:
+    """Match ids and their labels, from the library when this Gold file has it."""
+    lib = library()
+    if lib is not None and not lib.empty:
+        return list(lib.match_id), {r.match_id: f"{r.home_team_short} {r.home_score}-{r.away_score} {r.away_team_short}"
+                                    f" · {r.match_date:%d %b %Y}" for r in lib.itertuples()}
+    teams = table("gold_team_match_stats")
+    ids = sorted(teams.match_id.unique())
+    return ids, {m: match_label(teams, m) for m in ids}
 
-left, middle, right = st.columns([5, 2, 5])
-left.markdown(f"<h2 style='text-align:right;margin:0'>{home.team_name}</h2>", unsafe_allow_html=True)
-middle.markdown(f"<h1 style='text-align:center;margin:0'>{home.score} - {away.score}</h1>", unsafe_allow_html=True)
-right.markdown(f"<h2 style='text-align:left;margin:0'>{away.team_name}</h2>", unsafe_allow_html=True)
-st.caption(f"{match_label(teams, match)}. HOME attacks toward the right of the pitch in every graphic, AWAY toward the left.")
 
-st.subheader("Team comparison")
-metrics = [("Distance (km)", "distance_km", "{:.1f}"), ("Sprints (efforts)", "sprint_count", "{:.0f}"),
-           ("Top speed (km/h)", "max_speed_kmh", "{:.1f}"), ("Passes", "passes", "{:.0f}"),
-           ("Pass accuracy", "pass_accuracy", "{:.0%}"), ("Shots (without goals)", "shots", "{:.0f}"),
-           ("Goals", "goals", "{:.0f}"), ("Tackles", "tackles", "{:.0f}"), ("Fouls", "fouls", "{:.0f}"),
-           ("Pressures", "pressures", "{:.0f}")]
-for label, col, fmt in metrics:
-    a, b, c = st.columns([5, 2, 5])
-    a.markdown(f"<div style='text-align:right;font-size:1.6rem'>{fmt.format(home[col])}</div>", unsafe_allow_html=True)
-    b.markdown(f"<div style='text-align:center;color:#8a948f'>{label}</div>", unsafe_allow_html=True)
-    c.markdown(f"<div style='text-align:left;font-size:1.6rem'>{fmt.format(away[col])}</div>", unsafe_allow_html=True)
+def sidebar() -> None:
+    # "view" and "match_id" are plain session keys, never widget keys: Streamlit may drop a widget's key when the page
+    # changes, and both must follow the visitor. The widgets only read them and write the new choice back.
+    st.sidebar.markdown("<div class='ml-side-logo'>Match<span>Lens</span></div>", unsafe_allow_html=True)
+    view = st.session_state.get("view")
+    if view:
+        picked = st.sidebar.segmented_control("View", list(sitemap.VIEWS), default=view,
+                                              format_func=lambda v: v.capitalize())
+        if picked and picked != view:
+            st.session_state["view"] = picked
+            on_view_page = any(p.key == navigation.url_path and p.section in sitemap.VIEWS.values() for p in sitemap.PAGES)
+            if on_view_page:
+                st.session_state["go_to"] = sitemap.FIRST_PAGE[picked]   # this page is not in the other view
+            st.rerun()          # the menu depends on the view
+    try:
+        ids, labels = match_choices()
+    except duckdb.Error:      # no Gold file yet: every page says what to run
+        return
+    if not ids:
+        return
+    current = st.session_state.get("match_id")
+    current = current if current in ids else ids[0]
+    st.session_state["match_id"] = st.sidebar.selectbox("Match", ids, index=ids.index(current), format_func=labels.get)
+    st.sidebar.caption(CREDIT)
 
-st.subheader("Average position of each team")
-st.write(f"{home.team_short}: x = {home.avg_x:.1f} m · {away.team_short}: x = {away.avg_x:.1f} m "
-         "(0 = left goal line, 105 = right goal line).")
 
-with st.expander("How to read these numbers"):
-    st.markdown(CAVEAT)
-    st.markdown("Possession is not shown: the source does not provide it. `Shots` excludes goals; the shot map shows both.")
-st.caption(CREDIT)
+pages = {section: [st.Page(f"pages/{p.key}.py", title=p.title, icon=p.icon, url_path=p.key, default=p.key == "home")
+                   for p in specs]
+         for section, specs in sitemap.menu(st.session_state.get("view")).items()}
+navigation = st.navigation(pages)
+if "go_to" in st.session_state:
+    st.switch_page(st.session_state.pop("go_to"))
+sidebar()   # drawn on every page: a widget that is not drawn loses its value, and the match must follow the visitor
+navigation.run()

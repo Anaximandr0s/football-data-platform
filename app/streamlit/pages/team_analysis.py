@@ -1,17 +1,18 @@
-"""Shots and passes: shot map of both teams and pass network of one team (FOO-07)."""
+"""Team analysis (COACH VIEW): shot map of both teams and pass network of one team (FOO-07); shape, pressing,
+build-up and attack side come in step 5."""
 import matplotlib.pyplot as plt
 import streamlit as st
 
+import sitemap
 import viz
-from data import CAVEAT, mmss, require_gold, sidebar_match, table
+from data import CAVEAT, current_match, mmss, require_gold, table
 
-st.set_page_config(page_title="Shots and passes", page_icon="🎯", layout="wide")
+sitemap.header("team_analysis")
 teams = require_gold()
-match = sidebar_match(teams)
+match = current_match(teams)
 colors = viz.team_colors(teams, match)
 name = {r.team_id: r.team_name for r in teams[teams.match_id == match].itertuples()}
 
-st.title("🎯 Shots and passes")
 shots_tab, network_tab = st.tabs(["Shot map", "Pass network"])
 
 with shots_tab:
@@ -57,4 +58,5 @@ with network_tab:
         st.markdown("**Most frequent connections**")
         st.dataframe(pairs[["passer_name", "receiver_name", "passes", "passes_successful"]], hide_index=True,
                      width="stretch")
+sitemap.still_to_come("team_analysis")
 st.caption(CAVEAT)
