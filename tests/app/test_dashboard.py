@@ -77,25 +77,29 @@ def test_squad_shows_shirt_cards_by_team_and_opens_the_player_page(app_env):
     assert at.session_state["go_to"] == "sections/player.py" and at.session_state["player"]["m1"] in {"H01", "H02"}
 
 
-def test_team_analysis_lists_the_shots_and_filters_goals(app_env):
+def test_team_analysis_tells_shape_pressing_build_up_and_space(app_env):
     at = run("sections/team_analysis.py")
     assert not at.exception
-    assert len(at.dataframe[0].value) == 3                  # shot, goal, AWAY shot
-    at.checkbox[0].check().run()
-    assert not at.exception and len(at.dataframe[0].value) == 1
+    page = texts(at)
+    assert "Outfield block length" in page and "Defensive line from own goal" in page
+    assert "Home spread 10 m wide with the ball." in page                # only ts 0 has a known owner: HOME
+    assert "nan" not in page
+    assert "Away made no pass: pressing per opponent pass cannot be measured." in page
+    assert "Home made 2 passes of 10 m or more toward goal (1 successful)" in page
+    assert "controlled" in page and len(at.dataframe[0].value) == 2       # HOME's shot and goal
 
 
-def test_team_analysis_pass_network_slider_and_team(app_env):
+def test_team_analysis_follows_the_other_team(app_env):
     at = run("sections/team_analysis.py")
-    at.radio[0].set_value("AWAY").run()                     # AWAY made no pass: a message, not a crash
+    at.segmented_control[0].set_value("AWAY").run()
     assert not at.exception
-    assert any("No pass" in i.value for i in at.info)
+    assert "Away made 0 passes of 10 m or more" in texts(at) and len(at.dataframe[0].value) == 1
 
 
-def test_compare_page_asks_for_a_second_match_when_there_is_only_one(app_env):
+def test_compare_page_needs_two_matches_of_the_team(app_env):
     at = run("sections/compare_matches.py")
     assert not at.exception
-    assert any("Only one match" in i.value for i in at.info)
+    assert any("has only one stored match" in i.value for i in at.info)
 
 
 def test_quality_page_shows_the_last_soda_run(app_env):
@@ -124,10 +128,13 @@ def test_every_page_explains_what_to_do_when_gold_does_not_exist(page, monkeypat
     assert any("not available" in e.value for e in at.error)
 
 
-def test_physical_page_shows_the_5_minute_windows_of_a_player(app_env):
+def test_physical_page_shows_the_team_grid_fatigue_and_one_player(app_env):
     at = run("sections/physical_fatigue.py")
     assert not at.exception
-    assert len(at.dataframe[0].value) == 1                 # H01 has one 5-minute window in the fixture
+    fatigue, one = at.dataframe[0].value, at.dataframe[1].value
+    assert set(fatigue.player) == {"#8 H. One", "#4 H. Two"} and not fatigue["enough data"].any()
+    assert list(one.minutes) == ["0-5'"]                     # H01: the 101-second first-half window of the fixture
+    assert "faded most" not in texts(at)                       # nobody passes the C6 thresholds in the fixture
 
 
 def test_match_library_lists_the_stored_matches_with_their_score_and_date(app_env):
@@ -137,3 +144,16 @@ def test_match_library_lists_the_stored_matches_with_their_score_and_date(app_en
     assert list(lib.home_team) == ["Home FC"] and list(lib.score) == ["1 - 0"]
     assert lib.match_date.iloc[0].strftime("%Y-%m-%d") == "2026-01-01"
     assert {m.label: m.value for m in at.metric}["Matches"] == "1"
+
+
+def test_event_explorer_filters_summarises_and_compares(app_env):
+    at = run("sections/event_explorer.py")
+    assert not at.exception
+    summary = at.dataframe[0].value
+    assert dict(summary["count"]) == {"pass": 3, "shot": 1, "goal": 1}         # HOME, passes shots goals by default
+    assert summary.loc["pass", "success"] == pytest.approx(2 / 3)
+    assert "5 events match these filters: 3 passes, 1 shot, 1 goal. 67% of the passes were successful." in texts(at)
+    at.multiselect[0].set_value(["run"]).run()                                  # runs are events too
+    assert not at.exception and dict(at.dataframe[0].value["count"]) == {"run": 1}
+    at.segmented_control[2].set_value("Heatmap").run()
+    assert not at.exception

@@ -6,13 +6,11 @@ import streamlit as st
 
 import charts
 import clock
-import pitch
 import sitemap
 import story
+import views
 import viz
 from data import CAVEAT, CREDIT, clock_bounds, current_match, require_gold, table
-
-MIN_PASSES = 3   # a pass-network line needs at least this many passes between two players
 
 sitemap.header("match_story")
 teams = require_gold()
@@ -67,14 +65,14 @@ st.altair_chart(charts.momentum(timeline, goals, colors, names, end_minute, tick
 st.caption("SkillCorner xThreat of the successful passes: how threatening the targeted spot was. It is not xG (expected "
            "goals). Above the line: " + short["HOME"] + " on top; below: " + short["AWAY"] + ". Dotted lines: goals; "
            "solid line: second-half kick-off.")
-say(story.momentum(timeline, short, bounds))
+say(story.momentum(timeline, short))
 
 st.markdown("**Possession**, per 5 minutes")
 st.altair_chart(charts.shares(timeline, "possession_share", goals, colors, names, end_minute, ticks, kickoff2,
                               greyed="possession_greyed"), width="stretch")
 st.caption(f"{short['HOME']} from the bottom, {short['AWAY']} from the top. Grey: fewer than 60 seconds with a known "
            "owner in that spell, too few to trust.")
-say(story.possession(timeline, profile, short, bounds))
+say(story.possession(timeline, profile, short))
 
 st.markdown("**Territory**: passes played from the final third, per 5 minutes")
 st.altair_chart(charts.shares(timeline, "field_tilt", goals, colors, names, end_minute, ticks, kickoff2),
@@ -92,9 +90,7 @@ st.caption("The three largest gaps between the teams. They describe the match; t
 left, right = st.columns(2)
 with left:
     st.subheader("Shots")
-    pitch.show(key="story_shots", players={}, colors=colors, clickable=False, arrows={"home": "right"},
-               shots=[[r.x_start, r.y_start, r.x_end, r.y_end, bool(r.is_goal), colors[r.team_id]]
-                      for r in shots.itertuples()])
+    views.shot_map("story_shots", shots, colors)
     st.caption(f"Filled with a gold ring: goal. {short['HOME']} attacks to the right, {short['AWAY']} to the left.")
     say(story.shots_line(shots, short))
 with right:
@@ -102,19 +98,9 @@ with right:
     side = st.segmented_control("Team", ["HOME", "AWAY"], default="HOME", format_func=short.get,
                                 key="story_net_team") or "HOME"
     net = table("gold_pass_network")
-    net = net[(net.match_id == match) & (net.team_id == side) & (net.passes >= MIN_PASSES)]
     stats = table("gold_player_match_stats")
-    pos = stats[(stats.match_id == match) & (stats.team_id == side)].set_index("player_id")
-    hubs = set(card[(card.team_id == side) & card.is_hub].player_id)
-    ids = sorted(set(net.passer_id) | set(net.receiver_id))
-    pitch.show(key="story_network", players={}, colors=colors, clickable=False, arrows={"home": "right"},
-               network={"color": colors[side],
-                        "nodes": [[pos.loc[p, "avg_x"], pos.loc[p, "avg_y"], int(pos.loc[p, "passes"]),
-                                   int(pos.loc[p, "shirt_number"]), p in hubs] for p in ids if p in pos.index],
-                        "edges": [[pos.loc[r.passer_id, "avg_x"], pos.loc[r.passer_id, "avg_y"],
-                                   pos.loc[r.receiver_id, "avg_x"], pos.loc[r.receiver_id, "avg_y"], int(r.passes)]
-                                  for r in net.itertuples() if r.passer_id in pos.index and r.receiver_id in pos.index]})
-    st.caption(f"Each player at his average position; a line = at least {MIN_PASSES} passes between two players, "
+    views.pass_network("story_network", net[net.match_id == match], stats[stats.match_id == match], card, side, colors)
+    st.caption(f"Each player at his average position; a line = at least {views.MIN_PASSES} passes between two players, "
                "thicker = more. Gold ring: the hub.")
     say(story.hub(card, side, short))
 

@@ -70,7 +70,7 @@ processes, so running again gives the same tables (no duplicates) and leaves oth
 | 3 | Add the team | `clean_tracking` | left join of Silver `players` on (match_id, player_id) |
 | 4 | Flip directions | `normalise_direction` | where `home_side_pN` is `right_to_left`: x = 105 - x, y = 68 - y for tracking and ball (both teams). Events: per team, see decision 1 |
 | 5 | Correct positions | `clean_tracking` | `was_corrected` = outside 105 x 68 as delivered by bronze, then x clipped to [0, 105], y to [0, 68] |
-| 6 | Speed | `clean_tracking` | `speed_kmh` kept as is (null stays null); `is_sprint` = speed_kmh > 25, false when null |
+| 6 | Speed | `clean_tracking` | `speed_kmh` kept as is (null stays null), except above 40 km/h: set to null (`MAX_SPEED_KMH`; m003 has 4 such seconds); `is_sprint` = speed_kmh > 25, false when null |
 | 7 | Gaps | `clean_tracking` | no row is invented; `is_after_gap` = the previous tracked second of the player is more than 1 s earlier |
 | 8 | Write Iceberg | `write_table` | `lake.silver.tracking / events / ball / players / matches`, `format-version` 2, partitioned by `match_id` |
 

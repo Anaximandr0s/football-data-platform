@@ -23,3 +23,9 @@ models:
     columns:
       - name: home_share
         data_tests: [not_null]
+  - name: int_football_windows
+    description: "GRAIN: one row per window per size (300, 900 s) per match: the football windows (restart at each kick-off, 45+ and 90+ for stoppage time)."
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [match_id, window_size, window_index]

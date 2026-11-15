@@ -155,8 +155,7 @@ if coach:
         win = table("gold_player_5min")
         win = win[(win.match_id == match) & (win.player_id == pid)].sort_values("window_start_ts")
         if not win.empty:
-            st.bar_chart(win.assign(minutes=[clock.span(r.window_start_ts, r.window_end_ts, *bounds)
-                                             for r in win.itertuples()]).set_index("minutes")["distance_m"],
+            st.bar_chart(win.assign(minutes=win.window_label + "'").set_index("minutes")["distance_m"],
                          color=color, height=180, sort=False)
             st.caption("Distance per 5-minute window (m); a window with little tracking is under-estimated.")
     st.markdown("**Events of this player** (E1)")

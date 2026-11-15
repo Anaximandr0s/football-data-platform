@@ -259,3 +259,32 @@ alors que le compte rendu officiel dit 46' et 63'.
 
 **Un test qui compare le système à lui-même ne trouve pas une erreur de définition.** Il faut au moins une vérification
 contre le monde réel.
+
+## Étape 5 : les pages coach, la comparaison et deux nouveaux matchs
+
+### Ce qui a été construit
+
+| Fichier | Rôle |
+|---|---|
+| `dbt/macros/football_window.sql`, `int_football_windows`, `clock.window_index` | les fenêtres de 5 et 15 minutes repartent à chaque coup d'envoi : 0-5' ... 40-45', 45+ (le temps additionnel), 45-50' ... 85-90', 90+. Une seule règle, en SQL et en Python, vérifiées égales par un test ; Spark la reprendra à l'étape 6 |
+| `app/streamlit/coach.py` | les phrases des pages coach, chacune avec les chiffres Gold qui l'ont produite |
+| `sections/team_analysis.py` | forme avec et sans ballon, pressing par 15 minutes, construction et côté d'attaque, contrôle de l'espace, tirs et réseau de passes |
+| `sections/physical_fatigue.py` | la distance par minute de chaque joueur dans chaque fenêtre, et qui a baissé en fin de match |
+| `sections/event_explorer.py` | tous les événements filtrés (équipe, type, joueur, phase, mi-temps, minutes), en flèches ou en carte de chaleur, un résumé, un face-à-face et le momentum |
+| `sections/compare_matches.py` | une équipe dans les matchs choisis, avec le lieu et l'adversaire écrits |
+| m003, m004 | Perth Glory 1-3 Brisbane Roar et Sydney FC 4-1 Adelaide United, passés par toute la chaîne |
+
+### Pourquoi c'est construit ainsi
+
+- **Des fenêtres « football », pas « horloge ».** Avec `ts // 300`, la 2e mi-temps commençait au milieu d'une
+  fenêtre. Les totaux n'ont pas bougé (passes, buts, secondes) : seules les frontières ont changé.
+- **Le contrôle qualité a fait son travail.** Le nouveau match m003 avait 4 secondes à 43-52 km/h, des sauts depuis une
+  position estimée. Les contrôles ont bloqué Gold ; tu as choisi de mettre ces vitesses à null dans Silver, et le
+  contrôle du job vérifie le compte.
+- **Une phrase montre ses chiffres.** « Spell le plus intense : 90+ avec 2,60 » ne disait pas que la fenêtre était
+  courte ; la phrase donne maintenant les comptes (actions et passes) à côté du ratio.
+
+### L'idée à retenir
+
+**Ajouter des données réelles est le meilleur test.** Deux matchs de plus ont trouvé une vitesse impossible et un
+écart de 3 s au début d'une mi-temps, que les deux premiers matchs ne montraient pas.

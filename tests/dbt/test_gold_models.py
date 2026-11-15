@@ -181,8 +181,9 @@ def test_shots_goal_distance_and_running_score(gold):
 
 def test_player_5min_window(gold):
     w = rows(gold, "select * from gold_player_5min where player_id = 'H01'")
-    assert len(w) == 1 and (w[0]["window_start_ts"], w[0]["window_end_ts"]) == (0, 300)
-    assert w[0]["tracked_seconds"] == 10 and w[0]["coverage"] == 0.033
+    # the fixture's first half is ts 0-100: its 0-5' window is 101 seconds long, coverage counts on that length
+    assert len(w) == 1 and (w[0]["window_label"], w[0]["window_start_ts"], w[0]["window_end_ts"]) == ("0-5", 0, 101)
+    assert w[0]["tracked_seconds"] == 10 and w[0]["coverage"] == round(10 / 101, 3)
     assert (w[0]["passes"], w[0]["goals"]) == (2, 1)
 
 
@@ -206,18 +207,18 @@ def test_reconciliation_tests_catch_a_wrong_score(tmp_path):
 
 # ------------------------------------------------------------------ MatchLens tables (docs/product.md, section 7)
 def test_pressing_counts_pressure_tackle_foul_and_never_runs(gold):
-    p = {r["team_id"]: r for r in rows(gold, "select * from gold_pressing")}
+    p = {r["team_id"]: r for r in rows(gold, "select * from gold_pressing where window_index = 0")}
     assert (p["HOME"]["defensive_actions"], p["AWAY"]["defensive_actions"]) == (1, 2)       # tackle; pressure + foul
     assert p["HOME"]["ppp"] is None                                   # AWAY made no pass: no division by zero
     assert (p["AWAY"]["opponent_passes"], p["AWAY"]["ppp"]) == (3, 0.6667)
     assert p["AWAY"]["defensive_actions_middle_third"] == 2           # x_att of AWAY = 105 - x: 45 and 55
-    t = {r["team_id"]: r for r in rows(gold, "select * from gold_match_timeline")}
+    t = {r["team_id"]: r for r in rows(gold, "select * from gold_match_timeline where window_index = 0")}
     assert (t["HOME"]["defensive_actions"], t["AWAY"]["defensive_actions"]) == (1, 2)
 
 
 def test_timeline_possession_is_greyed_under_60_known_seconds(gold):
-    t = {r["team_id"]: r for r in rows(gold, "select * from gold_match_timeline")}
-    assert len(t) == 2                                                # one window (p2_end_ts = 200), two teams
+    assert rows(gold, "select count(*) as n from gold_match_timeline") == [{"n": 4}]   # 0-5' and 45-50', two teams
+    t = {r["team_id"]: r for r in rows(gold, "select * from gold_match_timeline where window_index = 0")}
     assert (t["HOME"]["possession_share"], t["HOME"]["known_seconds"], t["HOME"]["possession_greyed"]) == (1.0, 1, True)
     assert (t["HOME"]["score_home_end"], t["HOME"]["score_away_end"]) == (1, 0)
     assert t["HOME"]["field_tilt"] is None and t["AWAY"]["field_tilt"] is None   # no pass from x_att >= 70: no tilt
@@ -282,3 +283,20 @@ def test_team_rates_are_per_90_tracked_minutes_of_the_team(gold):
     assert b["HOME"]["tracked_minutes"] == round(10 / 60, 1)            # 10 distinct seconds, not 13 player rows
     assert b["HOME"]["progressive_passes_per90"] == 1080.0              # 2 / (10 / 60) x 90
     assert "progressive_success_rate" not in b["HOME"]
+
+
+def test_football_windows_of_dbt_equal_the_python_definition(gold):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("clock", DBT_DIR.parent / "app" / "streamlit" / "clock.py")
+    clock = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(clock)
+    m = _matches().iloc[0]
+    for size in (300, 900):
+        dbt_rows = [tuple(r.values()) for r in rows(gold, f"select window_index, period, window_label, window_start_ts, "
+                                                         f"window_end_ts from int_football_windows "
+                                                         f"where window_size = {size} order by window_index")]
+        assert dbt_rows == clock.windows(m.p1_start_ts, m.p1_end_ts, m.p2_start_ts, m.p2_end_ts, size)
+    # the macro and the Python function put every tracked second in the same window
+    trk = rows(gold, "select t.ts, t.period, w.window_index from stg_tracking t join gold_player_5min w using (player_id) "
+                     "where t.ts >= w.window_start_ts and t.ts < w.window_end_ts")
+    assert trk and all(r["window_index"] == clock.window_index(r["ts"], r["period"], 0, 101) for r in trk)

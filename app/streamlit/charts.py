@@ -50,7 +50,9 @@ def momentum(timeline: pd.DataFrame, goals: pd.DataFrame, colors: dict, names: d
              second_kickoff: float | None) -> alt.Chart:
     """E2: HOME minus AWAY SkillCorner xThreat of successful passes per 5 minutes; above zero = HOME on top."""
     w = timeline.pivot(index="window_index", columns="team_id", values="xthreat_successful_passes").fillna(0)
-    df = pd.DataFrame({"minute": w.index * 5 + 2.5, "momentum": (w["HOME"] - w["AWAY"]).round(3)})
+    middle = timeline.groupby("window_index").apply(lambda g: (g.window_start_ts.iloc[0] + g.window_end_ts.iloc[0]) / 120,
+                                                    include_groups=False)
+    df = pd.DataFrame({"minute": middle.loc[w.index].to_numpy(), "momentum": (w["HOME"] - w["AWAY"]).round(3).to_numpy()})
     df["team"] = df.momentum.map(lambda v: "HOME" if v >= 0 else "AWAY")
     df["team_name"] = df.team.map(names)
     bars = alt.Chart(df).mark_bar(width=14, cornerRadius=2).encode(
@@ -66,8 +68,9 @@ def momentum(timeline: pd.DataFrame, goals: pd.DataFrame, colors: dict, names: d
 def shares(timeline: pd.DataFrame, column: str, goals: pd.DataFrame, colors: dict, names: dict, end_minute: float,
            ticks: list, second_kickoff: float | None, greyed: str | None = None) -> alt.Chart:
     """A share per 5-minute window (possession or field tilt), HOME from the bottom; greyed windows drawn in grey."""
-    df = timeline[["window_index", "team_id", column] + ([greyed] if greyed else [])].copy()
-    df["minute"] = df.window_index * 5 + 2.5
+    df = timeline[["window_index", "window_start_ts", "window_end_ts", "team_id", column]
+                  + ([greyed] if greyed else [])].copy()
+    df["minute"] = (df.window_start_ts + df.window_end_ts) / 120            # the middle of the window, in ts minutes
     df["share"] = df[column].fillna(0)
     df["shown"] = df.team_id
     if greyed:

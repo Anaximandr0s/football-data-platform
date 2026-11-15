@@ -13,6 +13,7 @@ from spark.silver.config import (
     DECIMALS,
     KAFKA_COLUMNS,
     KEYS,
+    MAX_SPEED_KMH,
     PITCH_L,
     PITCH_W,
     RIGHT_TO_LEFT,
@@ -98,8 +99,11 @@ def clean_tracking(tracking: DataFrame, players: DataFrame, matches: DataFrame) 
     t = (t.withColumn("x", F.round(F.least(F.greatest(F.col("x"), F.lit(0.0)), F.lit(PITCH_L)), DECIMALS))
           .withColumn("y", F.round(F.least(F.greatest(F.col("y"), F.lit(0.0)), F.lit(PITCH_W)), DECIMALS)))
 
-    # 6. speed: bronze value untouched (null stays null, never 0); null never counts as a sprint.
-    # Clipping does not recompute it: the speed describes the real movement between two seconds.
+    # 6. speed: bronze value kept (null stays null, never 0), except above MAX_SPEED_KMH: no player runs that fast,
+    # it is a jump from a position SkillCorner estimated (m003: 4 seconds of 43-52 km/h), so it becomes null and adds
+    # nothing to a distance. Null never counts as a sprint. Clipping does not recompute the speed: it describes the
+    # real movement between two seconds.
+    t = t.withColumn("speed_kmh", F.when(F.col("speed_kmh") <= MAX_SPEED_KMH, F.col("speed_kmh")))
     t = t.withColumn("is_sprint", F.coalesce(F.col("speed_kmh") > SPRINT_KMH, F.lit(False)))
 
     # 2 + 7. order by time per player, flag the first tracked second after a gap. Nothing is invented:

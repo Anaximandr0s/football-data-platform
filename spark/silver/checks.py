@@ -10,12 +10,13 @@ from pathlib import Path
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 
-from spark.silver.config import PITCH_L, PITCH_W
+from spark.silver.config import MAX_SPEED_KMH, PITCH_L, PITCH_W
 
 
 def measure(raw_counts: dict[str, int], tracking: DataFrame, events: DataFrame, ball: DataFrame,
-            players: DataFrame, matches: DataFrame) -> dict:
-    """All metrics in a few Spark jobs. `raw_counts` = rows read from bronze, per table."""
+            players: DataFrame, matches: DataFrame, speed_over_max: int = 0) -> dict:
+    """All metrics in a few Spark jobs. `raw_counts` = rows read from bronze, per table; `speed_over_max` = bronze
+    tracking rows faster than MAX_SPEED_KMH, which Silver sets to null."""
     t = tracking.agg(
         F.count("*").alias("rows"),
         F.countDistinct("player_id", "ts").alias("distinct_keys"),
@@ -51,7 +52,7 @@ def measure(raw_counts: dict[str, int], tracking: DataFrame, events: DataFrame, 
                      "sprints": t["sprints"] or 0, "after_gap": t["after_gap"] or 0,
                      "team_null": t["team_null"] or 0, "outside_after_clip": t["outside_after"] or 0,
                      "speed_max": t["speed_max"], "seconds_with_data": t["seconds"],
-                     "detected": t["detected"] or 0},
+                     "detected": t["detected"] or 0, "speed_over_max_bronze": speed_over_max},
         "events_by_type": by_type,
         "ball_with_possession": b["with_possession"],
         "shot_avg_x": shots,      # {team: [mean x_start of its shots and goals, how many]}
@@ -74,6 +75,8 @@ def evaluate(metrics: dict, manifest: dict | None) -> list[tuple[str, bool, str]
     out.append(("tracking: every row has a team_id", tr["team_null"] == 0, f"{tr['team_null']} null"))
     out.append(("tracking: all positions inside the pitch after clipping", tr["outside_after_clip"] == 0,
                 f"{tr['outside_after_clip']} outside"))
+    out.append(("tracking: no speed above 40 km/h", (tr.get("speed_max") or 0) <= MAX_SPEED_KMH,
+                f"max {tr.get('speed_max')}"))
     goals, score = metrics["goals_home_away"], metrics["score_home_away"]
     out.append(("events: goals equal the final score", goals == score, f"goals={goals} score={score}"))
 
@@ -95,9 +98,10 @@ def evaluate(metrics: dict, manifest: dict | None) -> list[tuple[str, bool, str]
     out.append(("tracking: was_corrected rows = manifest rows_outside_pitch",
                 tr["was_corrected"] == manifest["rows_outside_pitch"],
                 f"{tr['was_corrected']} vs {manifest['rows_outside_pitch']}"))
-    out.append(("tracking: null speeds untouched (null stays null)",
-                tr["speed_null"] == manifest["rows_speed_null"],
-                f"{tr['speed_null']} vs {manifest['rows_speed_null']}"))
+    over = tr.get("speed_over_max_bronze", 0)
+    out.append(("tracking: null speeds = manifest nulls + bronze speeds above 40 km/h (set to null)",
+                tr["speed_null"] == manifest["rows_speed_null"] + over,
+                f"{tr['speed_null']} vs {manifest['rows_speed_null']} + {over}"))
     out.append(("tracking: detected rows = manifest rows_detected",
                 tr["detected"] == manifest["rows_detected"], f"{tr['detected']} vs {manifest['rows_detected']}"))
     out.append(("ball: seconds with possession = manifest",

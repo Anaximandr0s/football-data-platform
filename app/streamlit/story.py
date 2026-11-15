@@ -20,8 +20,9 @@ class Sentence:
 Bounds = tuple[int, int | None]   # (p1_start_ts, p2_start_ts): what the football clock needs
 
 
-def _spell(window_index: int, bounds: Bounds) -> str:
-    return clock.span(window_index * 300, window_index * 300 + 300, *bounds)
+def _spell(timeline: pd.DataFrame, window_index: int) -> str:
+    """The football window as fans read it: "55-60", "45+"."""
+    return timeline[timeline.window_index == window_index].window_label.iloc[0]
 
 
 def _other(team: str) -> str:
@@ -51,7 +52,7 @@ def goals(shots: pd.DataFrame, short: dict, score: tuple[int, int], bounds: Boun
                     f"{short[last.team_id]} scored the last one (minute {minute(last)}): final score {final}.", facts)
 
 
-def momentum(timeline: pd.DataFrame, short: dict, bounds: Bounds) -> Sentence:
+def momentum(timeline: pd.DataFrame, short: dict) -> Sentence:
     """E2: SkillCorner xThreat of successful passes per 5-minute window, HOME minus AWAY."""
     w = timeline.pivot(index="window_index", columns="team_id", values="xthreat_successful_passes").fillna(0)
     diff = (w["HOME"] - w["AWAY"]).round(4)
@@ -62,10 +63,10 @@ def momentum(timeline: pd.DataFrame, short: dict, bounds: Bounds) -> Sentence:
              "best_window": int(best), "best_value": float(diff[best])}
     ahead = home_ahead if leader == "HOME" else away_ahead
     return Sentence(f"{short[leader]} created more danger with its passes in {ahead} of the {len(diff)} five-minute "
-                    f"spells; its strongest spell was minutes {_spell(best, bounds)}.", facts)
+                    f"spells; its strongest spell was minutes {_spell(timeline, best)}.", facts)
 
 
-def possession(timeline: pd.DataFrame, profile: pd.DataFrame, short: dict, bounds: Bounds) -> Sentence:
+def possession(timeline: pd.DataFrame, profile: pd.DataFrame, short: dict) -> Sentence:
     """F2: the match share, the best reliable spell of the team with more of the ball, and the greyed windows."""
     share = profile.set_index("team_id").possession_share
     greyed = int(timeline[timeline.team_id == "HOME"].possession_greyed.sum())
@@ -80,7 +81,7 @@ def possession(timeline: pd.DataFrame, profile: pd.DataFrame, short: dict, bound
     else:
         best = mine.loc[mine.possession_share.idxmax()]
         facts |= {"best_window": int(best.window_index), "best_share": float(best.possession_share)}
-        text += (f"; its best spell was minutes {_spell(int(best.window_index), bounds)} with "
+        text += (f"; its best spell was minutes {_spell(timeline, int(best.window_index))} with "
                  f"{_pct(best.possession_share)}.")
     if greyed:
         text += f" {greyed} spell{'s are' if greyed > 1 else ' is'} greyed: under 60 seconds with a known owner."

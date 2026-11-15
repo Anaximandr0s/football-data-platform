@@ -75,11 +75,11 @@ models:
       - name: distance_to_goal_m
         data_tests: [not_null]
   - name: gold_player_5min
-    description: "GRAIN: one row per player per 5-minute window of the match clock per match. coverage = tracked seconds / 300."
+    description: "GRAIN: one row per player per 5-minute football window per match (0-5' ... 45+ ... 90+). coverage = tracked seconds / window_seconds."
     data_tests:
       - unique_combination:
           arguments:
-            columns: [match_id, player_id, window_start_ts]
+            columns: [match_id, player_id, window_index]
     columns:
       - name: coverage
         data_tests: [not_null]
@@ -87,7 +87,8 @@ models:
   # MatchLens tables (docs/product.md, section 7). Formulas: docs/product.md; columns: docs/contrat_donnees.md 10.3.
   - name: gold_match_timeline
     description: >
-      GRAIN: one row per team per 5-minute window per match, every window from 0 to p2_end_ts // 300 (F1, F2, F7, E2).
+      GRAIN: one row per team per 5-minute football window per match (0-5' ... 40-45', 45+, 45-50' ... 90+), every
+      window of the match (F1, F2, F7, E2).
       possession_greyed = fewer than 60 seconds with a known owner in the window.
     data_tests:
       - unique_combination:
@@ -135,7 +136,7 @@ models:
               arguments:
                 values: ["in_possession", "out_of_possession", "unknown"]
   - name: gold_pressing
-    description: "GRAIN: one row per team per 15-minute window per match, every window from 0 to p2_end_ts // 900 (C3)."
+    description: "GRAIN: one row per team per 15-minute football window per match (0-15', 15-30', 30-45', 45+, 45-60' ... 90+) (C3)."
     data_tests:
       - unique_combination:
           arguments:
@@ -156,7 +157,7 @@ models:
       - name: is_eligible
         data_tests: [not_null]
   - name: gold_space_control
-    description: "GRAIN: one row per team per 5-minute window with tracked seconds per match (S1)."
+    description: "GRAIN: one row per team per 5-minute football window with tracked seconds per match (S1)."
     data_tests:
       - unique_combination:
           arguments:

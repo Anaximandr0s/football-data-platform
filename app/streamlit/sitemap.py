@@ -39,7 +39,7 @@ PAGES = (
     PageSpec("physical_fatigue", "Physical & fatigue", ":material/directions_run:", "COACH VIEW",
              "Who ran how much, and who faded?", "coaches", True),
     PageSpec("event_explorer", "Event explorer", ":material/scatter_plot:", "COACH VIEW",
-             "Which actions happened where, by whom, and how dangerous were they?", "coaches", False),
+             "Which actions happened where, by whom, and how dangerous were they?", "coaches", True),
     PageSpec("player", "Player page", ":material/person:", "COACH VIEW", "What exactly did this player do?",
              "coaches", True),
     PageSpec("data_quality", "Data quality", ":material/verified:", "BEHIND THE DATA", "Can I trust these numbers?",
@@ -53,12 +53,8 @@ PAGES = (
 # what is still missing on a page that exists, and the build step of docs/product.md section 12 that adds it
 COMING = {
     "replay": ("play a stored match at 0.25x to 8x with trails, Voronoi cells and a stats panel on click", 7),
-    "event_explorer": ("every action and run, filtered by team, player, type, phase and time, with the momentum chart",
-                       5),
     "pipeline_lineage": ("the Dagster asset graph and the dbt lineage of every Gold table", 8),
     "sources_limits": ("SkillCorner open data, 1 Hz tracking, estimated positions, no expected goals", 8),
-    "team_analysis": ("team shape, pressing, build-up, attack side and space control", 5),
-    "physical_fatigue": ("who faded: distance in the first 15 against the last 5 minutes on the pitch", 5),
     "live_match": ("the 5-minute stats of Spark Streaming (possession, distance, top speed, pressing)", 6),
 }
 

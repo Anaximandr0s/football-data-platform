@@ -264,11 +264,12 @@ def gold_db(path: Path, mutate=None) -> None:
              "distance_to_goal_m", "score_home_after", "score_away_after"],
             ints=["ts", "period", "shirt_number", "score_home_after", "score_away_after"]),
         "gold_player_5min": df(
-            [("mx", "H01", "HOME", 0, 300, 3, 0.01, 5.6, 1, 26.0, 1, 1, 1, 0, 0, 0),
-             ("mx", "A01", "AWAY", 0, 300, 3, 0.01, 5.0, 0, 10.0, 0, 1, 0, 0, 0, 0)],
-            ["match_id", "player_id", "team_id", "window_start_ts", "window_end_ts", "tracked_seconds", "coverage",
-             "distance_m", "sprint_seconds", "max_speed_kmh", "passes", "shots", "goals", "tackles", "fouls", "pressures"],
-            ints=["window_start_ts", "window_end_ts"],
+            [("mx", "H01", "HOME", 0, 1, "0-5", 0, 300, 300, 3, 0.01, 5.6, 1, 26.0, 1, 1, 1, 0, 0, 0),
+             ("mx", "A01", "AWAY", 0, 1, "0-5", 0, 300, 300, 3, 0.01, 5.0, 0, 10.0, 0, 1, 0, 0, 0, 0)],
+            ["match_id", "player_id", "team_id", "window_index", "period", "window_label", "window_start_ts",
+             "window_end_ts", "window_seconds", "tracked_seconds", "coverage", "distance_m", "sprint_seconds",
+             "max_speed_kmh", "passes", "shots", "goals", "tackles", "fouls", "pressures"],
+            ints=["window_index", "period", "window_start_ts", "window_end_ts", "window_seconds"],
             bigs=["tracked_seconds", "sprint_seconds", "passes", "shots", "goals", "tackles", "fouls", "pressures"]),
     }
     tables.update(matchlens_tables())
@@ -290,9 +291,10 @@ def typed(rows: list[dict], types: dict) -> pd.DataFrame:
 def matchlens_tables() -> dict:
     """Healthy rows of the MatchLens tables, consistent with the six tables above (HOME 1-0, one HOME pass)."""
     i32, i64, f64 = "int32", "int64", "float64"
-    window = {"window_index": i32, "window_start_ts": i32, "window_end_ts": i32}
+    window = {"window_index": i32, "period": i32, "window_start_ts": i32, "window_end_ts": i32, "window_seconds": i64}
     timeline = typed([
-        dict(match_id="mx", team_id=t, window_index=0, window_start_ts=0, window_end_ts=300, passes=p, final_third_passes=0,
+        dict(match_id="mx", team_id=t, window_index=0, period=1, window_label="0-5", window_start_ts=0, window_end_ts=300,
+             window_seconds=300, passes=p, final_third_passes=0,
              field_tilt=None, possession_seconds=1, known_seconds=2, possession_share=0.5, possession_greyed=True,
              shots=1, goals=g, defensive_actions=0, xthreat_successful_passes=x, score_home_end=1, score_away_end=0)
         for t, p, g, x in (("HOME", 1, 1, 0.05), ("AWAY", 0, 0, 0.0))],
@@ -319,7 +321,8 @@ def matchlens_tables() -> dict:
                    for t in ("HOME", "AWAY") for ph in ("in_possession", "out_of_possession", "unknown")],
                   {"seconds_used": i64})
     pressing = typed([
-        dict(match_id="mx", team_id=t, window_index=0, window_start_ts=0, window_end_ts=900, defensive_actions=0,
+        dict(match_id="mx", team_id=t, window_index=0, period=1, window_label="0-15", window_start_ts=0, window_end_ts=900,
+             window_seconds=900, defensive_actions=0,
              opponent_passes=op, ppp=ppp, defensive_actions_own_third=0, defensive_actions_middle_third=0,
              defensive_actions_final_third=0, high_press_share=None)
         for t, op, ppp in (("HOME", 0, None), ("AWAY", 1, 0.0))],
@@ -341,7 +344,8 @@ def matchlens_tables() -> dict:
         for pid, t, sn, pos in (("H01", "HOME", "H.", "CM"), ("A01", "AWAY", "A.", "ST"))],
         {"start_ts": i32, "end_ts": i32})
     space = typed([
-        dict(match_id="mx", team_id=t, window_index=0, window_start_ts=0, window_end_ts=300, seconds_used=3,
+        dict(match_id="mx", team_id=t, window_index=0, period=1, window_label="0-5", window_start_ts=0, window_end_ts=300,
+             window_seconds=300, seconds_used=3,
              space_share=s, seconds_in_possession=1, space_share_in_possession=s_in, seconds_out_of_possession=1,
              space_share_out_of_possession=s_out, seconds_unknown=1, space_share_unknown=s, detected_share=0.67)
         for t, s, s_in, s_out in (("HOME", 0.55, 0.6, 0.5), ("AWAY", 0.45, 0.5, 0.4))],

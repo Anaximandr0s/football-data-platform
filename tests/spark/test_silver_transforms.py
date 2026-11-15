@@ -103,6 +103,24 @@ def test_null_speed_stays_null_and_only_above_25_is_a_sprint(spark, players, mat
     assert out[2]["speed_kmh"] == 25.0   # value untouched
 
 
+def test_a_speed_above_40_becomes_null_and_is_no_sprint(spark, players, matches):
+    rows = [("H01", 1, 1, 10.0, 10.0, 40.0), ("H01", 2, 1, 10.0, 10.0, 52.5)]
+    out = by_ts(transforms.clean_tracking(tracking(spark, rows), players, matches))
+    assert out[1]["speed_kmh"] == 40.0 and out[1]["is_sprint"] is True        # 40 is still possible
+    assert out[2]["speed_kmh"] is None and out[2]["is_sprint"] is False       # a jump from an estimated position
+
+
+def test_evaluate_counts_the_nulled_speeds_against_the_manifest():
+    nulled = _metrics(tracking={**_metrics()["tracking"], "speed_null": 5, "speed_over_max_bronze": 2,
+                                "speed_max": 39.0})
+    assert all(ok for _, ok, _ in checks.evaluate(nulled, MANIFEST))
+    lost = _metrics(tracking={**_metrics()["tracking"], "speed_null": 4, "speed_over_max_bronze": 2})
+    assert [n for n, ok, _ in checks.evaluate(lost, MANIFEST) if not ok] == [
+        "tracking: null speeds = manifest nulls + bronze speeds above 40 km/h (set to null)"]
+    fast = _metrics(tracking={**_metrics()["tracking"], "speed_max": 41.0})
+    assert [n for n, ok, _ in checks.evaluate(fast, None) if not ok] == ["tracking: no speed above 40 km/h"]
+
+
 def test_is_after_gap_marks_the_first_second_after_missing_seconds_only(spark, players, matches):
     rows = [("H01", 0, 1, 1.0, 1.0, None), ("H01", 1, 1, 1.0, 1.0, 1.0), ("H01", 2, 1, 1.0, 1.0, 1.0),
             ("H01", 5, 1, 1.0, 1.0, None), ("H01", 6, 1, 1.0, 1.0, 1.0),
