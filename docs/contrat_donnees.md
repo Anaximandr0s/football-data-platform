@@ -86,7 +86,7 @@ score for both matches); `run` from `off_ball_run` rows. `passing_option` rows a
 `match_id` (string), `ts` (int32), `period` (int8), `x`, `y`, `z` (float64, metres; `z` = height), `possession` (string,
 `HOME`, `AWAY` or null when the ball is dead or nobody controls it; from the tracking frame's `possession.group`).
 Only seconds where the source has a ball position exist, so possession known in a second without a ball position is
-not kept (55 seconds in m001, all of them gap seconds without any player either).
+not kept (55 seconds in m001, 50 in m002, all of them gap seconds without any player either; section 7).
 
 ### players: one row = one player of the match (starters and substitutes who played)
 
@@ -160,10 +160,15 @@ read the column as null, and deduplication keeps the latest copy. A match must b
 | By type | pass 837, pressure 835, tackle 36, shot 21, foul 7, goal 5, run 535 | pass 912, pressure 890, tackle 35, shot 29, foul 11, goal 1, run 498 |
 | Detected tracking rows | 56,390 (57.9 %) | 61,162 (58.0 %) |
 | Ball seconds with possession (HOME / AWAY) | 3,232 (1,277 / 1,955) | 3,510 (2,208 / 1,302) |
+| Possession seconds lost (known limit) | 55 of 3,287 (1.7 %) | 50 of 3,560 (1.4 %) |
 | Goals home-away | 2-3 (= real score) | 0-1 (= real score) |
 | Rows outside the pitch | 735 (0.75%) | 618 |
 | Rows with null speed | 1,386 | 1,166 |
 | Rows above 40 km/h | 0 | 0 |
+
+**Known limit: lost possession seconds.** The source knows which team has the ball in some seconds where it has no ball
+position and no player (camera off the pitch). `ball` has no row for those seconds, so their possession is lost: 55
+seconds in m001, 50 in m002. Possession shares computed from `ball` cover the other 98 % of the possession time.
 
 Gaps are a property of the source, not of a match: the 20 matches of the SkillCorner repository have between 66% and
 81% coverage (details in `data-sources.md`).

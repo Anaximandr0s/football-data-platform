@@ -23,8 +23,9 @@ group means the ball is dead or nobody controls it. Possession % per team and pe
 our tables today: ingestion has to carry it (section 6).
 
 **Stable player id.** `match.json` gives each player a SkillCorner `id` (plus `team_player_id`). 13 Brisbane Roar
-players appear in both matches with the same `id`, name and shirt number, and no player has the same name and team
-under two ids. Our `player_id` (`H01`, `A07`...) is local to a match, so linking needs the source id carried into
+players are in both squads with the same `id`, name and shirt number, and no player has the same name and team under
+two ids. 11 of them played both matches (Acton and Zabala were unused substitutes twice), and only players who played
+are in `players`: F8 has 11 players to follow. Our `player_id` (`H01`, `A07`...) is local to a match, so linking needs the source id carried into
 `players` (section 6).
 
 **Detected or extrapolated.** Each player position has `is_detected`. In m001 only 57.9 % of the player-seconds are
@@ -90,7 +91,7 @@ team won or lost. Every metric has one plain sentence under it, numbers are roun
 | F5 | Who was the fastest? | Top speed (approximate) | `max(speed_kmh)` per player, shown as "about N km/h" | Player cards, Live | live (per 5 min) + post |
 | F6 | Who made the team play? | Pass network hub | `involvement(p) = (successful passes made by p + successful passes received by p) / (2 x successful passes of the team)`; hub = player with the highest `involvement` in their team | Passing | post |
 | F7 | Why did we win or lose? | Three biggest differences between the teams | for each team metric `m` in {possession %, field tilt, shots + goals, progressive passes, defensive actions per opponent pass, dpm of outfield players}: `gap = (m_T - m_O) / ((m_T + m_O) / 2)`; show the 3 largest `abs(gap)` as sentences ("Brisbane had 63 % of the ball") | Match story | post |
-| F8 | How is my player doing across matches? | The player's card in each match, side by side | `gold_player_card` rows sharing one `source_player_id`, one column per match; scores stay ranked within their own match, and each column names the opponent | Player cards | post |
+| F8 | How is my player doing across matches? | The player's card in each match, side by side | `gold_player_card` rows sharing one `source_player_id` (11 Brisbane Roar players in m001 and m002), one column per match; scores stay ranked within their own match, and each column names the opponent | Player cards | post |
 
 F7 states differences, not causes: the sentences say "had more", never "won because". F8 compares ranks, not raw
 values: a score of 80 means "better than 80 % of the eligible players of that match", and the opponent differs.
