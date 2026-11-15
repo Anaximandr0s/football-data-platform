@@ -83,3 +83,102 @@ models:
     columns:
       - name: coverage
         data_tests: [not_null]
+
+  # MatchLens tables (docs/product.md, section 7). Formulas: docs/product.md; columns: docs/contrat_donnees.md 10.3.
+  - name: gold_match_timeline
+    description: >
+      GRAIN: one row per team per 5-minute window per match, every window from 0 to p2_end_ts // 300 (F1, F2, F7, E2).
+      possession_greyed = fewer than 60 seconds with a known owner in the window.
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [match_id, team_id, window_index]
+    columns:
+      - name: team_id
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["HOME", "AWAY"]
+      - name: possession_greyed
+        data_tests: [not_null]
+  - name: gold_player_card
+    description: >
+      GRAIN: one row per player per match (F3, F4, F5, F6, F8). Scores rank the eligible players (outfield, at least 20
+      tracked minutes) of one match; other players have no scores.
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [match_id, player_id]
+    columns:
+      - name: source_player_id
+        data_tests: [not_null]
+      - name: is_eligible
+        data_tests: [not_null]
+      - name: player_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('stg_players')
+                field: player_id
+  - name: gold_team_shape
+    description: "GRAIN: one row per team per phase per match (C1, C2): means over tracked seconds, outfield players."
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [match_id, team_id, phase]
+    columns:
+      - name: phase
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["in_possession", "out_of_possession", "unknown"]
+  - name: gold_pressing
+    description: "GRAIN: one row per team per 15-minute window per match, every window from 0 to p2_end_ts // 900 (C3)."
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [match_id, team_id, window_index]
+  - name: gold_team_build_up
+    description: "GRAIN: one row per team per match (C4, C5)."
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [match_id, team_id]
+  - name: gold_player_fatigue
+    description: "GRAIN: one row per player per match (C6). is_eligible carries the thresholds of C6; the others are greyed out."
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [match_id, player_id]
+    columns:
+      - name: is_eligible
+        data_tests: [not_null]
+  - name: gold_space_control
+    description: "GRAIN: one row per team per 5-minute window with tracked seconds per match (S1)."
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [match_id, team_id, window_index]
+  - name: gold_team_profile
+    description: "GRAIN: one row per team per match (C7, F7): whole-match team metrics and the F7 gaps."
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [match_id, team_id]
+  - name: gold_events
+    description: "GRAIN: one row per event, runs included (E1, E2)."
+    columns:
+      - name: event_id
+        data_tests: [unique, not_null]
+      - name: third
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["own", "middle", "final"]
+      - name: lane
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["left", "centre", "right"]
