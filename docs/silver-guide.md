@@ -71,7 +71,8 @@ is_sprint, was_corrected` (+ `is_after_gap` if you want it). The final shape is 
 
 - Every second that exists has exactly 22 tracking rows per match.
 - Positions are inside 105 x 68 in Silver (before correction you will find the rows from step 5).
-- `speed_kmh` <= 40 (bronze has none above; null is allowed).
+- `speed_kmh` <= 40 (null is allowed). Bronze can hold a few faster seconds, jumps from an estimated position (m003: 4);
+  Silver sets them to null.
 - Event types are in {pass, shot, goal, tackle, foul, pressure, run}.
 - Goals in events = `home_score + away_score` of `matches`.
 - Row counts after deduplication equal the table in section 2.

@@ -211,7 +211,7 @@ pull request, and warn the Gold owner. Rules and decisions: [`silver-guide.md`](
 | `team_id` on tracking | absent | added from `players` (never null) |
 | Attack direction | not normalised | **tracking and ball: HOME attacks toward x = 105 in both halves** (period mirrored where `home_side_pN` is `right_to_left`: x = 105 - x, y = 68 - y, both teams). **Events: per team** (see 9.3) |
 | Positions outside the pitch | kept | **tracking only**: clipped to x in [0, 105], y in [0, 68], with `was_corrected` = true on the rows that were outside. Ball and events are not clipped (the ball really leaves the pitch, a shot can end behind the goal line) |
-| `speed_kmh` | derived, may be null | unchanged, null stays null (never 0); not recomputed after clipping |
+| `speed_kmh` | derived, may be null | null stays null (never 0); a speed above 40 km/h becomes null (a jump from an estimated position: 4 seconds in m003, none in m001, m002, m004); not recomputed after clipping |
 | Gaps (missing seconds) | present | present: nothing is invented. `is_after_gap` marks the first second after one |
 | `period` type | int8 | int32 |
 
@@ -230,7 +230,7 @@ halves. In `events` the source already gives the acting team attacking toward x 
 | period | int32 | no | 1 or 2 |
 | ts | int32 | no | second since kick-off |
 | x, y | float64 | no | metres, 2 decimals, inside the pitch (clipped), Silver frame |
-| speed_kmh | float64 | yes | as in bronze: distance to the position at `ts - 1`, times 3.6. Null on the first second of a stretch. Not capped, but never above 40 on the delivered matches |
+| speed_kmh | float64 | yes | as in bronze: distance to the position at `ts - 1`, times 3.6. Null on the first second of a stretch, and above 40 km/h (impossible for a player: Silver sets it to null, its gate counts them against bronze) |
 | is_sprint | bool | no | `speed_kmh > 25`; false when the speed is null |
 | was_corrected | bool | no | the position delivered by bronze was outside 105 x 68 (before clipping) |
 | is_after_gap | bool | no | the player's previous tracked second is more than 1 s earlier. False for a player's first row (nothing is missing before it) |

@@ -10,7 +10,7 @@
 | FOO-06 | Streamlit pitch with live positions and score | OBL | both | done: page Live match (pitch, score from goal events, clock, possession, last event, team shape of the current second, camera-gap message); 8 state tests + 3 headless page tests | `make app`, then `make replay MATCH=m001 SPEED=5` while the page is open: on 2026-11-15 it showed 1-0 after the first goal, 2-3 after the fifth ([screenshot](img/live_match_m001_goal5.png)), "No tracking: camera off the pitch" inside the 143 s gap, and 2-3 at full time; `python -m pytest tests/app` |
 | FOO-07 | Streamlit heatmap of a player and shot maps | OBL | both | done: Player page (heatmap, shots and passes on the pitch component), Team analysis (shot map, pass network), Live heatmap so far; headless tests; seen in a browser on 2026-11-15 ([Player page](img/player_fan_m001.png), [coach mode](img/player_coach_m001.png), [Live](img/live_player_selected_m001.png)) | `make app`, Player page and Live match with a player clicked; `python -m pytest tests/app` |
 | FOO-08 | 5-minute rolling stats with Spark Structured Streaming | OPT | Silver / Gold | todo | |
-| FOO-09 | Compare two matches, or cluster player profiles | OPT | Silver / Gold | in progress: team-level compare page done (clustering not done) | `make app`, page Compare matches (to add a screenshot) |
+| FOO-09 | Compare two matches, or cluster player profiles | OPT | Silver / Gold | done for comparing (clustering not done): Compare matches shows one team in any of its stored matches, venue and opponent named, with sentences checked against Gold | `make app`, Compare matches: Brisbane Roar at home (m002) and away (m003) against Perth Glory ([screenshot](img/compare_brisbane_perth.png)) |
 
 Status: todo · in progress · done (with proof: command, file or screenshot).
 ## External check against official sources
@@ -25,5 +25,8 @@ Goal minutes come from `clock.py` (football clock: the second half restarts at 4
 | m001 possession | Brisbane Roar 40 %, Adelaide United 60 % | [FBref match report](https://fbref.com/en/matches/9d2e447a/Brisbane-Roar-Adelaide-United): 39 % / 61 % | yes, within 1 point |
 | m002 Brisbane Roar 0-1 Perth Glory, goal | 69' Williams | [Brisbane Roar match wrap](https://brisbaneroar.com.au/news/alm-r9-match-wrap-brisbane-roar-0-1-perth-glory/), [AAP](https://aapnews.aap.com.au/news/glory-defeat-roar-to-end-18-game-alm-winless-streak): 69' (Perth Glory's own report: 70') | yes |
 | m002 possession | Brisbane Roar 63 %, Perth Glory 37 % | [FBref match report](https://aws.fbref.com/en/matches/f328e2b6/Brisbane-Roar-Perth-Glory-December-21-2024-A-League-Men): 64 % for Brisbane | yes, within 1 point |
+
+| m003 Perth Glory 1-3 Brisbane Roar (SkillCorner 2007448), goals | 7' Amos, 37' Abubakar, 51' Klein, 89' Klein | [Brisbane Roar match wrap](https://brisbaneroar.com.au/news/alm-r23-match-wrap-perth-glory-1-3-brisbane-roar): 7', 37', 50', 89' | 3 of 4 exact; Klein's first one minute apart (other reports give 51'). The second half's first data second (ts 2856) is 3 s after `match.json`'s kick-off frame (28540 = ts 2853): it changes no minute here |
+| m004 Sydney FC 4-1 Adelaide United (SkillCorner 1996435), goals | 36' Lolley, 46' Klimala, 49' Pierias, 75' Segecic, 83' Cáceres | [AAP](https://aapnews.aap.com.au/news/lolley-hits-sweet-spot-as-sydney-slice-adelaide-apart), [Adelaide United report](https://adelaideunited.com.au/?p=329213): 36', 46', 49', 75', 83' | yes, 5 of 5 |
 
 Tested in `tests/app/test_clock.py` (m001 goals, stoppage time, the running clock, 5-minute windows).
