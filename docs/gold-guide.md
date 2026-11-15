@@ -15,7 +15,7 @@ small, one row per business grain, and read by Streamlit (FOO-06, FOO-07, FOO-09
 ```mermaid
 flowchart LR
     S[(Iceberg lake.silver.*)] -->|read| ST[dbt staging<br/>views]
-    ST --> M[dbt marts<br/>6 gold tables]
+    ST --> M[dbt marts<br/>15 gold tables]
     M --> D[(DuckDB file<br/>data/football.duckdb)]
     M -->|export Parquet| G[(MinIO gold)]
     G --> A[Streamlit]
@@ -147,7 +147,7 @@ dbt/
   Dockerfile               # dbt-core + dbt-duckdb image of the `dbt` and `duckdb` services
   macros/                  # silver_table (how Silver is read), export_gold (Parquet to s3://gold)
   models/staging/          # stg_tracking, stg_events, stg_ball, stg_players, stg_matches + schema.yml
-  models/marts/            # the 6 gold_* models + schema.yml (grain, tests, descriptions)
+  models/marts/            # the 15 gold_* models + schema.yml (grain, tests, descriptions)
   tests/                   # unique_combination (generic) + 5 assert_*.sql reconciliation tests
   scripts/duckdb_query.py  # read-only SQL on the Gold file (make gold-sql)
 ```
@@ -181,7 +181,7 @@ The m002 values come from your own run (the guide gives: 1 goal, 0-1).
 ## 7. Dagster
 
 Assets in order: bronze (exists as `bronze_writer`) -> `silver` (runs `python -m spark.silver.bronze_to_silver --match <id>`)
--> `dbt` (`dagster-dbt`, the 6 gold models) -> Soda asset checks (a failed check blocks what follows) -> post-match report.
+-> `dbt` (`dagster-dbt`, the gold models) -> Soda asset checks (a failed check blocks what follows) -> post-match report.
 Sensor: the match is over when the largest `ts` of the match in bronze reaches `matches.p2_end_ts`; it triggers Silver, then
 Gold, then the report. The Silver job is idempotent (it replaces the match partition) and so are the incremental Gold models,
 so retries and re-runs are safe. At least one schedule, retries on the Spark and dbt steps (see `dagster/README.md`).
