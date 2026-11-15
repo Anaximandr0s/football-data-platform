@@ -20,7 +20,7 @@ SILVER_TABLES = ["tracking", "events", "ball", "players", "matches"]
 GOLD_TABLES = ["gold_player_match_stats", "gold_team_match_stats", "gold_zone_occupancy",
                "gold_pass_network", "gold_shots", "gold_player_5min", "gold_match_timeline", "gold_player_card",
                "gold_team_shape", "gold_pressing", "gold_team_build_up", "gold_player_fatigue", "gold_space_control",
-               "gold_team_profile", "gold_events"]
+               "gold_team_profile", "gold_events", "gold_match_library"]
 
 
 def test_every_table_has_a_checks_block_with_a_schema_check():
@@ -374,7 +374,13 @@ def matchlens_tables() -> dict:
             ("mx-r1", 1, "H03", None, "HOME", "run", 60.0, 30.0, 80.0, 20.0, "n/a", 0.1, "behind", True, False, "middle"))],
         {"ts": i32, "period": i32, "shirt_number": i32, "xthreat": f64, "dangerous": "boolean", "targeted": "boolean",
          "received": "boolean"})
-    return {"gold_match_timeline": timeline, "gold_player_card": card, "gold_team_shape": shape,
+    library = typed([dict(match_id="mx", home_team="Home FC", away_team="Away FC", home_team_short="Home",
+                          away_team_short="Away", home_color="#ff0000", away_color="#0000ff", home_score=1, away_score=0,
+                          kickoff_utc="2026-01-01T00:00:00Z", match_date=pd.Timestamp("2026-01-01").date(),
+                          competition="Test", season="2026", round="1", stadium="Park", match_seconds=3,
+                          tracked_seconds=3, tracked_share=1.0)],
+                    {"home_score": i32, "away_score": i32, "match_seconds": i32, "tracked_seconds": i64})
+    return {"gold_match_library": library, "gold_match_timeline": timeline, "gold_player_card": card, "gold_team_shape": shape,
             "gold_pressing": pressing, "gold_team_build_up": build_up, "gold_player_fatigue": fatigue,
             "gold_space_control": space, "gold_team_profile": profile, "gold_events": events}
 

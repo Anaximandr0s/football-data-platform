@@ -607,3 +607,32 @@ checks for gold_events:
         join (select match_id, sum(passes + shots + goals + tackles + fouls + pressures) as actions
               from gold_player_match_stats group by 1) s using (match_id)
         where e.actions != s.actions
+
+checks for gold_match_library:
+  - schema:
+      name: gold_match_library follows the data contract
+      fail:
+        when required column missing: [match_id, home_team, away_team, home_team_short, away_team_short, home_color, away_color, home_score, away_score, kickoff_utc, match_date, competition, season, round, stadium, match_seconds, tracked_seconds, tracked_share]
+        when wrong column type:
+          match_id: VARCHAR
+          home_score: INTEGER
+          away_score: INTEGER
+          match_date: DATE
+          match_seconds: INTEGER
+          tracked_seconds: BIGINT
+          tracked_share: DOUBLE
+  - row_count > 0
+  - duplicate_count(match_id) = 0:
+      name: one library row per match
+  - missing_count(match_date) = 0
+  - failed rows:
+      name: the tracked share is between 0 and 1
+      fail condition: tracked_share < 0 or tracked_share > 1 or tracked_seconds > match_seconds
+  - failed rows:
+      name: the library score is the score of the team table
+      fail query: |
+        select l.match_id, l.home_score, l.away_score, h.score as home_team_score, a.score as away_team_score
+        from gold_match_library l
+        join gold_team_match_stats h on h.match_id = l.match_id and h.team_id = 'HOME'
+        join gold_team_match_stats a on a.match_id = l.match_id and a.team_id = 'AWAY'
+        where l.home_score != h.score or l.away_score != a.score
