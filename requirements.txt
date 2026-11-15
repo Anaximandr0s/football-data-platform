@@ -10,6 +10,9 @@ boto3>=1.43,<2
 # --- Silver: Spark job (needs Java 17+; the S3A and Iceberg jars are downloaded at the first run) ---
 pyspark>=4.0,<4.1
 
+# --- Gold: dbt + DuckDB (the Docker image of `make gold` pins its own copy, see dbt/Dockerfile) ---
+dbt-duckdb>=1.11,<1.12
+
 # --- Dev tools: lint, tests, hooks ---
 ruff>=0.17
 pytest>=9.2

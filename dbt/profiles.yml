@@ -1,0 +1,23 @@
+# Committed on purpose: no secret inside, everything comes from environment variables (.env / docker-compose).
+#   target dev   = DuckDB file only, no extension: local files (tests, silver_reader=parquet)
+#   target minio = httpfs + iceberg extensions, S3 settings for MinIO (used by `make gold`)
+football:
+  target: "{{ env_var('DBT_TARGET', 'dev') }}"
+  outputs:
+    dev:
+      type: duckdb
+      path: "{{ env_var('GOLD_DUCKDB_PATH', '../data/football.duckdb') }}"
+      threads: 4
+    minio:
+      type: duckdb
+      path: "{{ env_var('GOLD_DUCKDB_PATH', '../data/football.duckdb') }}"
+      threads: 4
+      extensions: [httpfs, iceberg]
+      settings:
+        s3_endpoint: "{{ env_var('GOLD_S3_ENDPOINT', 'localhost:9000') }}"   # host:port, no http://
+        s3_use_ssl: false
+        s3_url_style: path
+        s3_region: us-east-1
+        s3_access_key_id: "{{ env_var('MINIO_ROOT_USER', '') }}"
+        s3_secret_access_key: "{{ env_var('MINIO_ROOT_PASSWORD', '') }}"
+        unsafe_enable_version_guessing: true   # iceberg_scan on a Hadoop-catalog folder (version-hint.text)

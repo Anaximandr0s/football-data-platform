@@ -1,0 +1,85 @@
+version: 2
+
+# Gold. Each model states its grain; data_tests check the grain, the keys and the vocabularies.
+# Cross-checks against Silver (counts, goals = score...) are in tests/assert_*.sql.
+models:
+  - name: gold_player_match_stats
+    description: >
+      GRAIN: one row per player per match (FOO-04). Distance, speed and sprints cover tracked seconds only and come
+      from 1 Hz positions: approximate. shots counts type 'shot' only; the shot map is shots + goals (see gold_shots).
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [match_id, player_id]
+    columns:
+      - name: team_id
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["HOME", "AWAY"]
+      - name: distance_m
+        description: "Sum of speed_kmh / 3.6 over tracked seconds (null speeds skipped)."
+        data_tests: [not_null]
+      - name: sprint_count
+        description: "Sprint efforts: consecutive sprint seconds (> 25 km/h) count as one."
+      - name: player_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('stg_players')
+                field: player_id
+  - name: gold_team_match_stats
+    description: "GRAIN: one row per team per match. Sums of gold_player_match_stats; possession is not in the source."
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [match_id, team_id]
+    columns:
+      - name: team_id
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["HOME", "AWAY"]
+      - name: match_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('stg_matches')
+                field: match_id
+  - name: gold_zone_occupancy
+    description: "GRAIN: one row per player per zone per match (grid zones_x x zones_y, Silver frame). Tracked seconds only."
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [match_id, player_id, zone_id]
+    columns:
+      - name: zone_id
+        data_tests: [not_null]
+  - name: gold_pass_network
+    description: "GRAIN: one row per passer, receiver and match (passes with a known receiver)."
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [match_id, passer_id, receiver_id]
+  - name: gold_shots
+    description: "GRAIN: one row per shot or goal. Goal attacked: x = 105 for HOME, x = 0 for AWAY."
+    columns:
+      - name: event_id
+        data_tests: [unique, not_null]
+      - name: type
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["shot", "goal"]
+      - name: distance_to_goal_m
+        data_tests: [not_null]
+  - name: gold_player_5min
+    description: "GRAIN: one row per player per 5-minute window of the match clock per match. coverage = tracked seconds / 300."
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [match_id, player_id, window_start_ts]
+    columns:
+      - name: coverage
+        data_tests: [not_null]

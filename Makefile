@@ -1,7 +1,7 @@
 # Shortcuts (Linux/macOS/WSL). Without make, run the plain commands from README.md.
 # Docker needs sudo on your machine?  make up DOCKER="sudo docker"
 .DEFAULT_GOAL := help
-.PHONY: help up down reset ps logs topics counts smoke lint test data bronze replay check silver
+.PHONY: help up down reset ps logs topics counts smoke lint test data bronze replay check silver gold gold-sql
 
 DOCKER ?= docker
 COMPOSE = $(DOCKER) compose
@@ -60,3 +60,9 @@ check: ## Compare bronze row counts with the prepared match
 
 silver: ## Bronze -> Silver on the Spark cluster: make silver MATCH="m001 m002" [ARGS=--dry-run]
 	$(COMPOSE) --profile jobs run --rm silver --match $(MATCH) $(ARGS)
+
+gold: ## Silver -> Gold with dbt + DuckDB in Docker (models, tests, export to s3://gold): make gold [ARGS="--select gold_shots"]
+	$(COMPOSE) --profile jobs run --rm dbt build --vars '{export_gold: true}' $(ARGS)
+
+gold-sql: ## Query the Gold DuckDB file (read-only): make gold-sql Q="select * from gold_shots limit 5"
+	$(COMPOSE) --profile jobs run --rm duckdb "$(Q)"

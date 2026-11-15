@@ -17,6 +17,7 @@ volumes:
   minio-data:
   kafka-data:
   spark-ivy:   # Maven jars of the Silver job (S3A, Iceberg): downloaded once
+  duckdb-ext:  # DuckDB extensions (httpfs, iceberg) of the Gold job: downloaded once
 
 services:
   # --- MinIO: S3-compatible storage (buckets = bronze / silver / gold) ---------
@@ -203,3 +204,40 @@ services:
       - ""
     command: ["--match", "m001"]
     mem_limit: 1536m
+
+  # --- Gold: dbt + DuckDB (profile "jobs": run on demand, not started by `docker compose up`) ---
+  # DuckDB is an embedded engine, there is no server: it runs inside these two containers and keeps the Gold tables
+  # in the file data/football.duckdb (also exported as Parquet to the MinIO bucket gold).
+  #   make gold                       dbt build: staging + 6 Gold tables + tests + export to s3://gold
+  #   make gold-sql Q="select ..."    query the Gold file (read-only)
+  dbt:
+    profiles: ["jobs"]
+    build: ./dbt
+    image: football-dbt:local
+    working_dir: /app/dbt
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      DBT_TARGET: minio                     # httpfs + iceberg extensions, S3 settings (dbt/profiles.yml)
+      GOLD_DUCKDB_PATH: /app/data/football.duckdb
+      GOLD_S3_ENDPOINT: minio:9000          # host:port for DuckDB (no http://)
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - ./:/app
+      - duckdb-ext:/root/.duckdb
+    command: ["build", "--vars", "{export_gold: true}"]
+    mem_limit: 1g
+
+  duckdb:
+    profiles: ["jobs"]
+    build: ./dbt
+    image: football-dbt:local
+    working_dir: /app
+    entrypoint: ["python", "/app/dbt/scripts/duckdb_query.py"]
+    environment:
+      GOLD_DUCKDB_PATH: /app/data/football.duckdb
+    volumes:
+      - ./:/app
+    mem_limit: 512m

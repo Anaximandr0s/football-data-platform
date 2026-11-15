@@ -33,8 +33,9 @@ Details: [`docs/architecture.md`](docs/architecture.md). The ingestion part: [`i
 | Source | download and convert two real matches (m001, m002) | done |
 | Ingestion | replay into Kafka at x1..x60, 5 topics | done |
 | Bronze | MinIO, partitioned by match, counts verified | done |
-| Silver | Spark + Iceberg: cleaning, grain player x second | **to do** |
-| Gold + checks | dbt + DuckDB, Soda | to do |
+| Silver | Spark + Iceberg: cleaning, grain player x second | code and unit tests done, to run on the stack ([`spark/silver/README.md`](spark/silver/README.md)) |
+| Gold | dbt + DuckDB: 6 tables, tests, export to `s3://gold` | code and tests done, to run on the stack ([`dbt/README.md`](dbt/README.md)) |
+| Checks | Soda | to do |
 | Streaming stats (optional) | 5-minute windows | to do |
 | Orchestration | Dagster | to do |
 | Presentation | Streamlit + mplsoccer | to do |
@@ -52,7 +53,7 @@ cp .env.example .env                      # then change MINIO_ROOT_PASSWORD
 python -m venv .venv && source .venv/bin/activate    # or: uv venv .venv
 pip install -r requirements.txt           # or: uv pip install -r requirements.txt
 
-make up                                   # MinIO + Kafka + Kafka UI, buckets and topics created
+make up                                   # MinIO + Kafka + Kafka UI + Spark cluster, buckets and topics created
 make ps
 make smoke                                # must end with ALL OK
 make lint
@@ -65,6 +66,10 @@ make replay MATCH=m001                    # terminal 2: replay at x60, about 100
 make replay MATCH=m002
 make check MATCH=m001                     # bronze row counts must say OK
 make check MATCH=m002
+
+make silver MATCH="m001 m002"            # Silver on the Spark cluster (ARGS=--dry-run to only check)
+make gold                                # Gold: dbt + DuckDB, tests, export to s3://gold
+make gold-sql Q="select * from gold_shots limit 5"
 ```
 
 | Service | URL | Notes |
@@ -72,10 +77,11 @@ make check MATCH=m002
 | MinIO console | http://localhost:9001 | user and password from `.env` |
 | MinIO S3 API | http://localhost:9000 | buckets `bronze`, `silver`, `gold` |
 | Kafka UI | http://localhost:8081 | topics, messages, consumer groups |
+| Spark master UI | http://localhost:8082 | cluster for Silver (`spark://spark-master:7077` inside Docker) |
 | Kafka from your machine | `localhost:29092` | Python scripts and Spark outside Docker |
 | Kafka from containers | `kafka:9092` | |
 
-Other commands: `make help` · `make down` (keep data) · `make reset` (**deletes all data**) ·
+Other commands: `make silver` · `make gold` · `make help` · `make down` (keep data) · `make reset` (**deletes all data**) ·
 `make counts` (messages per topic) · `make lint` · `make test`.
 
 Troubleshooting:
@@ -87,11 +93,11 @@ Troubleshooting:
 | Folder | Content | State |
 |---|---|---|
 | `ingestion/` | download, convert, replay into Kafka, bronze writer ([guide](ingestion/README.md)) | done |
-| `tests/<part>/` | Python tests, one folder per part (`tests/ingestion/` today) | ingestion done |
+| `tests/<part>/` | Python tests, one folder per part (`tests/ingestion/`, `tests/spark/`, `tests/dbt/`) | ingestion, Silver and Gold done |
 | `scripts/` | `smoke_test.py`: health of the Docker stack | done |
 | `docs/` | contract, guides, ADRs | in progress |
-| `spark/` | Silver and streaming jobs | to do (teammate) |
-| `dbt/` | Gold models and dbt tests | to do |
+| `spark/` | Silver job (`spark/silver/`, [guide](spark/silver/README.md)); streaming job later | Silver code done, streaming to do |
+| `dbt/` | Gold models, dbt tests, Dockerfile ([guide](dbt/README.md)) | Gold code done |
 | `soda/` | data-quality checks | to do |
 | `dagster/` | orchestration | to do |
 | `app/` | Streamlit app (`app/streamlit/`), optional 3D page (`app/web3d/`) | to do |
@@ -99,6 +105,8 @@ Troubleshooting:
 ## Documentation
 
 - **Start here (Silver and Gold): [`docs/silver-guide.md`](docs/silver-guide.md)**
+- Silver job (what it does, tables, decisions, checks): [`spark/silver/README.md`](spark/silver/README.md)
+- Gold layer (tables, definitions, tests, how to run): [`dbt/README.md`](dbt/README.md), specification in [`docs/gold-guide.md`](docs/gold-guide.md)
 - Ingestion guide (files, outputs, how to verify): [`ingestion/README.md`](ingestion/README.md)
 - Data contract (every table, column, rule): [`docs/contrat_donnees.md`](docs/contrat_donnees.md)
 - Where the data comes from and its limits: [`docs/data-sources.md`](docs/data-sources.md)

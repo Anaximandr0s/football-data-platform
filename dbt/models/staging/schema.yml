@@ -1,0 +1,51 @@
+version: 2
+
+# Staging = a copy of each Silver table (see macros/silver_table.sql for how it is read). Same columns as Silver.
+models:
+  - name: stg_tracking
+    description: "Silver tracking. Grain: player x second (tracked seconds only; missing seconds are real gaps)."
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [match_id, player_id, ts]
+    columns:
+      - name: team_id
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["HOME", "AWAY"]
+      - name: is_sprint
+        data_tests: [not_null]
+  - name: stg_events
+    description: "Silver events. Grain: one game action. Coordinates in the Silver frame (HOME attacks toward x = 105, AWAY toward x = 0)."
+    columns:
+      - name: event_id
+        data_tests: [unique, not_null]
+      - name: type
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["pass", "shot", "goal", "tackle", "foul", "pressure"]
+      - name: team_id
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["HOME", "AWAY"]
+  - name: stg_ball
+    description: "Silver ball. Grain: second. Not clipped: the ball really leaves the pitch."
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [match_id, ts]
+  - name: stg_players
+    description: "Silver players. Grain: player of a match (only players who were on the pitch)."
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [match_id, player_id]
+  - name: stg_matches
+    description: "Silver matches. Grain: match."
+    columns:
+      - name: match_id
+        data_tests: [unique, not_null]

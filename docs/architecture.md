@@ -12,7 +12,7 @@
 | Source | `data/raw`, `data/prepared` | Python (`ingestion/`) | SkillCorner files converted into 5 Parquet tables |
 | Ingestion | Kafka topics `foot-tracking`, `foot-events`, `foot-ball`, `foot-players`, `foot-matches` | Kafka (KRaft, 1 broker) | the match replayed at x1..x60 |
 | Bronze | MinIO bucket `bronze` | `ingestion/bronze_writer.py` | raw rows + Kafka metadata, partitioned by match |
-| Silver | MinIO bucket `silver` | Spark + Iceberg | cleaned, deduplicated, player x second |
+| Silver | MinIO bucket `silver` | Spark (standalone cluster in `docker-compose.yml`: `spark-master`, `spark-worker`) + Iceberg | cleaned, deduplicated, player x second |
 | Gold | MinIO bucket `gold` | dbt + DuckDB, Soda checks | statistics per player and team, zones, passes, shots |
 | Orchestration | | Dagster | Gold and post-match report when a match ends |
 | Presentation | `app/streamlit` | Streamlit + mplsoccer | live pitch, heatmaps, shot and pass maps |
@@ -30,6 +30,16 @@
 The writer buffers per (table, match) and writes a file every 10 s or 5,000 rows, so two matches replayed at the same time never mix.
 `ingest_date` (UTC day of writing) is the time partition. Delivery is at-least-once; Silver deduplicates.
 
+## Silver layout
+
+Iceberg tables `lake.silver.tracking | events | ball | players | matches` (catalog `lake`, Hadoop catalog, warehouse
+`s3://silver/warehouse`), partitioned by `match_id`. Built per match by `spark/silver/bronze_to_silver.py`:
+deduplicated on the bronze keys, sorted by (player_id, ts), `team_id` added to tracking, attack direction normalised
+(HOME attacks toward x = 105), tracking positions clipped to 105 x 68 with `was_corrected`, `is_sprint` (> 25 km/h)
+and `is_after_gap` flags. Gaps are never filled. A run replaces the partition of the match it processes (idempotent), and
+nothing is written if the counts or goals do not match the ingestion manifest. Run with `make silver MATCH=m001` (a one-shot `silver` container submits to `spark://spark-master:7077`). Details, columns and decisions:
+[`spark/silver/README.md`](../spark/silver/README.md).
+
 ## Design principles
 
 - **Bronze is raw**: ingestion changes the shape, never the values; Silver cleans ([ADR 0003](adr/0003-real-data-skillcorner.md)).
@@ -37,7 +47,13 @@ The writer buffers per (table, match) and writes a file every 10 s or 5,000 rows
 - **Idempotent and checkable**: every stage prints counts; `make check` compares bronze with the source.
 - **Simple stack**: single-broker Kafka and single-node MinIO; sizes are set in `docker-compose.yml`.
 
-## Planned Gold tables
+## Gold tables
+
+dbt-core + dbt-duckdb (`dbt/`), run by `make gold` in the `dbt` container: five staging tables (a copy of Silver, read with
+`iceberg_scan`) and six Gold tables, tested against Silver, kept in the DuckDB file `data/football.duckdb` and exported as
+Parquet to `s3://gold/<table>.parquet`. DuckDB is embedded (no server); `make gold-sql` queries the file read-only.
+Specification: [`gold-guide.md`](gold-guide.md). Guide of the code: [`dbt/README.md`](../dbt/README.md).
 
 `gold_player_match_stats` (player x match) · `gold_team_match_stats` (team x match) · `gold_zone_occupancy` (player x zone) ·
 `gold_pass_network` (passer x receiver x match) · `gold_shots` (one shot) · `gold_player_5min` (player x 5-minute window).
+
