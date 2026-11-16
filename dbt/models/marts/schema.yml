@@ -162,6 +162,23 @@ models:
       - unique_combination:
           arguments:
             columns: [match_id, team_id, window_index]
+  - name: gold_replay_frames
+    description: "GRAIN: one row per match per tracked second per object (players on the pitch, and the ball as object_id 'ball'), in the Silver frame (R1, S1)."
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [match_id, ts, object_id]
+    columns:
+      - name: object_type
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [player, ball]
+      - name: x
+        data_tests:
+          - not_null:
+              config:
+                where: "object_type = 'player'"
   - name: gold_team_profile
     description: "GRAIN: one row per team per match (C7, F7): whole-match team metrics and the F7 gaps."
     data_tests:

@@ -9,7 +9,7 @@ flowchart LR
     S[(Iceberg lake.silver.*)] -->|iceberg_scan views| R[run_checks.py<br/>DuckDB connection]
     G[(data/football.duckdb<br/>attached read-only)] -->|gold_* views| R
     C1[checks/silver.yml<br/>73 checks] --> R
-    C2[checks/gold.yml<br/>130 checks] --> R
+    C2[checks/gold.yml<br/>136 checks] --> R
     R -->|exit 0 / 1| D[Dagster: block or go on]
     R -->|data/soda/layer.json| A[dashboard: Data quality page]
 ```

@@ -47,7 +47,7 @@ def test_the_chain_runs_in_order_and_soda_blocks_what_follows(defs):
     assert [s.asset_key for s in soda_silver.check_specs] == [key]
     gold_checked = {s.asset_key.to_user_string() for s in soda_gold.check_specs}
     report = graph.get(defs.resolve_assets_def("match_report").key)
-    assert {k.to_user_string() for k in report.parent_keys} == gold_checked and len(gold_checked) == 16
+    assert {k.to_user_string() for k in report.parent_keys} == gold_checked and len(gold_checked) == 17
 
 
 def test_the_duckdb_steps_share_one_pool_and_spark_and_dbt_retry(defs):
@@ -88,10 +88,10 @@ def test_the_soda_checks_read_their_config_and_report_per_table(defs, monkeypatc
     verdict = {e.asset_key.path[-1]: e.passed for e in result.get_asset_check_evaluations()}
     assert sorted(asked) == [("gold", inject_damage), ("silver", inject_damage)]
     assert verdict["silver"] is not inject_damage and verdict["gold_shots"] is not inject_damage
-    assert verdict["gold_events"] is True and len(verdict) == 17
+    assert verdict["gold_events"] is True and len(verdict) == 18
     from football_platform.sensors import run_entry
 
     entry = run_entry(instance, result.dagster_run)
     assert entry["status"] == ("FAILURE" if inject_damage else "SUCCESS") and entry["trigger"] == "manual"
     assert {s["step"] for s in entry["steps"]} == {"silver_soda_silver", "soda_gold"}
-    assert sum(not c["passed"] for c in entry["checks"]) == (2 if inject_damage else 0) and len(entry["checks"]) == 17
+    assert sum(not c["passed"] for c in entry["checks"]) == (2 if inject_damage else 0) and len(entry["checks"]) == 18

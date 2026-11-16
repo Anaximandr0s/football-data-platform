@@ -653,3 +653,38 @@ checks for gold_match_library:
         join gold_team_match_stats h on h.match_id = l.match_id and h.team_id = 'HOME'
         join gold_team_match_stats a on a.match_id = l.match_id and a.team_id = 'AWAY'
         where l.home_score != h.score or l.away_score != a.score
+
+checks for gold_replay_frames:
+  - schema:
+      name: gold_replay_frames follows the data contract
+      fail:
+        when required column missing: [match_id, ts, period, object_id, object_type, team_id, shirt_number, x, y, speed_kmh, is_detected, possession, home_space_share]
+        when wrong column type:
+          match_id: VARCHAR
+          ts: INTEGER
+          object_id: VARCHAR
+          object_type: VARCHAR
+          x: DOUBLE
+          y: DOUBLE
+          is_detected: BOOLEAN
+          home_space_share: DOUBLE
+  - row_count > 0
+  - duplicate_count(match_id, ts, object_id) = 0:
+      name: one replay row per object per second
+  - failed rows:
+      name: players are inside the pitch with a team and a shirt number; the ball has neither
+      fail condition: (object_type = 'player' and (x < 0 or x > 105 or y < 0 or y > 68 or team_id is null or shirt_number is null)) or (object_type = 'ball' and (team_id is not null or object_id != 'ball')) or object_type not in ('player', 'ball')
+  - failed rows:
+      name: every tracked second has its ball and 22 players
+      fail query: |
+        select match_id, ts, count(*) filter (where object_type = 'player') as players,
+               count(*) filter (where object_type = 'ball') as balls
+        from gold_replay_frames group by 1, 2
+        having count(*) filter (where object_type = 'player') != 22 or count(*) filter (where object_type = 'ball') != 1
+  - failed rows:
+      name: the replay plays every tracked second of the match
+      fail query: |
+        select r.match_id, r.seconds, l.tracked_seconds
+        from (select match_id, count(distinct ts) as seconds from gold_replay_frames group by 1) r
+        join gold_match_library l using (match_id)
+        where r.seconds != l.tracked_seconds

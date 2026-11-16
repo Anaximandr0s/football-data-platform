@@ -15,7 +15,7 @@ small, one row per business grain, and read by Streamlit (FOO-06, FOO-07, FOO-09
 ```mermaid
 flowchart LR
     S[(Iceberg lake.silver.*)] -->|read| ST[dbt staging<br/>views]
-    ST --> M[dbt marts<br/>16 gold tables]
+    ST --> M[dbt marts<br/>17 gold tables]
     M --> D[(DuckDB file<br/>data/football.duckdb)]
     M -->|export Parquet| G[(MinIO gold)]
     G --> A[Streamlit]
@@ -147,7 +147,7 @@ dbt/
   Dockerfile               # dbt-core + dbt-duckdb image of the `dbt` and `duckdb` services
   macros/                  # silver_table (how Silver is read), export_gold (Parquet to s3://gold)
   models/staging/          # stg_tracking, stg_events, stg_ball, stg_players, stg_matches + schema.yml
-  models/marts/            # the 16 gold_* models + schema.yml (grain, tests, descriptions)
+  models/marts/            # the 17 gold_* models + schema.yml (grain, tests, descriptions)
   tests/                   # unique_combination (generic) + 5 assert_*.sql reconciliation tests
   scripts/duckdb_query.py  # read-only SQL on the Gold file (make gold-sql)
 ```
