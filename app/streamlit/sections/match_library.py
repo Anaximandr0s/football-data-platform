@@ -40,5 +40,7 @@ if current in set(lib.match_id):
     row = lib[lib.match_id == current].iloc[0]
     st.success(f"Current match: {row.home_team} {row.home_score} - {row.away_score} {row.away_team} "
                f"({row.match_date:%d %B %Y}). Select a row to change it; every page follows.")
+    st.page_link("sections/replay.py", label=f"Replay {row.home_team_short} - {row.away_team_short}",
+                 icon=":material/replay:")
 st.caption("Tracked = share of the two periods with player positions: the camera loses the play mostly when the ball is "
            "dead. " + CREDIT)

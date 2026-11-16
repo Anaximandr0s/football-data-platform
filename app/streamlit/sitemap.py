@@ -27,7 +27,7 @@ PAGES = (
     PageSpec("match_library", "Match library", ":material/video_library:", "MATCHES",
              "Which matches are stored, and how did they end?", "both", True),
     PageSpec("replay", "Replay", ":material/replay:", "MATCHES",
-             "What did a stored match look like at any moment?", "both", False),
+             "What did a stored match look like at any moment?", "both", True),
     PageSpec("compare_matches", "Compare matches", ":material/compare_arrows:", "MATCHES",
              "Is this how a team usually plays?", "both", True),
     PageSpec("match_story", "Match story", ":material/auto_stories:", "FAN VIEW",
@@ -52,7 +52,6 @@ PAGES = (
 
 # what is still missing on a page that exists, and the build step of docs/product.md section 12 that adds it
 COMING = {
-    "replay": ("play a stored match at 0.25x to 8x with trails, Voronoi cells and a stats panel on click", 7),
 }
 
 

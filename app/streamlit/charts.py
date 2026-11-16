@@ -89,3 +89,19 @@ def shares(timeline: pd.DataFrame, column: str, goals: pd.DataFrame, colors: dic
     half = alt.Chart(pd.DataFrame({"y": [0.5]})).mark_rule(color="#e8f0ea", opacity=0.35, strokeDash=[2, 2]).encode(
         y="y:Q")
     return (bars + half + _half_time(second_kickoff) + _goal_rules(goals, colors)).properties(height=170)
+
+
+def space_control(space: pd.DataFrame, color: str, team: str, end_minute: float, ticks: list,
+                  second_kickoff: float | None, now_minute: float) -> alt.Chart:
+    """S1 per 5-minute window (gold_space_control of one team), the even line at 50 %, and a gold rule at the minute
+    being watched (Replay)."""
+    data = space.assign(minute=(space.window_start_ts + space.window_end_ts) / 2 / 60)
+    y = alt.Y("space_share:Q", title=f"{team}'s share", scale=alt.Scale(domain=[0.3, 0.7], clamp=True),
+              axis=alt.Axis(format="%", labelColor=TEXT, titleColor=TEXT, minExtent=AXIS_WIDTH, values=[0.3, 0.5, 0.7]))
+    line = alt.Chart(data).mark_line(point=True, color=color).encode(
+        x=_x(end_minute, ticks), y=y,
+        tooltip=[alt.Tooltip("window_label:N", title="minutes"), alt.Tooltip("space_share:Q", format=".0%")])
+    even = alt.Chart(pd.DataFrame({"space_share": [0.5]})).mark_rule(color=TEXT, strokeDash=[4, 4], opacity=0.5) \
+        .encode(y=y)
+    now = alt.Chart(pd.DataFrame({"minute": [now_minute]})).mark_rule(color="#f4c430", strokeWidth=2).encode(x="minute:Q")
+    return (_half_time(second_kickoff) + even + line + now).properties(height=170)

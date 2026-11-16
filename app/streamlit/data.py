@@ -51,6 +51,24 @@ def _load(name: str, key: str) -> pd.DataFrame:  # `key` only makes the cache de
         con.close()
 
 
+@st.cache_data(ttl=600, show_spinner=False, max_entries=2)
+def _replay(match_id: str, key: str) -> pd.DataFrame:
+    folder = parquet_dir()
+    query = "select * from {} where match_id = ? order by ts, object_id"
+    if folder:
+        return duckdb.execute(query.format(f"read_parquet('{folder / 'gold_replay_frames.parquet'}')"), [match_id]).df()
+    con = duckdb.connect(str(duckdb_path()), read_only=True)
+    try:
+        return con.execute(query.format("gold_replay_frames"), [match_id]).df()
+    finally:
+        con.close()
+
+
+def replay_frames(match_id: str) -> pd.DataFrame:
+    """gold_replay_frames of one match (about 100,000 rows): the Replay page never loads every match at once."""
+    return _replay(match_id, source_key())
+
+
 def table(name: str) -> pd.DataFrame:
     """One Gold table as a DataFrame."""
     if name not in GOLD_TABLES:

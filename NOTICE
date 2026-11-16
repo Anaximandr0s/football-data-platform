@@ -4,3 +4,9 @@ Optional real-match source: SkillCorner Open Data (https://github.com/SkillCorne
 MIT licence, 2024/25 A-League broadcast tracking. Credit: SkillCorner.
 Tracking and event data: SkillCorner open data (MIT licence), https://github.com/SkillCorner/opendata. Names of players, teams and league are kept as in the source (school project).
 Raw files are downloaded locally and are NOT redistributed in this repository.
+
+Third-party code
+----------------
+app/web3d/d3-delaunay.min.js: d3-delaunay 6.0.4 (https://github.com/d3/d3-delaunay), which includes Delaunator
+(https://github.com/mapbox/delaunator). ISC licence, Copyright 2018-2021 Observable, Inc., Copyright 2021 Mapbox.
+Licence text: app/web3d/d3-delaunay.LICENSE. Used for the Voronoi cells of the Replay page.
