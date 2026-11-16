@@ -68,7 +68,8 @@ The columns are in `docs/contrat_donnees.md`. The manifest is the health report 
 
 Five topics, one per table (`foot-tracking` has 3 partitions, keyed by `player_id`; the others have 1).
 Bronze: `s3://bronze/<table>/match_id=<id>/ingest_date=<day>/part-<epoch_ms>-<n>.parquet`, rows as received plus
-`kafka_partition`, `kafka_offset`, `kafka_ts`, `ingested_at`. Delivery is at-least-once: a second replay doubles the rows,
+`kafka_partition`, `kafka_offset`, `kafka_ts`, `ingested_at` and `kafka_replay_id` (the Kafka header `replay_id`,
+`<match_id>-<start time UTC>`, set once per replay by the producer). Delivery is at-least-once: a second replay doubles the rows,
 and Silver deduplicates (keys in the contract). After one replay of m001 and m002, `make counts` shows
 202,950 tracking, 3,619 events, 9,225 ball, 64 players and 2 matches messages in total.
 

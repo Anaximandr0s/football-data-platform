@@ -41,6 +41,8 @@ TOPICS = {
     "matches": os.getenv("KAFKA_TOPIC_MATCHES", "foot-matches"),
 }
 # table -> message key (all rows of one player share a partition, so their order is kept)
+# Kafka header carried by every message of one replay (FOO-08): "<match_id>-<UTC start, YYYYMMDDTHHMMSSZ>"
+REPLAY_HEADER = "replay_id"
 KEYS = {"tracking": "player_id", "events": "match_id", "ball": "match_id",
         "players": "player_id", "matches": "match_id"}
 

@@ -36,7 +36,7 @@ Details: [`docs/architecture.md`](docs/architecture.md). The ingestion part: [`i
 | Silver | Spark + Iceberg: cleaning, grain player x second | code and unit tests done, to run on the stack ([`spark/silver/README.md`](spark/silver/README.md)) |
 | Gold | dbt + DuckDB: 6 tables, tests, export to `s3://gold` | code and tests done, to run on the stack ([`dbt/README.md`](dbt/README.md)) |
 | Checks | Soda Core on Silver and Gold, 73 + 130 checks, failure demo | code and tests done, to run on the stack ([`soda/README.md`](soda/README.md)) |
-| Streaming stats (optional) | 5-minute windows | to do |
+| Streaming stats (optional) | Spark Structured Streaming: 5- and 15-minute windows to the topic `foot-live-stats`, shown on Live; equal to Gold after a full replay ([`spark/streaming/live_stats.py`](spark/streaming/live_stats.py)) | done |
 | Orchestration | Dagster | to do |
 | Presentation | Streamlit + mplsoccer dashboard on Gold (live pitch page still to do) | code and tests done, to run on the stack ([`app/streamlit/README.md`](app/streamlit/README.md)) |
 
@@ -99,7 +99,7 @@ Troubleshooting:
 | `tests/<part>/` | Python tests, one folder per part (`tests/ingestion/`, `tests/spark/`, `tests/dbt/`, `tests/soda/`, `tests/app/`) | ingestion to dashboard done |
 | `scripts/` | `smoke_test.py`: health of the Docker stack | done |
 | `docs/` | contract, guides, ADRs | in progress |
-| `spark/` | Silver job (`spark/silver/`, [guide](spark/silver/README.md)); streaming job later | Silver code done, streaming to do |
+| `spark/` | Silver job (`spark/silver/`, [guide](spark/silver/README.md)); streaming job (`spark/streaming/`, `make streaming`) | done |
 | `dbt/` | Gold models, dbt tests, Dockerfile ([guide](dbt/README.md)) | Gold code done |
 | `soda/` | data-quality checks on Silver and Gold, runner, Dockerfile ([guide](soda/README.md)) | Soda code done |
 | `dagster/` | orchestration | to do |

@@ -36,7 +36,7 @@ to page. A page marked "coming soon" states its question and the build step (pro
 | Section | Page | Reads | Now |
 |---|---|---|---|
 | | Home | `gold_match_library` | wordmark, match cards (teams, score, date, tracked share), "I am a Fan / I am a Coach" |
-| LIVE | Live match | Kafka topics `foot-*`, through one background consumer | "Now playing": only the matches being replayed right now (the sidebar match opens directly; "No match live right now" with a link to Replay otherwise). The match being replayed (`make replay`): the pitch component with the 22 players (lighter = estimated position) and the ball; a click on a player shows his distance, top speed, sprints and heatmap so far (`playerstats.py`, equal to Gold at full time); score from goal events, clock and period, possession bar, last goal / shot / tackle / foul, width and length of each team for the current second, "No tracking: camera off the pitch" during a camera gap, a box for the 5-minute stats of FOO-08. Redrawn about once per second (FOO-06) |
+| LIVE | Live match | Kafka topics `foot-*`, through one background consumer | "Now playing": only the matches being replayed right now (the sidebar match opens directly; "No match live right now" with a link to Replay otherwise). The match being replayed (`make replay`): the pitch component with the 22 players (lighter = estimated position) and the ball; a click on a player shows his distance, top speed, sprints and heatmap so far (`playerstats.py`, equal to Gold at full time); score from goal events, clock and period, possession bar, last goal / shot / tackle / foul, width and length of each team for the current second, "No tracking: camera off the pitch" during a camera gap, under the pitch the 5-minute panel of FOO-08 (topic `foot-live-stats`, written by `make streaming`): the 4 newest windows, "complete" or "in progress", possession and pressing per opponent pass, and who covered most ground. Only the newest replay of a match is shown (Kafka header `replay_id`). Redrawn about once per second (FOO-06) |
 | MATCHES | Match library | `gold_match_library` | every stored match, newest first; selecting a row makes it the match of every page |
 | MATCHES | Replay | | coming soon (step 7) |
 | MATCHES | Compare matches | `gold_team_match_stats` | two or more matches side by side at team level (FOO-09) |
@@ -89,8 +89,8 @@ green 5.0:1); `sitemap.style()` holds the few shared classes, and the charts use
 | `charts.py` | the Altair timelines of the Match story (goals, momentum, possession, territory), aligned on the same minutes |
 | `data.py` | reading Gold (cached for a minute), the current match, the match library, the Soda result reader, shared texts |
 | `viz.py` | the figures: zone heatmap, shot map, pass network, ranking bars, live pitch (pure functions, tested without Streamlit) |
-| `live.py` | the live state of a replayed match: `apply(state, table, record, kafka_ms)` returns a new state, plus the readers (score, possession, clock, status, team shape, event line). Pure, tested without Kafka |
-| `live_feed.py` | the single Kafka consumer of the app (a thread created once by `st.cache_resource`), holding the latest state per match |
+| `live.py` | the live state of a replayed match: `route` sends a message to the state of its replay (header `replay_id`; an older replay of the same match is ignored), `apply(state, table, record, kafka_ms)` returns a new state, plus the readers (score, possession, clock, status, team shape, event line). Pure, tested without Kafka |
+| `live_feed.py` | the single Kafka consumer of the app (a thread created once by `st.cache_resource`), holding the latest state per match, and the latest `foot-live-stats` row per key |
 | `Dockerfile`, `requirements.txt` | the image of `make app` (the repository is mounted read-only, nothing is copied in) |
 
 Settings by environment variable: `GOLD_DUCKDB_PATH` (default `data/football.duckdb`), `GOLD_PARQUET_DIR` (read

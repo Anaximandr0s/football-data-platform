@@ -390,7 +390,8 @@ In this order. Each step is one branch, merged before the next starts; "check" i
 
 ## 13. Demo script (10 minutes)
 
-Before the jury arrives: stack up, Kafka topics emptied (step 10), Gold built for every match, the app open on Home.
+Before the jury arrives: stack up, Kafka topics emptied (step 10), Gold built for every match, the streaming job started
+(`make streaming`: it reads only new messages, so it must run before the replay starts), the app open on Home.
 
 | Time | Where | What happens | What we say |
 |---|---|---|---|

@@ -3,7 +3,7 @@
 ## Two paths
 
 - **Batch** (analysis after the match): Kafka -> bronze -> silver -> gold, orchestrated by Dagster.
-- **Stream** (live display): Kafka -> Spark Structured Streaming (5-minute windows) and Kafka -> Streamlit.
+- **Stream** (live display): Kafka -> Spark Structured Streaming (5- and 15-minute windows) -> Kafka `foot-live-stats` -> Streamlit, and Kafka -> Streamlit for the positions and the score.
 
 ## Layers
 
@@ -23,6 +23,9 @@
 |---|---|---|
 | foot-tracking | player_id | 3 (order kept per player) |
 | foot-events, foot-ball, foot-players, foot-matches | match_id or player_id | 1 |
+| foot-live-stats (compacted) | replay_id, match_id, window, team or player | 1 |
+
+Every replay message carries the header `replay_id` (`m001-20261116T101503Z`): two replays of a match never mix.
 
 ## Bronze layout
 
@@ -39,6 +42,30 @@ deduplicated on the bronze keys, sorted by (player_id, ts), `team_id` added to t
 and `is_after_gap` flags. Gaps are never filled. A run replaces the partition of the match it processes (idempotent), and
 nothing is written if the counts or goals do not match the ingestion manifest. Run with `make silver MATCH=m001` (a one-shot `silver` container submits to `spark://spark-master:7077`). Details, columns and decisions:
 [`spark/silver/README.md`](../spark/silver/README.md).
+
+## Streaming (FOO-08)
+
+`spark/streaming/live_stats.py`, started by `make streaming` (container `streaming-5min`, one core of `spark-worker`, Spark UI
+on http://localhost:4040; `make streaming-stop`). It must run **before** a replay starts: it reads only new messages.
+Three queries read `foot-tracking`, `foot-ball` and `foot-events`, join the replay's `foot-matches` and `foot-players`
+messages (read as tables at each micro-batch), and group by replay and football window (`clock.window_index`, the rule of
+`int_football_windows`), not by Spark's time windows. `players-5min` gives F4 and F5, `teams-5min` gives F2, and
+`pressing-15min` gives C3, with the formulas of Gold. Every 5 s a micro-batch sends the windows that changed to the
+compacted topic `foot-live-stats`, as full values (`spark/streaming/rows.py`); the Live page reads them.
+
+- **Checkpoint** `s3a://checkpoints/streaming-5min/<query>` (MinIO): Kafka offsets and aggregation state. A restart goes on
+  where it stopped; a micro-batch played twice sends the same full rows again, which overwrite.
+- **Duplicates**: a repeated message counts once (dropDuplicatesWithinWatermark, 10 minutes of Kafka time). Known
+  limit: a duplicate arriving more than 10 minutes after the first copy is counted twice in the live stats (Gold is not
+  affected: Silver deduplicates the whole match).
+- **Complete**: a window is final once tracking has reached its end + 10 s of match time, or the last second of the match.
+
+Proof (2026-11-16): after a full replay of m001 at x10, stopped at minute 40 and restarted, and after an earlier one at
+x60, all 506 rows of each replay are complete and equal Gold value by value (`gold_match_timeline` 40 windows,
+`gold_player_5min` 450, `gold_pressing` 16); the only differences are 0.1 m distance ties on an exact .x5 sum (9 and 4
+rows), which Spark and DuckDB round apart. m003 at x60 (the match with 4 speeds above 40 km/h): 502 rows, all complete
+and equal Gold (40 + 446 + 16 windows; 12 distance ties on an exact .x5 sum). [Spark UI](img/spark_ui_streaming.png),
+[Live panel](img/live_5min_panel_m001.png).
 
 ## Design principles
 

@@ -194,6 +194,21 @@ def test_a_wrong_column_type_or_a_kafka_column_breaks_the_contract(tmp_path):
 
 
 @needs_soda
+def test_the_replay_id_of_bronze_never_reaches_silver(tmp_path):
+    frames = silver_tables()
+    for table in frames:
+        frames[table]["kafka_replay_id"] = "m001-20261116T101503Z"
+    proc = run_silver(tmp_path, frames)
+    checks = {c["name"]: c for c in json.loads((tmp_path / "out" / "silver.json").read_text())["checks"]}
+    contract = {name: c for name, c in checks.items() if name.endswith("the data contract")}
+    assert len(contract) == 5
+    for name, check in contract.items():
+        assert check["outcome"] == "fail", name
+        assert "kafka_replay_id" in check["detail"], name
+    assert proc.returncode != 0
+
+
+@needs_soda
 def test_a_bad_possession_a_run_with_a_receiver_and_a_missing_source_id_are_caught(tmp_path):
     frames = silver_tables()
     frames["ball"].loc[1, "possession"] = "BOTH"

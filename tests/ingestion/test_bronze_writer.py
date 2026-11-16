@@ -3,7 +3,7 @@ import io
 
 import pyarrow.parquet as pq
 
-from ingestion.bronze_writer import to_parquet_bytes
+from ingestion.bronze_writer import replay_id_of, to_parquet_bytes
 from ingestion.schemas import bronze_schema
 
 
@@ -33,3 +33,13 @@ def test_event_booleans_and_xthreat_keep_their_types_in_bronze():
     got = table.to_pylist()[0]
     assert (got["xthreat"], got["dangerous"], got["targeted"], got["received"]) == (0.12, True, True, None)
     assert str(table.schema.field("dangerous").type) == "bool"
+
+
+def test_the_replay_id_header_becomes_a_column_and_is_null_without_it():
+    assert replay_id_of([("other", b"x"), ("replay_id", b"m001-20261116T101503Z")]) == "m001-20261116T101503Z"
+    assert replay_id_of(None) is None and replay_id_of([]) is None
+    row = {"match_id": "m001", "ts": 1, "period": 1, "x": 1.0, "y": 2.0, "z": 0.0, "kafka_partition": 0,
+           "kafka_offset": 5, "kafka_ts": 1, "ingested_at": 2, "kafka_replay_id": "m001-20261116T101503Z"}
+    old = {k: v for k, v in row.items() if k != "kafka_replay_id"}           # a message without the header
+    table = pq.read_table(io.BytesIO(to_parquet_bytes("ball", [row, old])))
+    assert table.column("kafka_replay_id").to_pylist() == ["m001-20261116T101503Z", None]

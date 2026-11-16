@@ -93,16 +93,30 @@ def test_camera_gap_then_stalled_then_full_time():
     assert live.clock(end, T0 + 100 * PACE + 60_000) == 100              # never past the last second of the match
 
 
-def test_an_older_replay_is_ignored_even_when_its_messages_arrive_late():
-    first = run(kickoff(T0) + second(0, T0) + [event("m1-e00001", 30, "goal", "HOME", "H03", T0)])
+def routed(messages, replay_id, states=None):
+    """messages through live.route, all with the same replay_id header."""
+    states = states or {}
+    for table, rec, ms in messages:
+        states = live.route(states, replay_id, table, rec, ms)
+    return states
+
+
+def test_replays_are_kept_apart_by_their_replay_id():
+    first = routed(kickoff(T0) + second(0, T0) + [event("m1-e00001", 30, "goal", "HOME", "H03", T0)],
+                   "m1-20261116T100000Z")
+    assert live.score(first["m1"]) == (1, 0)
     t1 = T0 + 1_000_000
     # the new replay's goal and positions arrive BEFORE its matches row (topics are not ordered with each other)
-    s = run([event("m1-e00009", 5, "goal", "AWAY", "A02", t1)] + second(3, t1), first)
-    s = run(kickoff(t1), s)
-    assert live.score(s) == (0, 1)                                      # the old HOME goal is gone, the new one kept
-    assert live.current_frame(s)[0] == 3
-    late_old = run([event("m1-e00002", 40, "goal", "HOME", "H02", T0)] + second(50, T0), s)
-    assert live.score(late_old) == (0, 1) and live.current_frame(late_old)[0] == 3
+    s = routed([event("m1-e00009", 5, "goal", "AWAY", "A02", t1)] + second(3, t1) + kickoff(t1),
+               "m1-20261116T110000Z", first)
+    assert s["m1"].replay_id == "m1-20261116T110000Z" and live.score(s["m1"]) == (0, 1)   # the old goal is gone
+    assert live.current_frame(s["m1"])[0] == 3
+    late_old = routed([event("m1-e00002", 40, "goal", "HOME", "H02", T0)] + second(50, T0), "m1-20261116T100000Z", s)
+    assert late_old["m1"] is s["m1"]                                      # a late message of the old replay is ignored
+
+
+def test_a_message_without_replay_id_is_ignored():
+    assert routed(kickoff(T0) + second(0, T0), None) == {}
 
 
 def test_team_shape_uses_outfield_players_of_the_current_second():

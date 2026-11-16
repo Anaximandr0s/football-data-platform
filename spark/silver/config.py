@@ -24,7 +24,7 @@ EVENTS_DIRECTION = os.getenv("SILVER_EVENTS_DIRECTION", "per_team")
 BRONZE_URI = os.getenv("SILVER_BRONZE_URI", "s3a://bronze")
 BRONZE_TABLES = ("tracking", "events", "ball", "players", "matches")
 # columns added by bronze_writer; Silver drops them once deduplication is done
-KAFKA_COLUMNS = ("kafka_partition", "kafka_offset", "kafka_ts", "ingested_at")
+KAFKA_COLUMNS = ("kafka_partition", "kafka_offset", "kafka_ts", "ingested_at", "kafka_replay_id")
 
 # Deduplication keys (docs/silver-guide.md section 2 and docs/contrat_donnees.md section 6)
 KEYS = {

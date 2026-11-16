@@ -40,7 +40,8 @@ SCHEMAS = {
 }
 
 KAFKA_FIELDS = [("kafka_partition", pa.int32()), ("kafka_offset", pa.int64()),
-                ("kafka_ts", pa.int64()), ("ingested_at", pa.int64())]
+                ("kafka_ts", pa.int64()), ("ingested_at", pa.int64()),
+                ("kafka_replay_id", pa.string())]   # the replay_id header; null for messages sent before it existed
 
 
 def bronze_schema(table: str) -> pa.Schema:
