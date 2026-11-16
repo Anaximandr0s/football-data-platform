@@ -371,3 +371,62 @@ compter et montrer.
   40 km/h : la règle de Silver est bien reprise dans le flux.
 - **Pressing en deux colonnes** sur la page Live : « - - - » quand les deux équipes étaient grisées était illisible.
 
+
+## Dagster : la chaîne d'un match lancée par le coup de sifflet final (étape 8)
+
+### Ce qui a été construit
+
+| Fichier | Rôle |
+|---|---|
+| `dagster/football_platform/assets.py` | les étapes d'un match : `bronze` (tout est dans MinIO), `silver` (le job Spark), `soda_silver` (contrôle bloquant), les modèles dbt (Gold), `soda_gold` (bloquant, un résultat par table), `match_report` |
+| `dagster/football_platform/sensors.py` | le capteur `replay_end` (fin d'un replay -> run du match), le planning de 3 h, et le journal des runs pour l'app |
+| `dagster/football_platform/replays.py`, `soda.py` | les règles en Python pur : quand un replay est fini, ce que veut dire un résultat Soda ; testées sans Dagster qui tourne |
+| `dagster/Dockerfile`, `dagster.yaml` | une image pour le serveur web, le démon et les runs (Java 17 + Spark, dbt, Soda) ; la file des runs et le pool `duckdb` |
+| service `bronze-writer` | l'écriture Kafka -> MinIO tourne seule dès `make up`, plus besoin d'un terminal |
+| `sections/pipeline_lineage.py`, `sources_limits.py` | les deux pages « Behind the data » |
+
+### Pourquoi c'est construit ainsi
+
+- **Chaque étape lance la commande du projet** (`check_bronze`, le job Silver, `dbt build`, `run_checks.py`) : un run
+  Dagster fait exactement ce que fait `make`. Dagster ajoute l'ordre, les reprises, le blocage et l'historique.
+- **Un contrôle « bloquant »** : si Soda échoue sur Silver, Gold n'est pas construit. Vérifié : avec des données
+  abîmées exprès (`inject_damage`), 6 contrôles Silver échouent, Gold, `soda_gold` et le rapport ne sont pas exécutés, et
+  le fichier Gold garde la même date et la même taille.
+- **Le capteur lit Kafka** : un replay est fini quand son tracking atteint la dernière seconde du match (`p2_end_ts` de
+  son propre message `foot-matches`, reconnu par `replay_id`). La clé du run est le `replay_id` : un replay ne lance
+  jamais deux runs.
+- **Bronze « complet »** : le writer ne valide ses offsets Kafka qu'après l'envoi vers MinIO. Quand son retard est nul,
+  tout ce que Kafka contient est dans Bronze ; l'étape `bronze` attend ce moment.
+- **Un seul Gold à la fois** : tous les matchs sont dans un seul fichier DuckDB, qui n'accepte qu'un écrivain. Les
+  étapes qui l'ouvrent partagent le pool `duckdb` (limite 1) : si deux matchs finissent ensemble, le second attend.
+- **Spark depuis un conteneur** : le « driver » Spark tourne dans le conteneur `dagster-daemon` ; les workers le
+  joignent par ce nom (`spark.driver.host`). Vérifié dans les logs du worker : `spark://CoarseGrainedScheduler@dagster-daemon`.
+- **Rejouer un run ne change rien** : relancer m001 a réécrit le fichier Gold, et les 16 tables sont identiques ligne à
+  ligne (15 294 lignes, même empreinte).
+
+### Les idées à retenir
+
+1. **L'orchestrateur ne calcule pas, il enchaîne.** Les calculs restent dans Spark, dbt et Soda ; Dagster décide quand
+   et dans quel ordre, et s'arrête au premier contrôle qui échoue.
+2. **Idempotent = on peut relancer sans peur.** Chaque étape remplace son résultat au lieu d'ajouter : c'est ce qui rend
+   les reprises automatiques (retries) sans danger.
+
+### Ce qu'on n'a pas choisi
+
+- **Lancer les conteneurs existants par le socket Docker** : plus léger, mais le conteneur Dagster aurait eu le contrôle
+  de toute la machine.
+- **Gold non partitionné, déclenché après Silver** : plus propre dans le graphe, mais un contrôle Silver raté y bloque
+  Gold moins visiblement.
+- **Postgres pour l'historique de Dagster** : utile à plusieurs machines ; SQLite suffit ici.
+
+### Un bug trouvé en route
+
+Le contrôle Silver « vitesses rejetées = vitesses > 40 km/h dans Bronze » comptait les lignes de Bronze **avant**
+dédoublonnage. m003, rejoué trois fois, donnait 4 contre 12 et Silver refusait le match. Le compte se fait maintenant une
+fois par clé (joueur, seconde). Le premier lancement automatique l'a montré : c'est l'intérêt d'un pipeline qui rejoue.
+
+### Limites connues
+
+- Après un changement de modèle dbt, relancer `make dagster` (le graphe est lu dans `manifest.json`).
+- Un replay déjà fini avant le premier démarrage du capteur n'est pas repris.
+- Le démon a besoin de mémoire : deux Silver en même temps, environ 3 Go sur les 4 Go permis.
