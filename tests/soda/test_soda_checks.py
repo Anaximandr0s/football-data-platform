@@ -78,6 +78,7 @@ def silver_tables() -> dict:
                                   "p2_start_ts": 2, "p2_end_ts": 2, "home_side_p1": "left_to_right",
                                   "home_side_p2": "right_to_left"}]),
     }
+    frames["tracking"].insert(8, "speed_rejected", False)
     frames["events"].insert(0, "match_id", "mx")
     frames["events"]["period"] = 1
     ev = frames["events"]
@@ -323,7 +324,8 @@ def matchlens_tables() -> dict:
     pressing = typed([
         dict(match_id="mx", team_id=t, window_index=0, period=1, window_label="0-15", window_start_ts=0, window_end_ts=900,
              window_seconds=900, defensive_actions=0,
-             opponent_passes=op, ppp=ppp, defensive_actions_own_third=0, defensive_actions_middle_third=0,
+             opponent_passes=op, ppp=ppp, ppp_greyed=op < 10, defensive_actions_own_third=0,
+             defensive_actions_middle_third=0,
              defensive_actions_final_third=0, high_press_share=None)
         for t, op, ppp in (("HOME", 0, None), ("AWAY", 1, 0.0))],
         {**window, "defensive_actions": i64, "opponent_passes": i64, "ppp": f64, "high_press_share": f64,
@@ -382,9 +384,10 @@ def matchlens_tables() -> dict:
                           away_team_short="Away", home_color="#ff0000", away_color="#0000ff", home_score=1, away_score=0,
                           kickoff_utc="2026-01-01T00:00:00Z", match_date=pd.Timestamp("2026-01-01").date(),
                           competition="Test", season="2026", round="1", stadium="Park", p1_start_ts=0,
-                          p1_end_ts=1, p2_start_ts=2, p2_end_ts=2, match_seconds=3,
+                          p1_end_ts=1, p2_start_ts=2, p2_end_ts=2, speeds_rejected=0, match_seconds=3,
                           tracked_seconds=3, tracked_share=1.0)],
                     {"home_score": i32, "away_score": i32, "match_seconds": i32, "tracked_seconds": i64,
+                     "speeds_rejected": i64,
                      **{c: i32 for c in ("p1_start_ts", "p1_end_ts", "p2_start_ts", "p2_end_ts")}})
     return {"gold_match_library": library, "gold_match_timeline": timeline, "gold_player_card": card, "gold_team_shape": shape,
             "gold_pressing": pressing, "gold_team_build_up": build_up, "gold_player_fatigue": fatigue,

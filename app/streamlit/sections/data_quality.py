@@ -3,9 +3,26 @@ import pandas as pd
 import streamlit as st
 
 import sitemap
-from data import soda_results
+from data import library, soda_results
 
 sitemap.header("data_quality")
+
+lib = library()
+if lib is not None:
+    st.subheader("Per match")
+    st.dataframe(lib.assign(match=lib.home_team_short + " " + lib.home_score.astype(str) + "-" + lib.away_score.astype(str)
+                            + " " + lib.away_team_short, tracked_pct=(lib.tracked_share * 100).round())
+                 [["match_date", "match", "tracked_pct", "speeds_rejected"]],
+                 hide_index=True, width="stretch",
+                 column_config={"match_date": st.column_config.DateColumn("Date", format="D MMM YYYY"),
+                                "tracked_pct": st.column_config.ProgressColumn("Tracked", format="%d%%", min_value=0,
+                                                                               max_value=100),
+                                "speeds_rejected": st.column_config.NumberColumn(
+                                    "Speeds rejected", help="Player-seconds above 40 km/h in bronze, set to null in Silver")})
+    st.caption("Tracked: share of the two periods with player positions. Speeds rejected: player-seconds faster than "
+               "40 km/h, a jump from a position SkillCorner estimated; Silver sets the speed to null and flags the row "
+               "(speed_rejected), so it adds nothing to a distance.")
+
 st.markdown("Soda checks run on the Silver and Gold layers (`make soda`). This page shows the **last run**.")
 
 results = soda_results()

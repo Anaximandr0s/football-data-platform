@@ -105,11 +105,13 @@ def test_compare_page_needs_two_matches_of_the_team(app_env):
 def test_quality_page_shows_the_last_soda_run(app_env):
     at = run("sections/data_quality.py")
     assert not at.exception
+    per_match = at.dataframe[0].value
+    assert list(per_match.speeds_rejected) == [0] and list(per_match.match) == ["Home 1-0 Away"]
     metrics = {m.label: m.value for m in at.metric}
     assert metrics["Passed"] == "2" and metrics["Failed"] == "1"
     assert any("No result for gold" in w.value for w in at.warning)
-    assert "detail" in at.dataframe[0].value.columns       # the reason of a failure is shown
-    assert "2 failing row(s)" in " ".join(at.dataframe[0].value["detail"])
+    assert "detail" in at.dataframe[1].value.columns       # the reason of a failure is shown
+    assert "2 failing row(s)" in " ".join(at.dataframe[1].value["detail"])
 
 
 def test_quality_page_without_any_result_explains_what_to_run(app_env, monkeypatch, tmp_path):
@@ -150,10 +152,10 @@ def test_event_explorer_filters_summarises_and_compares(app_env):
     at = run("sections/event_explorer.py")
     assert not at.exception
     summary = at.dataframe[0].value
-    assert dict(summary["count"]) == {"pass": 3, "shot": 1, "goal": 1}         # HOME, passes shots goals by default
-    assert summary.loc["pass", "success"] == pytest.approx(2 / 3)
+    assert dict(summary["count"]) == {"pass": "3", "shot": "1", "goal": "1"}   # HOME, passes shots goals by default
+    assert summary.loc["pass", "success"] == "67%" and summary.loc["shot", "success"] == "-"   # "-", never None
     assert "5 events match these filters: 3 passes, 1 shot, 1 goal. 67% of the passes were successful." in texts(at)
     at.multiselect[0].set_value(["run"]).run()                                  # runs are events too
-    assert not at.exception and dict(at.dataframe[0].value["count"]) == {"run": 1}
+    assert not at.exception and dict(at.dataframe[0].value["count"]) == {"run": "1"}
     at.segmented_control[2].set_value("Heatmap").run()
     assert not at.exception

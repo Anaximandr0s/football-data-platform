@@ -2,7 +2,8 @@
 -- the match the camera tracked. tracked_share = distinct tracked seconds / seconds of the two periods. The short
 -- names are the names fans use (seed team_names.csv); the period bounds feed the football clock of the app.
 with tracked as (
-    select match_id, count(distinct ts) as tracked_seconds
+    select match_id, count(distinct ts) as tracked_seconds,
+           count(*) filter (where speed_rejected) as speeds_rejected
     from {{ ref('stg_tracking') }}
     group by 1
 )
@@ -18,6 +19,7 @@ select
     cast(cast(m.kickoff_utc as timestamptz) at time zone 'UTC' as date) as match_date,
     m.competition, m.season, m.round, m.stadium,
     m.p1_start_ts, m.p1_end_ts, m.p2_start_ts, m.p2_end_ts,
+    coalesce(t.speeds_rejected, 0)                                       as speeds_rejected,
     (m.p1_end_ts - m.p1_start_ts + 1) + (m.p2_end_ts - m.p2_start_ts + 1)  as match_seconds,
     coalesce(t.tracked_seconds, 0)                                       as tracked_seconds,
     round(coalesce(t.tracked_seconds, 0)

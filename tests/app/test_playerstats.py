@@ -1,11 +1,22 @@
 """Live player stats (playerstats.py through live.apply) against Gold, and the Silver rules they repeat."""
+import importlib.util
+from pathlib import Path
+
 import pytest
-from conftest import _load_gold_fixture
 
 import live
 import playerstats
 
 duckdb = pytest.importorskip("duckdb")
+
+
+def _load_gold_fixture():
+    """The tiny Silver of tests/dbt (by path: a `conftest` import could resolve to another test folder's)."""
+    spec = importlib.util.spec_from_file_location(
+        "gold_fixture", Path(__file__).resolve().parents[1] / "dbt" / "test_gold_models.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def test_silver_frame_flips_where_home_attacks_left_and_clips():
