@@ -55,13 +55,16 @@ compacted topic `foot-live-stats`, as full values (`spark/streaming/rows.py`); t
 
 - **Checkpoint** `s3a://checkpoints/streaming-5min/<query>` (MinIO): Kafka offsets and aggregation state. A restart goes on
   where it stopped; a micro-batch played twice sends the same full rows again, which overwrite.
-- **Duplicates**: a repeated message counts once (dropDuplicatesWithinWatermark, 10 minutes of Kafka time).
+- **Duplicates**: a repeated message counts once (dropDuplicatesWithinWatermark, 10 minutes of Kafka time). Known
+  limit: a duplicate arriving more than 10 minutes after the first copy is counted twice in the live stats (Gold is not
+  affected: Silver deduplicates the whole match).
 - **Complete**: a window is final once tracking has reached its end + 10 s of match time, or the last second of the match.
 
 Proof (2026-11-16): after a full replay of m001 at x10, stopped at minute 40 and restarted, and after an earlier one at
 x60, all 506 rows of each replay are complete and equal Gold value by value (`gold_match_timeline` 40 windows,
 `gold_player_5min` 450, `gold_pressing` 16); the only differences are 0.1 m distance ties on an exact .x5 sum (9 and 4
-rows), which Spark and DuckDB round apart. [Spark UI](img/spark_ui_streaming.png),
+rows), which Spark and DuckDB round apart. m003 at x60 (the match with 4 speeds above 40 km/h): 502 rows, all complete
+and equal Gold (40 + 446 + 16 windows; 12 distance ties on an exact .x5 sum). [Spark UI](img/spark_ui_streaming.png),
 [Live panel](img/live_5min_panel_m001.png).
 
 ## Design principles

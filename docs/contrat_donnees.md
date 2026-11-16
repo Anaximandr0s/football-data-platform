@@ -155,6 +155,10 @@ window_start_ts, window_end_ts (exclusive), window_seconds, last_ts (latest seco
 and updated_at (ms). A window is **complete** when the replay's tracking has reached `window_end_ts + 10` (10 s of
 match time of grace for messages of other topics that arrive late) or the last second of the match (`p2_end_ts`).
 Only a complete window equals Gold; the Live page shows the others as "in progress".
+Known limit: a repeated message counts once only within 10 minutes of Kafka time; a duplicate arriving more than 10
+minutes late is counted twice in `foot-live-stats` (not in Silver and Gold). A replay started inside a window (`--start`)
+marks that first window complete with only the seconds it sent: complete means no more data will come, not a full
+window; its possession and pressing are greyed when under the thresholds.
 
 ## 6. Bronze (MinIO)
 

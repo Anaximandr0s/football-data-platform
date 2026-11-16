@@ -355,3 +355,19 @@ compter et montrer.
 - Il ne garde que 10 minutes de messages pour enlever les doublons ; un doublon arrivé plus tard compterait deux fois.
 - Les distances sont arrondies au dixième ; quand la somme tombe exactement sur ,x5, Spark et DuckDB n'arrondissent pas
   du même côté (0,1 m d'écart sur 9 des 450 lignes joueur, sommes non arrondies identiques).
+- Un replay lancé au milieu d'une fenêtre (la démo part de 04:56) marque la fenêtre 0-5' « complete » avec seulement
+  4 secondes : « complete » veut dire « plus rien n'arrivera », pas « fenêtre pleine ». Possession et pressing y sont
+  grisés (« - »).
+
+### Corrections après la revue de l'étape 6
+
+- **`PYSPARK_PYTHON`** est posé par `tests/spark/conftest.py` sur l'interpréteur qui lance les tests : Spark ne peut pas
+  mélanger deux versions de Python (3.11 pour le pilote, 3.12 pour les workers). `make test` et la CI passent donc sans
+  variable à poser à la main.
+- **Un test Soda** ajoute `kafka_replay_id` aux cinq tables Silver et vérifie que les cinq contrôles de schéma échouent.
+  On a aussi vérifié que le test lui-même échoue si on retire la colonne d'une des listes (un test qui ne peut pas
+  échouer ne prouve rien).
+- **m003 à x60** dans le job de streaming : 502 lignes, toutes égales à Gold. C'est le match aux 4 vitesses au-dessus de
+  40 km/h : la règle de Silver est bien reprise dans le flux.
+- **Pressing en deux colonnes** sur la page Live : « - - - » quand les deux équipes étaient grisées était illisible.
+
