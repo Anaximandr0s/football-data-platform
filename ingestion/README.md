@@ -38,8 +38,7 @@ generating a match (see `docs/data-sources.md`).
 
 ```bash
 make data MATCH=m001 SC_ID=1874553     # steps 1 and 2
-make bronze                            # step 4, terminal 1, leave running
-make replay MATCH=m001                 # step 3, terminal 2, about 100 s at x60
+make replay MATCH=m001                 # step 3, about 100 s at x60; step 4 runs as the service bronze-writer (make up)
 make check MATCH=m001                  # step 5, every table must say OK
 ```
 Without make (Windows): `docs/windows.md`. Each script has `--help`.

@@ -138,6 +138,26 @@ services:
       - "127.0.0.1:${KAFKA_UI_PORT}:8080"
     mem_limit: 512m
 
+  # --- Bronze writer: Kafka -> MinIO bronze, always on (started by `make up`, restarted if it stops) ---------
+  # Commits its Kafka offsets only after an upload, so its lag tells Dagster when a replay is fully in Bronze.
+  bronze-writer:
+    <<: *common
+    build: ./ingestion
+    image: football-bronze-writer:local
+    depends_on:
+      kafka:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      KAFKA_EXTERNAL_BOOTSTRAP: kafka:9092
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - ./:/app:ro
+    mem_limit: 512m
+
   # --- Spark standalone cluster (Silver): 1 master + 1 worker ---------------------
   #   master UI: http://localhost:${SPARK_MASTER_UI_PORT}   cluster URL (inside Docker): spark://spark-master:7077
   spark-master:

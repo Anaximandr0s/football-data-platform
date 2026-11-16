@@ -14,7 +14,7 @@ ARGS ?=
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  %-8s %s\n",$$1,$$2}'
 
-up: ## Start MinIO + Kafka + Kafka UI (creates .env if missing)
+up: ## Start MinIO, Kafka, Kafka UI, Spark and the Bronze writer (creates .env if missing)
 	@test -f .env || cp .env.example .env
 	$(COMPOSE) up -d
 
@@ -49,7 +49,7 @@ data: ## Download + convert one match: make data MATCH=m001 SC_ID=1874553
 	python -m ingestion.download_foot $(SC_ID)
 	python -m ingestion.ingest_foot --match $(MATCH) --sc-id $(SC_ID)
 
-bronze: ## Kafka -> MinIO bronze writer (leave running, Ctrl+C to stop)
+bronze: ## Kafka -> MinIO bronze writer in this terminal (`make up` already runs it: service bronze-writer)
 	python -m ingestion.bronze_writer
 
 replay: ## Replay a match into Kafka: make replay MATCH=m001 SPEED=60
