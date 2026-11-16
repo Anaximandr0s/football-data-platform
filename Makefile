@@ -1,7 +1,7 @@
 # Shortcuts (Linux/macOS/WSL). Without make, run the plain commands from README.md.
 # Docker needs sudo on your machine?  make up DOCKER="sudo docker"
 .DEFAULT_GOAL := help
-.PHONY: help up down reset ps logs topics counts smoke lint test data bronze replay check silver gold gold-sql soda soda-silver soda-gold soda-demo app app-stop dagster dagster-stop
+.PHONY: help up down reset ps logs topics counts smoke lint test data bronze replay check silver gold gold-sql soda soda-silver soda-gold soda-demo app app-stop dagster dagster-stop evidence
 
 DOCKER ?= docker
 COMPOSE = $(DOCKER) compose
@@ -92,6 +92,9 @@ app: ## Dashboard (Streamlit) on http://localhost:8501 (needs `make gold`; `make
 
 app-stop: ## Stop the dashboard
 	$(COMPOSE) --profile app stop app
+
+evidence: ## Re-run the quality proofs (Live = Gold, Streaming = Gold, live delay, caught runs) -> docs/quality_evidence.yml
+	python scripts/quality_evidence.py
 
 dagster: ## Dagster webserver + daemon on http://localhost:3000 (a replay's end starts its match's chain)
 	$(COMPOSE) --profile dagster up -d --build dagster-webserver dagster-daemon
