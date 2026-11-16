@@ -2,11 +2,14 @@
 line-length = 100
 target-version = "py311"
 # the dashboard imports its sibling modules (data, viz); without this, ruff's verdict depends on a local data/ folder
-src = [".", "app/streamlit"]
+src = [".", "app/streamlit", "dagster"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
 ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-third-party = ["dagster"]   # the library, not the repository folder dagster/ of the same name
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

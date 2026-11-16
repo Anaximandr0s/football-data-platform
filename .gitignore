@@ -12,6 +12,7 @@ __pycache__/
 data/raw/
 data/prepared/
 data/soda/
+data/pipeline/
 *.parquet
 *.jsonl
 *.duckdb

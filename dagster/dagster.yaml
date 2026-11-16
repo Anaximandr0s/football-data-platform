@@ -1,0 +1,31 @@
+# Dagster instance, shared by the webserver and the daemon through the volume mounted on storage/.
+storage:
+  sqlite:
+    base_dir: /opt/dagster/home/storage
+local_artifact_storage:
+  module: dagster._core.storage.root
+  class: LocalArtifactStorage
+  config:
+    base_dir: /opt/dagster/home/storage
+compute_logs:
+  module: dagster._core.storage.local_compute_log_manager
+  class: LocalComputeLogManager
+  config:
+    base_dir: /opt/dagster/home/storage/logs
+
+# Runs wait in a queue and the daemon starts them, so every run (sensor, schedule or UI) executes in the daemon container,
+# whose name the Spark workers can reach (spark.driver.host).
+run_coordinator:
+  module: dagster._core.run_coordinator
+  class: QueuedRunCoordinator
+
+# The steps that open the DuckDB Gold file (dbt, Soda Gold, the report) share the pool "duckdb": one at a time.
+concurrency:
+  runs:
+    max_concurrent_runs: 2
+  pools:
+    granularity: op
+    default_limit: 1
+
+telemetry:
+  enabled: false

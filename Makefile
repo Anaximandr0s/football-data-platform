@@ -1,7 +1,7 @@
 # Shortcuts (Linux/macOS/WSL). Without make, run the plain commands from README.md.
 # Docker needs sudo on your machine?  make up DOCKER="sudo docker"
 .DEFAULT_GOAL := help
-.PHONY: help up down reset ps logs topics counts smoke lint test data bronze replay check silver gold gold-sql soda soda-silver soda-gold soda-demo app app-stop
+.PHONY: help up down reset ps logs topics counts smoke lint test data bronze replay check silver gold gold-sql soda soda-silver soda-gold soda-demo app app-stop dagster dagster-stop
 
 DOCKER ?= docker
 COMPOSE = $(DOCKER) compose
@@ -18,11 +18,11 @@ up: ## Start MinIO, Kafka, Kafka UI, Spark and the Bronze writer (creates .env i
 	@test -f .env || cp .env.example .env
 	$(COMPOSE) up -d
 
-down: ## Stop (data kept), dashboard included
-	$(COMPOSE) --profile app down
+down: ## Stop (data kept), dashboard and Dagster included
+	$(COMPOSE) --profile app --profile dagster down
 
-reset: ## Stop and DELETE all data (topics, buckets)
-	$(COMPOSE) --profile app down -v
+reset: ## Stop and DELETE all data (topics, buckets, Dagster history)
+	$(COMPOSE) --profile app --profile dagster down -v
 
 ps: ## Container status
 	$(COMPOSE) ps -a
@@ -92,3 +92,9 @@ app: ## Dashboard (Streamlit) on http://localhost:8501 (needs `make gold`; `make
 
 app-stop: ## Stop the dashboard
 	$(COMPOSE) --profile app stop app
+
+dagster: ## Dagster webserver + daemon on http://localhost:3000 (a replay's end starts its match's chain)
+	$(COMPOSE) --profile dagster up -d --build dagster-webserver dagster-daemon
+
+dagster-stop: ## Stop Dagster (its history stays in the volume dagster-storage)
+	$(COMPOSE) --profile dagster stop dagster-webserver dagster-daemon
