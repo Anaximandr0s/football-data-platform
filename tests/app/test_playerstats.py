@@ -78,3 +78,11 @@ def test_a_new_replay_starts_the_stats_again(gold_env):
     states = live.route(states, "m1-20261116T110000Z", "tracking",
                         {**tracking.iloc[1].to_dict(), "speed_kmh": 10.0}, 10_001)
     assert live.player_stats(states["m1"], "H01").tracked_seconds == 1
+
+
+def test_a_speed_above_40_counts_as_no_speed_as_in_silver():
+    s = playerstats.Second
+    stats = playerstats.player_stats([s(0, 10, 10, None, True), s(1, 10, 10, 20.0, True), s(2, 10, 10, 52.0, True),
+                                      s(3, 10, 10, 30.0, True)])
+    assert stats.distance_m == pytest.approx((20 + 30) / 3.6)              # 52 km/h is a jump, not a run
+    assert stats.sprint_count == 1 and stats.top_speed_kmh is None         # never two speeds in a row left
