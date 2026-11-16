@@ -3,7 +3,7 @@
 Owner of sections 1 to 8: ingestion (Kafka, MinIO, bronze). Consumers: Silver (Spark + Iceberg), then Gold and Streamlit.
 Sections 9 (Silver) and 10 (Gold) have their own owners and code twins, given at the top of each section.
 The code twin of the table sections is `ingestion/schemas.py` (`SCHEMAS`): change both together, by pull request,
-and warn the Silver owner. Last update: 2026-11-15 (possession on ball, `source_player_id` on players, `is_detected` on tracking, event context columns and off-ball runs as type `run`, in sections 4 to 9). Matches covered: `m001` (SkillCorner 1874553) and `m002` (SkillCorner 1925299).
+and warn the Silver owner. Last update: 2026-11-16 (Kafka header `replay_id`, bronze column `kafka_replay_id` and topic `foot-live-stats`, in sections 5, 6 and 9.2). Before: 2026-11-15 (possession on ball, `source_player_id` on players, `is_detected` on tracking, event context columns and off-ball runs as type `run`, in sections 4 to 9). Matches covered: `m001` (SkillCorner 1874553) and `m002` (SkillCorner 1925299).
 
 ## 1. Provenance
 
@@ -127,16 +127,42 @@ Substitutes who never played are not listed.
 | foot-ball | match_id | 1 | ball | total |
 | foot-players | player_id | 1 | players | |
 | foot-matches | match_id | 1 | matches | |
+| foot-live-stats | see 5.1 | 1, compacted | live stats of the streaming job (FOO-08) | per key |
 
 Messages are JSON, one row each, with the column names above. `matches` and `players` are sent at the start of each
 replay, then the live tables second by second. Replay speed x1 to x60 (x60: a match lasts about 100 s).
+
+Every message of a replay carries the Kafka header `replay_id` = `<match_id>-<start time UTC, YYYYMMDDTHHMMSSZ>`, for
+example `m001-20261116T101503Z`, set once when `producer_foot` starts. Two replays of the same match have two ids, so the
+Live page and the streaming job never mix them; for one match, a larger id is a newer replay. A message without the
+header (written before 2026-11-16) is ignored by both.
+
+### 5.1 foot-live-stats (written by `spark/streaming`, read by the Live page)
+
+Log-compacted (`cleanup.policy=compact`): Kafka keeps at least the latest message of each key. Key =
+`replay_id|match_id|window_size|window_index|player_id or team_id`. Value = JSON of one window, the **full current
+value, never an increment**: a new message for the same key replaces the previous one. Built by
+`spark/streaming/rows.py`, with the names and formulas of Gold.
+
+| `kind` | Window | Grain | Values (same names as the Gold table) |
+|---|---|---|---|
+| `team` | 5 min | team x window | `gold_match_timeline`: possession_seconds, known_seconds, possession_share, possession_greyed, passes, defensive_actions; plus opponent_passes, ppp, ppp_greyed |
+| `player` | 5 min | player x window | `gold_player_5min`: tracked_seconds, coverage, distance_m, sprint_seconds, max_speed_kmh |
+| `pressing` | 15 min | team x window | `gold_pressing`: defensive_actions, opponent_passes, ppp, ppp_greyed, defensive_actions_own/middle/final_third, high_press_share |
+
+Every row also has replay_id, match_id, team_id, window_size (300 or 900 s), window_index, window_label,
+window_start_ts, window_end_ts (exclusive), window_seconds, last_ts (latest second counted), p2_end_ts, `complete`
+and updated_at (ms). A window is **complete** when the replay's tracking has reached `window_end_ts + 10` (10 s of
+match time of grace for messages of other topics that arrive late) or the last second of the match (`p2_end_ts`).
+Only a complete window equals Gold; the Live page shows the others as "in progress".
 
 ## 6. Bronze (MinIO)
 
 Path: `s3://bronze/<table>/match_id=<id>/ingest_date=<YYYY-MM-DD>/part-<epoch_ms>-<n>.parquet`, with `<table>` in
 tracking, events, ball, players, matches. `ingest_date` is the UTC day of writing and exists only in the path.
 Columns = the table columns (fixed types) plus `kafka_partition` (int32), `kafka_offset` (int64), `kafka_ts` (int64, ms),
-`ingested_at` (int64, ms).
+`ingested_at` (int64, ms) and `kafka_replay_id` (string, the `replay_id` header of section 5; null for rows written
+before 2026-11-16).
 
 Delivery is at-least-once: a replay, or a consumer restart, adds duplicates. Silver deduplicates on: tracking
 (match_id, player_id, ts); events `event_id`; ball (match_id, ts); players (match_id, player_id); matches `match_id`.
@@ -206,7 +232,7 @@ pull request, and warn the Gold owner. Rules and decisions: [`silver-guide.md`](
 | Item | Bronze | Silver |
 |---|---|---|
 | Duplicates | possible (at-least-once delivery) | none: one row per key (section 6), the latest written copy is kept |
-| Kafka columns (`kafka_partition`, `kafka_offset`, `kafka_ts`, `ingested_at`) | present | removed |
+| Kafka columns (`kafka_partition`, `kafka_offset`, `kafka_ts`, `ingested_at`, `kafka_replay_id`) | present | removed |
 | Row order | arrival order | tracking by (`player_id`, `ts`), events by (`ts`, `event_id`), ball by `ts` |
 | `team_id` on tracking | absent | added from `players` (never null) |
 | Attack direction | not normalised | **tracking and ball: HOME attacks toward x = 105 in both halves** (period mirrored where `home_side_pN` is `right_to_left`: x = 105 - x, y = 68 - y, both teams). **Events: per team** (see 9.3) |

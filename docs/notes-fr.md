@@ -52,7 +52,8 @@ pitch ») au lieu de laisser des points figés.
 
 - Au premier affichage après le démarrage du conteneur `app`, le consommateur relit tout l'historique des topics (537 939
   messages en 16 s au plus, mesuré) ; la page montre des états intermédiaires pendant ce temps.
-- Deux replays du même match lancés en même temps se mélangent.
+- Deux replays du même match lancés en même temps se mélangeaient. Depuis l'étape 6, chaque message porte un
+  `replay_id` et la page ne montre que le replay le plus récent du match.
 - La page bouge une fois par seconde : le mouvement fluide est prévu pour la page « Match replay ».
 
 ## Les tables Gold de MatchLens (section 7 de `product.md`)
@@ -301,3 +302,56 @@ contre le monde réel.
 
 L'idée à retenir : **marquer plutôt qu'effacer en silence**. Une valeur corrigée doit laisser une trace qu'on peut
 compter et montrer.
+
+## Spark Structured Streaming : les statistiques sur 5 minutes (FOO-08, étape 6)
+
+### Ce qui a été construit
+
+| Fichier | Rôle |
+|---|---|
+| `ingestion/producer_foot.py` | chaque message d'un replay porte l'en-tête Kafka `replay_id`, par exemple `m001-20261116T101503Z` (le match et l'heure de départ) ; Bronze le garde dans `kafka_replay_id`, Silver le retire |
+| `spark/streaming/live_stats.py` | le job Spark : il lit `foot-tracking`, `foot-ball` et `foot-events`, compte par replay et par fenêtre de football, et écrit dans le topic `foot-live-stats` ; lancé par `make streaming` sur le cluster Spark |
+| `spark/streaming/rows.py` | les formules (celles de Gold) et la règle « fenêtre terminée », en Python pur, testées sans Spark |
+| `sections/live_match.py` | sous le terrain, le panneau « Every 5 minutes » : les 4 dernières fenêtres, « complete » ou « in progress » |
+
+### Pourquoi c'est construit ainsi
+
+- **`replay_id` plutôt que deviner avec l'heure.** Avant, la page devinait un nouveau replay à partir des dates des
+  messages. Un identifiant posé une fois par le producteur est sûr : deux replays de m001 l'un après l'autre donnent deux
+  séries de fenêtres séparées, et toutes deux égales à Gold (vérifié). Le mettre dans un en-tête Kafka, et non dans le
+  JSON, ne change pas les tables du contrat.
+- **Des valeurs complètes, pas des incréments.** Chaque message de `foot-live-stats` contient la valeur entière d'une
+  fenêtre (« 412 m depuis le début de la fenêtre »), jamais « +12 m ». Si un message est envoyé deux fois, la seconde
+  copie écrase la première au lieu de s'ajouter. Le topic est « compacté » : Kafka garde au moins le dernier message de
+  chaque clé, comme une table.
+- **Le checkpoint.** Spark écrit dans MinIO (`s3a://checkpoints/streaming-5min`) les offsets Kafka déjà lus et l'état des
+  agrégations. Après un arrêt, il repart exactement de là. Vérifié : le job arrêté à la minute 40 d'un replay x10 puis
+  relancé donne les mêmes chiffres que Gold, sans rien compter deux fois.
+- **La marge de 10 secondes (grace).** Les trois topics n'arrivent pas au même rythme : un événement de la minute 4:59
+  peut arriver après la position de 5:01. Une fenêtre n'est donc marquée « complete » que quand le tracking a dépassé sa
+  fin de 10 secondes de match (ou la dernière seconde du match). Avant, elle reste « in progress » et ses chiffres
+  peuvent encore bouger.
+- **Fenêtres de football, pas fenêtres Spark.** Les fenêtres de temps de Spark (`window()`) coupent l'horloge toutes les
+  5 minutes ; nos fenêtres repartent à chaque coup d'envoi (45+, 45-50'). Le job appelle donc `clock.window_index`, la
+  même fonction que l'app et que la macro dbt.
+
+### Les idées à retenir
+
+1. **Un flux qui peut rejouer doit être idempotent.** Envoyer la valeur complète avec une clé stable rend une répétition
+   sans danger.
+2. **« Fini » est une décision.** Dans un flux, une fenêtre n'est jamais sûre d'être terminée ; on choisit une règle
+   (fin + 10 s) et on l'affiche.
+
+### Ce qu'on n'a pas choisi
+
+- **Les fenêtres de temps de Spark avec un watermark** : elles suivent l'horloge réelle, pas la mi-temps du football.
+- **Le mode `complete` de Spark** (renvoyer toutes les fenêtres à chaque micro-batch) : plus simple, mais tout l'historique
+  repart toutes les 5 secondes. Le mode `update` n'envoie que les fenêtres qui ont changé.
+- **Écrire dans Gold en direct** : Gold reste construit par dbt après le match ; le live ne fait qu'afficher.
+
+### Limites connues
+
+- Le job ne lit que les nouveaux messages : il doit tourner avant le début du replay (écrit dans le script de démo).
+- Il ne garde que 10 minutes de messages pour enlever les doublons ; un doublon arrivé plus tard compterait deux fois.
+- Les distances sont arrondies au dixième ; quand la somme tombe exactement sur ,x5, Spark et DuckDB n'arrondissent pas
+  du même côté (0,1 m d'écart sur 9 des 450 lignes joueur, sommes non arrondies identiques).
