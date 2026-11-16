@@ -1,0 +1,52 @@
+# Our numbers against official sources: the goal minute of every goal and the possession of every stored match.
+# The one source of these facts: the Data quality page (Accuracy) and the Sources & limits page read this file.
+#
+# Rules (Data quality, Accuracy): a goal minute is exact when at least one source gives the same minute, and within
+# 1 minute when the nearest source is one minute away (sources disagree among themselves). Possession is green within
+# 1 point of at least one source, orange within 2, red further.
+# Only what the sources say: our side is computed from Gold by the page (the goals of a match in time order, the minute
+# from app/streamlit/clock.py on gold_events.ts; possession = gold_team_profile.possession_share of HOME), so a change
+# in our data changes the result. tests/app/test_quality.py checks the scorers against Gold.
+checked_on: "2026-11-17"
+sources:
+  brisbane_m001: {name: Brisbane Roar match wrap, url: "https://brisbaneroar.com.au/news/alm-united-round-match-wrap-brisbane-roar-2-3-adelaide-united/"}
+  adelaide_m001: {name: Adelaide United report, url: "https://adelaideunited.com.au/?p=328175"}
+  fbref_m001: {name: FBref match report, url: "https://fbref.com/en/matches/9d2e447a/Brisbane-Roar-Adelaide-United"}
+  brisbane_m002: {name: Brisbane Roar match wrap, url: "https://brisbaneroar.com.au/news/alm-r9-match-wrap-brisbane-roar-0-1-perth-glory/"}
+  aap_m002: {name: AAP, url: "https://aapnews.aap.com.au/news/glory-defeat-roar-to-end-18-game-alm-winless-streak"}
+  fbref_m002: {name: FBref match report, url: "https://aws.fbref.com/en/matches/f328e2b6/Brisbane-Roar-Perth-Glory-December-21-2024-A-League-Men"}
+  brisbane_m003: {name: Brisbane Roar match wrap, url: "https://brisbaneroar.com.au/news/alm-r23-match-wrap-perth-glory-1-3-brisbane-roar"}
+  foxsports_m003: {name: Fox Sports box score, url: "https://www.foxsports.com/soccer/australian-a-league-perth-glory-fc-vs-brisbane-roar-fc-mar-15-2025-game-boxscore-549716"}
+  espn_m003: {name: ESPN, url: "https://global.espn.com/football/match/_/gameId/718047/brisbane-roar-perth-glory"}
+  fbref_m003: {name: FBref match report, url: "https://aws.fbref.com/en/matches/257b3ee8/Perth-Glory-Brisbane-Roar-March-15-2025-A-League-Men"}
+  aap_m004: {name: AAP, url: "https://aapnews.aap.com.au/news/lolley-hits-sweet-spot-as-sydney-slice-adelaide-apart"}
+  adelaide_m004: {name: Adelaide United report, url: "https://adelaideunited.com.au/?p=329213"}
+  espn_m004: {name: ESPN, url: "https://www.espn.com/soccer/match/_/gameId/718012/adelaide-united-sydney-fc"}
+matches:
+  m001:
+    goals:
+      - {scorer: K. Jelacic, sources: {brisbane_m001: 6, adelaide_m001: 5}}
+      - {scorer: S. Mauk, sources: {brisbane_m001: 33}}
+      - {scorer: J. O'Shea, sources: {brisbane_m001: 43}}
+      - {scorer: Z. Clough, sources: {brisbane_m001: 46}}
+      - {scorer: A. Goodwin, sources: {brisbane_m001: 63, adelaide_m001: 62}}
+    possession: {sources: {fbref_m001: 0.39}}
+  m002:
+    goals:
+      - {scorer: D. Williams, sources: {brisbane_m002: 69, aap_m002: 69}}
+    possession: {sources: {fbref_m002: 0.64}}
+  m003:
+    goals:
+      - {scorer: L. Amos, sources: {brisbane_m003: 7, foxsports_m003: 7, espn_m003: 7}}
+      - {scorer: Asumah Abubakar, sources: {brisbane_m003: 37, foxsports_m003: 37, espn_m003: 37}}
+      - {scorer: S. Klein, sources: {brisbane_m003: 50, foxsports_m003: 51, espn_m003: 51}}
+      - {scorer: S. Klein, sources: {brisbane_m003: 89, foxsports_m003: 89, espn_m003: 89}}
+    possession: {sources: {fbref_m003: 0.50, espn_m003: 0.50}}
+  m004:
+    goals:
+      - {scorer: J. Lolley, sources: {aap_m004: 36, adelaide_m004: 36}}
+      - {scorer: P. Klimala, sources: {aap_m004: 46, adelaide_m004: 46}}
+      - {scorer: D. Pierias, sources: {aap_m004: 49, adelaide_m004: 49}}
+      - {scorer: A. Segecic, sources: {aap_m004: 75, adelaide_m004: 75}}
+      - {scorer: A. Cáceres, sources: {aap_m004: 83, adelaide_m004: 83}}
+    possession: {sources: {espn_m004: 0.54}}

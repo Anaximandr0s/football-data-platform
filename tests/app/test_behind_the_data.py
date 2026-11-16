@@ -85,5 +85,6 @@ def test_sources_page_shows_the_source_the_limits_and_the_external_checks(app_en
     at = AppTest.from_file(str(APP / "sections/sources_limits.py"), default_timeout=90).run()
     assert not at.exception
     text = " ".join(m.value for m in at.markdown)
-    assert "MIT licence" in text and "**Gaps.**" in text and "FBref match report" in text
+    assert "MIT licence" in text and "**Gaps.**" in text
+    assert any("FBref match report" in c.value for c in at.caption)          # the sources of docs/external_checks.yml
     assert at.metric[0].value == "SkillCorner"

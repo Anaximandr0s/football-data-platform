@@ -46,7 +46,7 @@ to page. A page marked "coming soon" states its question and the build step (pro
 | COACH VIEW | Team analysis | `gold_shots`, `gold_pass_network`, `gold_player_match_stats` | shot map of both teams with filters and a shot table; pass network of one team (FOO-07) |
 | COACH VIEW | Physical & fatigue | `gold_player_5min` | distance and sprint seconds per 5 minutes of one player, with the coverage of each window |
 | COACH VIEW | Event explorer | | coming soon (step 5) |
-| BEHIND THE DATA | Data quality | `data/soda/silver.json`, `gold.json` | passed / failed / warnings / errors of the last `make soda` per layer, and the list of checks (FOO-05) |
+| BEHIND THE DATA | Data quality | `data/soda/*.json`, `soda/dimensions.yml`, `data/quality/silver_*.json`, `data/pipeline/runs.json`, `docs/external_checks.yml`, `docs/quality_evidence.yml`, Gold | A verdict banner, then six cards, one per data-quality dimension (completeness, uniqueness, validity, consistency, accuracy, freshness; English and French): a simple question, one number, what it is made of. A match x dimension grid, the camera coverage per 5 minutes, the last Dagster runs, what our checks caught (with the fix commits), the official sources, and every check with a plain-English name and filters (`quality.py`, FOO-05) |
 | BEHIND THE DATA | Pipeline & lineage, Sources & limits | | coming soon (step 8) |
 
 One pitch component (docs/product.md, section 8.2) draws every pitch of Live and the Player page: `pitch.py` shapes the

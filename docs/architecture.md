@@ -116,6 +116,12 @@ damages a copy on purpose to show the checks catch it. Soda has its own image be
 (see [`soda/README.md`](../soda/README.md)). The columns and types the schema checks enforce are in
 [`contrat_donnees.md`](contrat_donnees.md), sections 9 and 10.
 
+The Data quality page reads them in six dimensions: every check has one in `soda/dimensions.yml` (completeness,
+uniqueness, validity, consistency or accuracy; a test fails if a check has none). Freshness comes from the Dagster runs.
+Two more inputs: the Silver job writes `data/quality/silver_<match>.json` (rows prepared, read from Bronze and kept,
+positions corrected, speeds rejected), and `make evidence` re-runs the comparisons Live = Gold, Streaming = Gold and the
+live delay, and explains the failed Dagster runs, into `docs/quality_evidence.yml` with the date and the commit.
+
 ## Dashboard (Streamlit)
 
 `app/streamlit/` (`make app`, http://localhost:8501): the MatchLens site of [`product.md`](product.md) section 8. Home (match

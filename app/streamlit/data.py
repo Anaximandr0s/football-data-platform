@@ -174,3 +174,59 @@ def doc_section(doc: str, heading: str) -> str:
     start = text.index(f"## {heading}\n") + len(heading) + 4
     end = text.find("\n## ", start)
     return text[start:end if end >= 0 else None].strip()
+
+
+def _yaml(path: Path):
+    import yaml
+
+    return yaml.safe_load(path.read_text(encoding="utf-8")) if path.exists() else None
+
+
+def dimension_map() -> dict:
+    """soda/dimensions.yml: table -> check name -> {dimension, plain}."""
+    return _yaml(ROOT / "soda" / "dimensions.yml") or {}
+
+
+def external_checks() -> dict | None:
+    """docs/external_checks.yml: what official sources say about goal minutes and possession."""
+    return _yaml(ROOT / "docs" / "external_checks.yml")
+
+
+def quality_evidence() -> dict | None:
+    """docs/quality_evidence.yml, written by `make evidence`; None before its first run."""
+    return _yaml(Path(os.getenv("QUALITY_EVIDENCE", ROOT / "docs" / "quality_evidence.yml")))
+
+
+def silver_reports() -> dict[str, dict]:
+    """data/quality/silver_<match>.json, written by the Silver job for each match it processes."""
+    folder = Path(os.getenv("QUALITY_OUT_DIR", ROOT / "data" / "quality"))
+    return {p.stem.removeprefix("silver_"): json.loads(p.read_text(encoding="utf-8"))
+            for p in sorted(folder.glob("silver_*.json"))} if folder.exists() else {}
+
+
+def dbt_tests() -> tuple[int, int] | None:
+    """(passed, total) dbt tests of the last dbt build (dbt/target/run_results.json)."""
+    path = Path(os.getenv("DBT_RUN_RESULTS", ROOT / "dbt" / "target" / "run_results.json"))
+    if not path.exists():
+        return None
+    tests = [r for r in json.loads(path.read_text(encoding="utf-8"))["results"] if r["unique_id"].startswith("test.")]
+    return (sum(r["status"] == "pass" for r in tests), len(tests)) if tests else None
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def _replay_counts(key: str) -> pd.DataFrame:
+    query = ("select match_id, count(*) filter (where object_type = 'player') as players, "
+             "count(*) filter (where object_type = 'ball') as balls from {} group by 1")
+    folder = parquet_dir()
+    if folder:
+        return duckdb.sql(query.format(f"read_parquet('{folder / 'gold_replay_frames.parquet'}')")).df()
+    con = duckdb.connect(str(duckdb_path()), read_only=True)
+    try:
+        return con.execute(query.format("gold_replay_frames")).df()
+    finally:
+        con.close()
+
+
+def replay_counts() -> pd.DataFrame:
+    """Player and ball rows of gold_replay_frames per match (Completeness: did Gold keep every Silver second?)."""
+    return _replay_counts(source_key())

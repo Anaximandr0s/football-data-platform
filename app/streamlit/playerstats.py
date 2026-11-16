@@ -15,6 +15,7 @@ from dataclasses import dataclass
 PITCH_L, PITCH_W = 105.0, 68.0
 ZONES_X, ZONES_Y = 6, 4
 SPRINT_KMH = 25.0
+MAX_SPEED_KMH = 40.0       # Silver's rule: faster is a jump between positions, not a run (spark/silver/config.py)
 RIGHT_TO_LEFT = "right_to_left"
 
 
@@ -61,6 +62,8 @@ def player_stats(seconds: list[Second]) -> PlayerStats:
     distance, sprints, top, zones = 0.0, 0, None, {}
     prev = before = None
     for s in sorted(seconds, key=lambda s: s.ts):
+        if s.speed_kmh is not None and s.speed_kmh > MAX_SPEED_KMH:     # Live gets bronze's raw speed
+            s = Second(s.ts, s.x, s.y, None, s.is_detected)
         if s.speed_kmh is not None:
             distance += s.speed_kmh / 3.6
         sprint = s.speed_kmh is not None and s.speed_kmh > SPRINT_KMH

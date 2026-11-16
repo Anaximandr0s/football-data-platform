@@ -3,3 +3,4 @@ mplsoccer>=1.4,<2
 duckdb>=2.0,<2.1
 pandas>=2.2
 confluent-kafka>=2.16,<3
+pyyaml>=6,<7         # the Data quality page reads soda/dimensions.yml and docs/*.yml

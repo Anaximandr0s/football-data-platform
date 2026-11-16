@@ -531,3 +531,49 @@ fois par clé (joueur, seconde). Le premier lancement automatique l'a montré : 
 - Sur Live, quand le ballon n'est jamais vu dans le but, le score change jusqu'à 10 s après le début de l'action
   (il faut attendre la fin de la fenêtre).
 - À 8x, il faut viser vite : la zone de clic grandit avec la vitesse (+16 px à 8x).
+
+## La page « Data quality » en six dimensions (2026-11-17)
+
+### Ce qui a été construit
+
+| Fichier | Rôle |
+|---|---|
+| `soda/dimensions.yml` | chacun des 210 contrôles Soda reçoit une dimension (complétude, unicité, validité, cohérence, exactitude) et un nom en anglais simple ; un test échoue si un contrôle n'en a pas |
+| `spark/silver` (`quality_report`) | à chaque match, Silver écrit `data/quality/silver_<match>.json` : lignes préparées, lues dans Bronze, gardées, positions corrigées, vitesses rejetées |
+| `docs/external_checks.yml` | ce que disent les sources officielles (clubs, AAP, Fox Sports, ESPN, FBref, avec les liens) ; la page compare avec Gold à chaque ouverture |
+| `scripts/quality_evidence.py` (`make evidence`) | refait les comparaisons Live = Gold, Streaming = Gold, mesure le délai du live, explique les runs Dagster en échec, et écrit le tout avec la date et le commit |
+| `app/streamlit/quality.py`, `sections/data_quality.py` | la page : verdict, six cartes, grille match x dimension, couverture caméra, runs, « Caught by our checks », tous les contrôles |
+
+### Pourquoi c'est construit ainsi
+
+- **Juger notre pipeline, pas la caméra.** La complétude dit si nous avons gardé tout ce que nous avons reçu
+  (100 % : 423 540 lignes sur 423 540, et Gold les contient toutes). Que la caméra n'ait vu que 76 % du match est une
+  limite de la source : on l'affiche, on ne la note pas.
+- **Une seule source pour chaque fait.** Les minutes officielles des buts sont dans un fichier YAML lu par deux pages ;
+  nos minutes sont recalculées depuis Gold à chaque fois. Si nos données changent, l'exactitude change aussi.
+- **Une preuve doit pouvoir être refaite.** `make evidence` refait les comparaisons au lieu de recopier un résultat :
+  le fichier dit quand et sur quel commit. Et il a trouvé un vrai bug : le live comptait les vitesses au-dessus de
+  40 km/h que Silver retire (m003, deux joueurs). Corrigé dans `playerstats.py`.
+- **« Exact » veut dire « comme au moins une source ».** Les sources ne sont pas d'accord entre elles (Goodwin 62' pour
+  Adelaide, 63' pour Brisbane ; Klein 50' pour Brisbane, 51' pour Fox Sports et ESPN). 15 buts sur 15 sont exacts.
+
+### Les idées à retenir
+
+1. **Les six dimensions répondent à six questions simples.** Rien ne manque ? Rien en double ? Des valeurs possibles ?
+   Les tables d'accord entre elles ? D'accord avec le monde réel ? Assez récent ?
+2. **Une vérification qu'on ne peut pas refaire n'est qu'une affirmation.** D'où la date, le commit et le script.
+
+### Ce qu'on n'a pas choisi
+
+- **Des attributs Soda (`attributes:`) pour la dimension** : Soda Core les valide contre Soda Cloud ; un fichier à
+  nous, testé, est plus simple.
+- **Noter la couverture caméra** : ce serait punir la source, pas notre travail.
+
+### Limites connues
+
+- La possession de m002 est à 1,1 point de FBref (62,9 % contre 64 %) : orange. Avant, le tableau arrondissait à 63 % et
+  disait « à 1 point ».
+- L'unicité, la cohérence et la validité viennent de contrôles qui couvrent tous les matchs à la fois : un échec met
+  tous les matchs en rouge.
+- Le délai du live mesure Kafka jusqu'à l'application (0,32 s, 95 %) ; l'affichage ajoute jusqu'à 1 s (la page se
+  redessine chaque seconde). Le délai jusqu'à l'écran n'est pas mesuré.

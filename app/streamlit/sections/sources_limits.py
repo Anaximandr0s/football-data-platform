@@ -3,8 +3,9 @@ official match reports. The text comes from docs/data-sources.md and docs/requir
 report never disagree."""
 import streamlit as st
 
+import quality
 import sitemap
-from data import CREDIT, doc_section, library
+from data import CREDIT, doc_section, external_checks, library, table
 
 sitemap.header("sources_limits")
 
@@ -35,5 +36,15 @@ st.markdown(doc_section("data-sources.md", "Known limits (state them in the repo
 st.subheader("Checked against official sources")
 st.markdown("Goal minutes and possession of every stored match, compared with the clubs' match reports, news agencies "
             "and FBref.")
-st.markdown(doc_section("requirements-coverage.md", "External check against official sources"))
+external = external_checks()
+if external is None or lib is None:
+    st.info("docs/external_checks.yml or the Gold match library is missing.")
+else:
+    acc = quality.accuracy(external, table("gold_events"), lib, table("gold_team_profile"))
+    names = {r.match_id: f"{r.home_team_short} {r.home_score}-{r.away_score} {r.away_team_short}" for r in lib.itertuples()}
+    st.dataframe(acc.assign(match=acc.match_id.map(names), agrees=acc.status.map(
+        {quality.GREEN: "yes, as a source", quality.ORANGE: "1 minute / 2 points away", quality.RED: "no"}))
+        [["match", "what", "ours", "sources", "agrees"]], hide_index=True, width="stretch")
+    links = " · ".join(f"[{s['name']} ({k.split('_')[-1]})]({s['url']})" for k, s in external["sources"].items())
+    st.caption(f"Checked {external['checked_on']}. Sources: {links}")
 st.caption(CREDIT)
