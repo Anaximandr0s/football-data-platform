@@ -229,6 +229,15 @@ def test_the_silver_demo_catches_its_own_damage_and_exits_zero(tmp_path):
     assert not (tmp_path / "out" / "silver.json").exists()   # a demo never replaces the result of a real run
 
 
+@needs_soda
+def test_injected_damage_fails_like_a_real_run_without_replacing_its_result(tmp_path):
+    proc = run_silver(tmp_path, silver_tables(), "--inject-damage")
+    assert proc.returncode == 1, proc.stdout[-2500:]
+    result = json.loads((tmp_path / "out" / "silver-damaged.json").read_text())
+    assert result["failed"] > 0
+    assert not (tmp_path / "out" / "silver.json").exists()
+
+
 # ------------------------------------------------------------------ Gold
 def gold_db(path: Path, mutate=None) -> None:
     import duckdb
