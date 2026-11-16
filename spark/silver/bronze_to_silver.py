@@ -12,8 +12,10 @@ The write replaces the match's partition, so running the job again gives the sam
 duplicates, other matches untouched. If a check fails the match is not written and the exit code is 1.
 """
 import argparse
+import json
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 from pyspark.sql import DataFrame, SparkSession
@@ -58,6 +60,15 @@ def write_table(spark: SparkSession, df: DataFrame, table: str) -> None:
            .tableProperty("format-version", "2").create())
 
 
+def write_quality(match_id: str, metrics: dict, manifest: dict | None, ok: bool, written: bool) -> None:
+    at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")  # noqa: UP017 - the Spark image runs Python 3.10
+    config.QUALITY_DIR.mkdir(parents=True, exist_ok=True)
+    path = config.QUALITY_DIR / f"silver_{match_id}.json"
+    path.write_text(json.dumps(checks.quality_report(match_id, metrics, manifest, ok, written, at), indent=1),
+                    encoding="utf-8")
+    print(f"quality report: {path}")
+
+
 def process_match(spark: SparkSession, match_id: str, bronze_uri: str, manifest_dir: Path,
                   dry_run: bool, events_direction: str = config.EVENTS_DIRECTION) -> bool:
     raw = {t: read_bronze(spark, bronze_uri, t, match_id) for t in config.BRONZE_TABLES}
@@ -83,6 +94,7 @@ def process_match(spark: SparkSession, match_id: str, bronze_uri: str, manifest_
                              players, matches, speed_over_max=over_max)
     manifest = checks.load_manifest(match_id, manifest_dir)
     ok = checks.report(match_id, metrics, checks.evaluate(metrics, manifest), manifest is not None)
+    write_quality(match_id, metrics, manifest, ok, written=ok and not dry_run)
     if not ok:
         print(f"{match_id}: a check failed, nothing written", file=sys.stderr)
     elif dry_run:

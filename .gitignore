@@ -13,6 +13,7 @@ data/raw/
 data/prepared/
 data/soda/
 data/pipeline/
+data/quality/
 *.parquet
 *.jsonl
 *.duckdb

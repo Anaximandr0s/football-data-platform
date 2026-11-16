@@ -63,6 +63,24 @@ def measure(raw_counts: dict[str, int], tracking: DataFrame, events: DataFrame, 
     }
 
 
+PREPARED_KEYS = {"tracking": "tracking_rows", "events": "events", "ball": "ball_rows", "players": "players"}
+
+
+def quality_report(match_id: str, metrics: dict, manifest: dict | None, ok: bool, written: bool, at: str) -> dict:
+    """What the Data quality page needs from this run (data/quality/silver_<match>.json): rows prepared from the
+    source, read from bronze (replays add copies) and kept in Silver, and the values Silver corrected or rejected."""
+    prepared = None
+    if manifest:
+        prepared = {t: int(manifest[k]) for t, k in PREPARED_KEYS.items()} | {"matches": 1}
+    bronze, silver = metrics["bronze_rows"], metrics["rows"]
+    return {"match_id": match_id, "written_at_utc": at, "checks_passed": ok, "written": written,
+            "prepared_rows": prepared, "bronze_rows": bronze, "silver_rows": silver,
+            "replay_copies_removed": {t: bronze[t] - silver[t] for t in silver},
+            "positions_corrected": metrics["tracking"]["was_corrected"],
+            "speeds_rejected": metrics["tracking"]["speed_rejected"],
+            "tracking_rows": silver["tracking"]}
+
+
 def load_manifest(match_id: str, manifest_dir: Path) -> dict | None:
     path = manifest_dir / match_id / "manifest.json"
     return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None

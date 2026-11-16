@@ -271,3 +271,15 @@ def test_a_rejected_speed_replayed_twice_is_one_rejected_second(spark):
     once = [("H01", 10, 1, 50.0, 30.0, 44.0), ("H01", 11, 1, 51.0, 30.0, 12.0), ("A01", 10, 1, 60.0, 30.0, 41.0)]
     replayed = tracking(spark, once + once[:1])          # a second replay copies the 44 km/h second
     assert transforms.speeds_over_max(replayed) == 2
+
+
+def test_the_quality_report_says_what_was_prepared_read_kept_and_corrected():
+    metrics = {"bronze_rows": {"tracking": 30, "events": 6, "ball": 3, "players": 4, "matches": 2},
+               "rows": {"tracking": 10, "events": 2, "ball": 1, "players": 2, "matches": 1},
+               "tracking": {"was_corrected": 3, "speed_rejected": 1}}
+    manifest = {"tracking_rows": 10, "events": 2, "ball_rows": 1, "players": 2}
+    r = checks.quality_report("m1", metrics, manifest, True, True, "2026-11-17T10:00:00Z")
+    assert r["prepared_rows"] == {"tracking": 10, "events": 2, "ball": 1, "players": 2, "matches": 1}
+    assert r["replay_copies_removed"] == {"tracking": 20, "events": 4, "ball": 2, "players": 2, "matches": 1}
+    assert (r["positions_corrected"], r["speeds_rejected"], r["checks_passed"]) == (3, 1, True)
+    assert checks.quality_report("m1", metrics, None, False, False, "t")["prepared_rows"] is None

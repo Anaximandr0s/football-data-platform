@@ -4,6 +4,7 @@ Environment values come from the process or from the `.env` file at the reposito
 file the ingestion scripts read). Nothing here touches bronze: bronze is only read.
 """
 import os
+from pathlib import Path
 
 from ingestion.config import ROOT, S3_ENDPOINT, load_env  # read-only use of the shared settings
 
@@ -51,6 +52,7 @@ PACKAGES = os.getenv("SPARK_JARS_PACKAGES", DEFAULT_PACKAGES)
 
 # Where the ingestion manifests are (only used to compare the counts, optional)
 MANIFEST_DIR = ROOT / "data" / "prepared"
+QUALITY_DIR = Path(os.getenv("QUALITY_OUT_DIR", ROOT / "data" / "quality"))   # silver_<match>.json per run
 
 # --- MinIO ---
 S3_ENDPOINT_URL = S3_ENDPOINT  # http://localhost:9000, or http://minio:9000 inside Docker (MINIO_ENDPOINT)
