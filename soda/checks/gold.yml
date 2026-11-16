@@ -618,6 +618,9 @@ checks for gold_events:
         join (select match_id, sum(passes + shots + goals + tackles + fouls + pressures) as actions
               from gold_player_match_stats group by 1) s using (match_id)
         where e.actions != s.actions
+  - failed rows:
+      name: a goal has the second the ball was in the goal, within 10 s of its start; no other event has one
+      fail condition: (type = 'goal' and (goal_ts is null or goal_ts < ts or goal_ts > ts + 10 or goal_ts_method not in ('ball_in_goal', 'ball_nearest_goal', 'event_start'))) or (type != 'goal' and (goal_ts is not null or goal_ts_method is not null))
 
 checks for gold_match_library:
   - schema:

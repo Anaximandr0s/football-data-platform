@@ -571,6 +571,8 @@ number, and every tracked second of `gold_match_library` present.
 | player_short_name, receiver_short_name | VARCHAR | |
 | shirt_number | INTEGER | of the player |
 | third, lane | VARCHAR | of the start: `own` / `middle` / `final`, `left` / `centre` / `right`; null without a start |
+| goal_ts | INTEGER | goals only: the second the ball was in the goal (the score changes then on Live and Replay). `ts` is the start of the possession that ended with the shot. Within 10 s after `ts`: the first second with the ball past the goal line the team attacks, between the posts; else the second with the ball nearest the goal mouth; else `ts`. Same rule as `app/streamlit/goalmoment.py` (Live). Added 2026-11-17 |
+| goal_ts_method | VARCHAR | `ball_in_goal`, `ball_nearest_goal` or `event_start` (8, 7 and 0 of the 15 goals of m001-m004) |
 
 ### 10.4 Known characteristics (measured on 2026-11-16, one replay of each match)
 

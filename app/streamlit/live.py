@@ -11,12 +11,14 @@ switch ends at half-time); `silver_frame` gives the frame to draw in Silver's fr
 from dataclasses import dataclass, field, replace
 
 import clock as football_clock  # live.clock (below) is the replay second now
+import goalmoment
 import playerstats
 
 FULL_FRAME = 22
 CHUNK = 64                                               # seconds per frozen chunk of a player's history
 KEY_EVENTS = {"goal": "Goal", "shot": "Shot", "tackle": "Tackle", "foul": "Foul"}
 STALLED_AFTER_S = 300  # match seconds without any tracking: longer than any camera gap of the source (143 s)
+BALL_TRACK_S = 30      # seconds of ball kept to find when a goal went in (goalmoment needs 10 after the event)
 
 
 @dataclass(frozen=True)
@@ -29,7 +31,8 @@ class MatchState:
     frames: dict = field(default_factory=dict)           # ts -> (kafka_ms, {player_id: (x, y, is_detected)})
     ball: tuple | None = None                            # (ts, period, x, y, kafka_ms)
     possession: dict = field(default_factory=dict)       # ts -> (team_id, kafka_ms)
-    goals: dict = field(default_factory=dict)            # event_id -> (ts, team_id, player_id, kafka_ms)
+    goals: dict = field(default_factory=dict)            # event_id -> (ts, team_id, player_id, kafka_ms, goal second or None)
+    ball_track: dict = field(default_factory=dict)       # ts -> (period, x, y): the latest seconds of the ball
     last_event: tuple | None = None                      # (ts, event_id, type, team_id, player_id, kafka_ms)
     first_tracking: tuple | None = None                  # (ts, kafka_ms) of the earliest tracked second seen
     last_tracking: tuple | None = None                   # (ts, kafka_ms) of the latest tracked second seen
@@ -44,11 +47,11 @@ def apply(state: MatchState, table: str, rec: dict, kafka_ms: int) -> MatchState
     if table == "players":
         return replace(state, players={**state.players, rec["player_id"]: rec})
     if table == "tracking":
-        return _tracking(state, rec, kafka_ms)
+        return _settle(_tracking(state, rec, kafka_ms))
     if table == "ball":
-        return _ball(state, rec, kafka_ms)
+        return _settle(_ball(state, rec, kafka_ms))
     if table == "events":
-        return _event(state, rec, kafka_ms)
+        return _settle(_event(state, rec, kafka_ms))
     raise ValueError(f"unknown table {table}")
 
 
@@ -94,7 +97,9 @@ def _ball(state: MatchState, rec: dict, kafka_ms: int) -> MatchState:
     ball = state.ball
     if ball is None or rec["ts"] >= ball[0]:
         ball = (rec["ts"], rec["period"], rec["x"], rec["y"], kafka_ms)
-    return replace(state, ball=ball, possession=possession)
+    track = {**state.ball_track, rec["ts"]: (rec["period"], rec["x"], rec["y"])}
+    track = {t: v for t, v in track.items() if t >= max(track) - BALL_TRACK_S}
+    return replace(state, ball=ball, possession=possession, ball_track=track)
 
 
 def _event(state: MatchState, rec: dict, kafka_ms: int) -> MatchState:
@@ -103,16 +108,38 @@ def _event(state: MatchState, rec: dict, kafka_ms: int) -> MatchState:
         return state
     goals = state.goals
     if kind == "goal":
-        goals = {**goals, rec["event_id"]: (rec["ts"], rec["team_id"], rec["player_id"], kafka_ms)}
+        moment = goals.get(rec["event_id"], (None,) * 5)[4]          # a repeated message keeps the second found
+        goals = {**goals, rec["event_id"]: (rec["ts"], rec["team_id"], rec["player_id"], kafka_ms, moment)}
     item = (rec["ts"], rec["event_id"], kind, rec["team_id"], rec["player_id"], kafka_ms)
     last = state.last_event if state.last_event and state.last_event[:2] > item[:2] else item
     return replace(state, goals=goals, last_event=last)
 
 
+def _latest(state: MatchState) -> int:
+    return max(state.last_tracking[0] if state.last_tracking else -1, state.ball[0] if state.ball else -1)
+
+
+def _settle(state: MatchState) -> MatchState:
+    """Give each goal still waiting the second the ball went in (goalmoment), once the ball tells it."""
+    pending = {e: g for e, g in state.goals.items() if g[4] is None}
+    if not pending or not state.info:
+        return state
+    p1, p2 = state.info.get("home_side_p1"), state.info.get("home_side_p2")
+    ball = [(t, *playerstats.flip_xy(x, y, period, p1, p2)) for t, (period, x, y) in state.ball_track.items()
+            if x is not None]
+    goals = dict(state.goals)
+    for event_id, (ts, team, pid, ms, _) in pending.items():
+        found = goalmoment.goal_moment(team, ts, ball, _latest(state))
+        if found:
+            goals[event_id] = (ts, team, pid, ms, found[0])
+    return replace(state, goals=goals)
+
+
 # ---------------------------------------------------------------- reading a state
 
 def score(state: MatchState) -> tuple[int, int]:
-    teams = [g[1] for g in state.goals.values()]
+    """Goals whose ball is in the goal: the score changes when the ball goes in, not when the attack starts."""
+    teams = [g[1] for g in state.goals.values() if g[4] is not None]
     return teams.count("HOME"), teams.count("AWAY")
 
 
