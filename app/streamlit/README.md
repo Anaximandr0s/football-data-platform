@@ -38,7 +38,7 @@ to page. A page marked "coming soon" states its question and the build step (pro
 | | Home | `gold_match_library` | wordmark, match cards (teams, score, date, tracked share), "I am a Fan / I am a Coach" |
 | LIVE | Live match | Kafka topics `foot-*`, through one background consumer | "Now playing": only the matches being replayed right now (the sidebar match opens directly; "No match live right now" with a link to Replay otherwise). The match being replayed (`make replay`): the pitch component with the 22 players (lighter = estimated position) and the ball; a click on a player shows his distance, top speed, sprints and heatmap so far (`playerstats.py`, equal to Gold at full time); score from goal events, clock and period, possession bar, last goal / shot / tackle / foul, width and length of each team for the current second, "No tracking: camera off the pitch" during a camera gap, under the pitch the 5-minute panel of FOO-08 (topic `foot-live-stats`, written by `make streaming`): the 4 newest windows, "complete" or "in progress", possession and pressing per opponent pass, and who covered most ground. Only the newest replay of a match is shown (Kafka header `replay_id`). Redrawn about once per second (FOO-06) |
 | MATCHES | Match library | `gold_match_library` | every stored match, newest first; selecting a row makes it the match of every page |
-| MATCHES | Replay | | coming soon (step 7) |
+| MATCHES | Replay | `gold_replay_frames`, `gold_match_timeline`, `gold_space_control`, `gold_events` | A stored match played in the browser (pitch.js): play/pause, 0.25x to 8x, a scrubber with a mark and a chip per goal, the football clock and the score; smooth movement (straight line between two consecutive seconds, never across a camera gap; off = the raw 1 Hz), trails, names, detected only, Voronoi cells (d3-delaunay). The whole match goes to the browser once; the panel (score, possession so far, space control now, the 5-minute windows already over, and on a click the player's distance, top speed, sprints and heatmap up to now, `replayer.py`) follows the replay time the browser reports. A space-control chart with a line at now. Opened from the Match library |
 | MATCHES | Compare matches | `gold_team_match_stats` | two or more matches side by side at team level (FOO-09) |
 | FAN VIEW | Match story | `gold_match_timeline`, `gold_team_profile`, `gold_shots`, `gold_pass_network`, `gold_player_card`, `gold_team_match_stats` | score and goal timeline; per 5 minutes: danger created with passes (SkillCorner xThreat, not xG), possession (greyed under 60 known seconds) and territory (field tilt); the 3 key differences as sentences; shot map and pass network with the hub on the pitch component; side by side with the top speed from detected positions. One plain sentence under every chart, built by `story.py` from the Gold numbers shown |
 | FAN VIEW | Squad | `gold_player_card` | shirt cards (team colour, number, short name, position, tracked minutes, goal / hub / substitute badges) grouped by team; a click opens the Player page |
@@ -56,16 +56,15 @@ this machine): one frame per refresh (the Live pattern, all 4,428 tracked second
 refresh, 13 % of one CPU for the whole Streamlit server, 220 MB resident, 12.5 kB/s over the websocket, 60 frames per
 second, 11 MB of JavaScript heap, flat over time. The whole match sent each refresh (1.9 MB of JSON, played in the
 browser at 30x): 60 frames per second and no restart of the animation across 160 refreshes, but about 150 ms of server
-time per refresh, so Replay will send the match once, outside a refresh fragment.
+time per refresh, so Replay sends the match once per session and afterwards only its key (the browser keeps its copy, and asks again after a remount).
 
 Look: a stadium at night (`.streamlit/config.toml`, colours checked for contrast: body text 16:1, white on the primary
 green 5.0:1); `sitemap.style()` holds the few shared classes, and the charts use the same background (`viz.BG`).
 
 ## Reading the graphics
 
-- **Frame of the Live match page.** It draws the replayed positions as the camera sees them: teams switch ends at
-  half-time, and arrows show the direction of attack of the current period.
-- **Frame.** Every Gold graphic uses the Silver frame: the pitch is 105 x 68 m, **HOME always attacks to the right** and AWAY to
+- **Frame.** Every pitch and every Gold graphic uses the Silver frame (Live included: its camera positions are mirrored
+  in a half where HOME attacks toward x = 0, with `playerstats.flip_xy`): the pitch is 105 x 68 m, **HOME always attacks to the right** and AWAY to
   the left, in both halves. An AWAY player's heatmap therefore looks mirrored compared with a TV picture.
 - **Colours.** Team colours are the kit colours of the source. A colour that is too dark for the dark pitch (m001's HOME is
   `#363636`) or two similar colours are replaced by fixed ones (red and blue).
@@ -82,7 +81,7 @@ green 5.0:1); `sitemap.style()` holds the few shared classes, and the charts use
 | `sitemap.py` | every page with its section, question and persona; the menu per view; the page header and the "coming soon" box. Pure data, tested without Streamlit |
 | `sections/*.py` | the pages (not `pages/`, see Tests) |
 | `pitch.py`, `../web3d/pitch.js` | the pitch component: layers (players and ball, a whole match played in the browser, heatmap, shots, passes, attack arrows, a message), the selected player ringed, clicks sent back |
-| `playerstats.py` | the per-player formulas shared by Live (and later Replay): Silver frame, distance, sprint efforts, top speed from detected positions, 6 x 4 heatmap. Pure, tested against Gold |
+| `playerstats.py` | the per-player formulas shared by Live and Replay: Silver frame, distance, sprint efforts, top speed from detected positions, 6 x 4 heatmap. Pure, tested against Gold |
 | `cards.py` | the shirt and the badges of the player cards |
 | `clock.py` | the football clock fans see on TV, from the replay second and its period: 6', 45+2', 46' at the second kick-off, 90+1'. Every time shown in the app goes through it |
 | `story.py` | the sentences of the Match story: each one keeps the Gold numbers it was built from; differences, never causes |

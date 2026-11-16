@@ -35,7 +35,7 @@ Details: [`docs/architecture.md`](docs/architecture.md). The ingestion part: [`i
 | Bronze | MinIO, partitioned by match, counts verified | done |
 | Silver | Spark + Iceberg: cleaning, grain player x second | code and unit tests done, to run on the stack ([`spark/silver/README.md`](spark/silver/README.md)) |
 | Gold | dbt + DuckDB: 6 tables, tests, export to `s3://gold` | code and tests done, to run on the stack ([`dbt/README.md`](dbt/README.md)) |
-| Checks | Soda Core on Silver and Gold, 73 + 130 checks, failure demo | code and tests done, to run on the stack ([`soda/README.md`](soda/README.md)) |
+| Checks | Soda Core on Silver and Gold, 73 + 136 checks, failure demo | code and tests done, to run on the stack ([`soda/README.md`](soda/README.md)) |
 | Streaming stats (optional) | Spark Structured Streaming: 5- and 15-minute windows to the topic `foot-live-stats`, shown on Live; equal to Gold after a full replay ([`spark/streaming/live_stats.py`](spark/streaming/live_stats.py)) | done |
 | Orchestration | Dagster: the end of a replay runs bronze check -> Silver -> Soda -> Gold -> Soda -> report for its match; a failed check blocks what follows ([`dagster/README.md`](dagster/README.md)) | done |
 | Presentation | Streamlit + mplsoccer dashboard on Gold (live pitch page still to do) | code and tests done, to run on the stack ([`app/streamlit/README.md`](app/streamlit/README.md)) |

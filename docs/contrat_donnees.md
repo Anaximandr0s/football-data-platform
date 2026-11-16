@@ -310,7 +310,7 @@ warn the dashboard owner. Definitions and examples: [`../dbt/README.md`](../dbt/
 
 - DuckDB file `data/football.duckdb` (git-ignored), tables `main.gold_*`; copy as Parquet in `s3://gold/<table>.parquet`.
   The `stg_*` tables in the same file are copies of Silver used by dbt: they are not part of the contract.
-- Rebuilt in full by `make gold` (dbt build): staging, intermediate models, 16 Gold tables, tests. Read it with `make gold-sql`
+- Rebuilt in full by `make gold` (dbt build): staging, intermediate models, 17 Gold tables, tests. Read it with `make gold-sql`
   or open it read-only. The `int_*` tables (`int_events`, `int_team_shape_second`, `int_space_control_second`) are inputs of
   several Gold tables: they are in the file but not exported and not part of the contract.
 
@@ -541,6 +541,26 @@ a 1 m grid whose nearest player, detected or not, is HOME).
 | match_seconds | INTEGER | seconds of the two periods: `(p1_end_ts - p1_start_ts + 1) + (p2_end_ts - p2_start_ts + 1)` |
 | tracked_seconds | BIGINT | distinct seconds with tracking |
 | tracked_share | DOUBLE | tracked_seconds / match_seconds (m001 0.7358, m002 0.7828) |
+
+**gold_replay_frames** (R1, S1): one row per match per tracked second per object: each player on the pitch, and the
+ball. Key (match_id, ts, object_id). What the Replay page plays; seconds without tracking (camera gaps) have no row.
+Added 2026-11-16.
+
+| Column | Type | Meaning |
+|---|---|---|
+| match_id, object_id | VARCHAR | `object_id` = the `player_id`, or `ball` |
+| object_type | VARCHAR | `player` or `ball` |
+| ts, period | INTEGER | |
+| team_id | VARCHAR | HOME or AWAY; null for the ball |
+| shirt_number | INTEGER | null for the ball |
+| x, y | DOUBLE | Silver frame (HOME attacks toward x = 105), as `silver.tracking` and `silver.ball`: players inside 105 x 68, the ball may be outside |
+| speed_kmh | DOUBLE | the player's Silver speed (null above 40 km/h and after a gap); null for the ball |
+| is_detected | BOOLEAN | seen by the camera; null for the ball |
+| possession | VARCHAR | owner of the ball in this second (`silver.ball`): HOME, AWAY or null |
+| home_space_share | DOUBLE | share of the pitch nearest to a HOME player in this second (S1, `int_space_control_second`) |
+
+Soda checks: one row per key, 22 players and one ball per second, players inside the pitch with a team and a shirt
+number, and every tracked second of `gold_match_library` present.
 
 **gold_events** (E1, E2): one row per event, runs included. Key `event_id`.
 

@@ -430,3 +430,54 @@ fois par clé (joueur, seconde). Le premier lancement automatique l'a montré : 
 - Après un changement de modèle dbt, relancer `make dagster` (le graphe est lu dans `manifest.json`).
 - Un replay déjà fini avant le premier démarrage du capteur n'est pas repris.
 - Le démon a besoin de mémoire : deux Silver en même temps, environ 3 Go sur les 4 Go permis.
+
+## Replay : rejouer un match stocké (étape 7, R1 et S1)
+
+### Ce qui a été construit
+
+| Fichier | Rôle |
+|---|---|
+| `dbt/models/marts/gold_replay_frames.sql` | nouvelle table Gold : une ligne par seconde suivie et par objet (22 joueurs et le ballon), dans le repère de Silver, avec le possesseur du ballon et la part d'espace de HOME (S1) |
+| `app/streamlit/replayer.py` | Python pur : le match pour le navigateur (positions en centimètres entiers), et le panneau « jusqu'à maintenant » (score, possession, fenêtres terminées, stats d'un joueur) |
+| `app/web3d/pitch.js` | le terrain joue le match **dans le navigateur** : lecture/pause, 0,25x à 8x, curseur avec les buts, mouvement fluide, traces, noms, « détectés seulement », Voronoi |
+| `app/web3d/d3-delaunay.min.js` | la bibliothèque des cellules de Voronoi, gardée en fichier (licence ISC, dans `NOTICE`) |
+| `sections/replay.py` | la page : le terrain, le panneau, le graphique de contrôle de l'espace avec un trait « maintenant » |
+| `live.py`, `playerstats.flip_xy` | la page Live dessine aussi dans le repère de Silver : HOME attaque à droite sur tous les terrains du site |
+
+### Pourquoi c'est construit ainsi
+
+- **Le match part une seule fois.** 1,7 à 2,1 Mo de JSON par match (0,55 Mo compressé). Si Python le renvoyait à
+  chaque mise à jour du panneau, ce serait lent. Il l'envoie une fois ; ensuite il envoie seulement sa clé, et le
+  navigateur garde sa copie. Après un changement de page, le navigateur n'a plus la copie : il la redemande.
+- **10 Hz ou 1 Hz ? La réponse se voit.** Nous gardons 1 position par seconde. « Smooth movement » trace la ligne
+  droite entre deux secondes consécutives, au rythme de l'écran (60 images par seconde) ; on ne trace jamais à travers
+  un trou de caméra. En coupant l'option, on voit les sauts bruts de 1 Hz. L'interpolation est dessinée, jamais
+  stockée : les chiffres viennent toujours des vraies secondes.
+- **Le panneau ne connaît pas le futur.** Il ne montre que les fenêtres de 5 minutes déjà terminées : une fenêtre en
+  cours afficherait des valeurs Gold qui incluent des secondes pas encore jouées.
+- **Centimètres, pas décimètres.** Le premier essai en décimètres perdait la 2e décimale de Silver (le test l'a vu :
+  -1,25 m devenait -1,2 m). En centimètres entiers, la position dessinée est exactement celle de Silver.
+- **Un seul repère pour tout le site.** Live montrait l'image de la caméra (les équipes changent de côté à la
+  mi-temps), les autres pages le repère de Silver. Maintenant Live retourne la 2e mi-temps comme Silver : la même
+  seconde est au même endroit sur Live et sur Replay (vérifié : 132 positions, écart 0).
+
+### Les idées à retenir
+
+1. **Calculer là où c'est le moins cher.** Animer 60 fois par seconde se fait dans le navigateur ; les statistiques
+   restent en Python, avec les formules déjà testées contre Gold.
+2. **Une interpolation est un dessin, pas une donnée.** Elle rend le mouvement lisible, mais aucun chiffre n'en vient.
+
+### Ce qu'on n'a pas choisi
+
+- **Garder le 10 Hz de SkillCorner** : 10 fois plus de données à envoyer, pour un mouvement que l'interpolation rend
+  déjà fluide à l'écran ; et les statistiques de Gold sont calculées à 1 Hz.
+- **Un graphique Plotly animé** : chaque image et chaque cellule de Voronoi vivraient dans la figure, trop lourd.
+- **Laisser Live dans le repère de la caméra** : plus proche de la télévision, mais un même joueur aurait changé de
+  côté entre Live et Replay.
+
+### Limites connues
+
+- Le panneau suit la lecture toutes les 2 secondes (et tout de suite à la pause, au saut ou au clic) : à 8x, il a
+  environ 16 secondes de match de retard pendant la lecture.
+- Une fenêtre de 5 minutes en cours n'apparaît qu'une fois terminée.
+- Le premier affichage d'un match prend environ 1 seconde (lecture et préparation des 100 000 lignes, ensuite en cache).

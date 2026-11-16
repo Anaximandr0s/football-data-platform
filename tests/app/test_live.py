@@ -125,7 +125,16 @@ def test_team_shape_uses_outfield_players_of_the_current_second():
     assert shape == {"HOME": (50.0, 20.0), "AWAY": (30.0, 10.0)}         # goalkeepers left out
 
 
-def test_direction_of_attack_follows_the_period():
-    s = run(kickoff() + second(0))
-    assert live.home_attacks_right(s) is True
-    assert live.home_attacks_right(run(second(60, period=2), s)) is False
+def halves():
+    """m1 with a second kick-off at ts 60: HOME attacks toward x = 105 in period 1 and toward x = 0 in period 2."""
+    return run([("matches", {**MATCH, "p2_start_ts": 60}, T0)] + kickoff()[1:] + second(0))
+
+
+def test_the_live_pitch_is_drawn_in_silvers_frame_in_both_halves():
+    ts, ball, players = live.silver_frame(halves())
+    assert ts == 0 and players["H02"] == (30.0, 10.0, True) and ball == (52.5, 34.0)    # period 1: as sent
+    s = run(second(60, period=2, shift=-40.0), halves())
+    ts, ball, players = live.silver_frame(s)
+    assert ts == 60 and players["H03"] == (95.0, 8.0, True)       # (10, 60) seen by the camera, mirrored
+    assert players["H01"] == (105.0, 34.0, True)                  # (-35, 34) off the pitch: clipped, as Silver
+    assert players["A03"][2] is False

@@ -5,8 +5,8 @@
 A topic keeps every past replay. Every message carries the Kafka header replay_id ("m001-20261116T101503Z", set by
 producer_foot), so one MatchState holds exactly one replay: `route` sends a message to its replay's state, ignores an
 older replay of a match and messages without the header. Inside a replay the order of the topics does not matter.
-Coordinates are those of the replayed tables: origin bottom-left, attack directions as in the source (teams switch
-ends at half-time).
+The state keeps the coordinates of the replayed tables (origin bottom-left, attack directions as in the source, teams
+switch ends at half-time); `silver_frame` gives the frame to draw in Silver's frame, like every pitch of the app.
 """
 from dataclasses import dataclass, field, replace
 
@@ -236,8 +236,18 @@ def _history(history: tuple) -> list:
     return [item for chunk in (*chunks, tail) for item in chunk]
 
 
-def home_attacks_right(state: MatchState) -> bool | None:
-    """Direction HOME attacks in the current period, as given by the source."""
-    if state.period not in (1, 2):
+def silver_frame(state: MatchState) -> tuple[int, tuple | None, dict] | None:
+    """(ts, ball, {player_id: (x, y, is_detected)}) of the current frame in Silver's frame: HOME attacks toward
+    x = 105 in both halves, as on the Replay and Player pages (players clipped to the pitch like Silver, the ball not)."""
+    current = current_frame(state)
+    if current is None:
         return None
-    return state.info.get(f"home_side_p{state.period}") == "left_to_right"
+    ts, positions = current
+    p1, p2 = state.info.get("home_side_p1"), state.info.get("home_side_p2")
+    period = football_clock.period_of(ts, state.info.get("p2_start_ts"))
+    players = {pid: (*playerstats.silver_xy(x, y, period, p1, p2), det) for pid, (x, y, det) in positions.items()}
+    ball = None
+    if state.ball is not None:
+        _, ball_period, bx, by, _ = state.ball
+        ball = tuple(round(v, 2) for v in playerstats.flip_xy(bx, by, ball_period, p1, p2))
+    return ts, ball, players

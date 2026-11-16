@@ -20,7 +20,7 @@ SILVER_TABLES = ["tracking", "events", "ball", "players", "matches"]
 GOLD_TABLES = ["gold_player_match_stats", "gold_team_match_stats", "gold_zone_occupancy",
                "gold_pass_network", "gold_shots", "gold_player_5min", "gold_match_timeline", "gold_player_card",
                "gold_team_shape", "gold_pressing", "gold_team_build_up", "gold_player_fatigue", "gold_space_control",
-               "gold_team_profile", "gold_events", "gold_match_library"]
+               "gold_team_profile", "gold_events", "gold_match_library", "gold_replay_frames"]
 
 
 def test_every_table_has_a_checks_block_with_a_schema_check():
@@ -413,9 +413,17 @@ def matchlens_tables() -> dict:
                     {"home_score": i32, "away_score": i32, "match_seconds": i32, "tracked_seconds": i64,
                      "speeds_rejected": i64,
                      **{c: i32 for c in ("p1_start_ts", "p1_end_ts", "p2_start_ts", "p2_end_ts")}})
+    frames = typed([dict(match_id="mx", ts=ts, period=1 if ts < 2 else 2, object_id=oid, object_type=kind,
+                         team_id=team, shirt_number=n, x=x, y=34.0, speed_kmh=None, is_detected=True if team else None,
+                         possession="HOME", home_space_share=0.55)
+                    for ts in range(3)
+                    for oid, kind, team, n, x in [*((f"{t[0]}{n:02d}", "player", t, n, 5.0 * n) for t in ("HOME", "AWAY")
+                                                    for n in range(1, 12)), ("ball", "ball", None, None, 107.0)]],
+                   {"ts": i32, "period": i32, "shirt_number": "Int32", "speed_kmh": f64, "is_detected": "boolean"})
     return {"gold_match_library": library, "gold_match_timeline": timeline, "gold_player_card": card, "gold_team_shape": shape,
             "gold_pressing": pressing, "gold_team_build_up": build_up, "gold_player_fatigue": fatigue,
-            "gold_space_control": space, "gold_team_profile": profile, "gold_events": events}
+            "gold_space_control": space, "gold_team_profile": profile, "gold_events": events,
+            "gold_replay_frames": frames}
 
 
 def run_gold(tmp: Path, *extra: str, mutate=None):
@@ -468,11 +476,13 @@ def test_gold_matchlens_rules_are_enforced(tmp_path):
         t["gold_space_control"].loc[0, "space_share"] = 0.7                  # HOME + AWAY no longer cover the pitch
         t["gold_player_card"].loc[0, "score_passing"] = 80                   # a score for an ineligible player
         t["gold_match_timeline"].loc[0, "possession_greyed"] = False         # 2 known seconds shown as reliable
+        t["gold_replay_frames"] = t["gold_replay_frames"].iloc[1:]            # a player missing from second 0
     names = failed_names(run_gold(tmp_path, mutate=damage))
     assert "defensive actions are pressures, tackles and fouls, never runs" in names
     assert "the two teams share the pitch (HOME + AWAY = 1 in every window)" in names
     assert "an eligible player has 5 scores between 0 and 100, the others none" in names
     assert "a window is greyed exactly when it has fewer than 60 known seconds" in names
+    assert "every tracked second has its ball and 22 players" in names
 
 
 @needs_soda

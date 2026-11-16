@@ -97,19 +97,20 @@ Guide and limits: [`dagster/README.md`](../dagster/README.md).
 ## Gold tables
 
 dbt-core + dbt-duckdb (`dbt/`), run by `make gold` in the `dbt` container: five staging tables (a copy of Silver, read with
-`iceberg_scan`) and 16 Gold tables, tested against Silver, kept in the DuckDB file `data/football.duckdb` and exported as
+`iceberg_scan`) and 17 Gold tables, tested against Silver, kept in the DuckDB file `data/football.duckdb` and exported as
 Parquet to `s3://gold/<table>.parquet`. DuckDB is embedded (no server); `make gold-sql` queries the file read-only.
 Specification: [`gold-guide.md`](gold-guide.md). Guide of the code: [`dbt/README.md`](../dbt/README.md).
 
 `gold_player_match_stats` (player x match) · `gold_team_match_stats` (team x match) · `gold_zone_occupancy` (player x zone) ·
 `gold_pass_network` (passer x receiver x match) · `gold_shots` (one shot) · `gold_player_5min` (player x 5-minute window),
+`gold_replay_frames` (match x second x player or ball, played by the Replay page),
 and the nine MatchLens tables of [`product.md`](product.md) section 7 (timeline, player card, team shape, pressing,
 build-up, fatigue, space control, team profile, events).
 
 ## Quality (Soda)
 
 Soda Core 3.5 runs SodaCL checks on Silver (`soda/checks/silver.yml`, 73 checks) and on the Gold file (`soda/checks/gold.yml`,
-130 checks) through one DuckDB connection built by `soda/run_checks.py`; nothing is written to the data. The exit code (0 / 1) is
+136 checks) through one DuckDB connection built by `soda/run_checks.py`; nothing is written to the data. The exit code (0 / 1) is
 what Dagster will use to block the next step; each run also writes `data/soda/<layer>.json` for the dashboard. `make soda-demo`
 damages a copy on purpose to show the checks catch it. Soda has its own image because its DuckDB connector pins DuckDB 1.0
 (see [`soda/README.md`](../soda/README.md)). The columns and types the schema checks enforce are in
