@@ -56,10 +56,11 @@ def test_positions_show_the_latest_complete_second(monkeypatch):
 def test_score_after_each_goal_and_the_event_line():
     s = run(kickoff() + second(0))
     assert live.score(s) == (0, 0) and live.event_line(s) is None
-    s = run([event("m1-e00001", 30, "goal", "HOME", "H03")], s)
+    s = run([event("m1-e00001", 30, "goal", "HOME", "H03")] + second(41), s)   # 10 s later the goal is settled
     assert live.score(s) == (1, 0)
     assert live.event_line(s) == "Goal, 1', Home FC (P. H03)"
-    s = run([event("m1-e00002", 70, "goal", "AWAY", "A03"), event("m1-e00003", 95, "goal", "AWAY", "A02")], s)
+    s = run([event("m1-e00002", 70, "goal", "AWAY", "A03"), event("m1-e00003", 95, "goal", "AWAY", "A02")]
+            + second(106), s)
     assert live.score(s) == (1, 2)
     assert live.event_line(s) == "Goal, 2', Away FC (P. A02)"
     s = run([event("m1-e00003", 95, "goal", "AWAY", "A02")], s)        # a duplicate never counts twice
@@ -102,15 +103,15 @@ def routed(messages, replay_id, states=None):
 
 
 def test_replays_are_kept_apart_by_their_replay_id():
-    first = routed(kickoff(T0) + second(0, T0) + [event("m1-e00001", 30, "goal", "HOME", "H03", T0)],
+    first = routed(kickoff(T0) + second(0, T0) + [event("m1-e00001", 30, "goal", "HOME", "H03", T0)] + second(41, T0),
                    "m1-20261116T100000Z")
     assert live.score(first["m1"]) == (1, 0)
     t1 = T0 + 1_000_000
     # the new replay's goal and positions arrive BEFORE its matches row (topics are not ordered with each other)
-    s = routed([event("m1-e00009", 5, "goal", "AWAY", "A02", t1)] + second(3, t1) + kickoff(t1),
+    s = routed([event("m1-e00009", 5, "goal", "AWAY", "A02", t1)] + second(3, t1) + kickoff(t1) + second(16, t1),
                "m1-20261116T110000Z", first)
     assert s["m1"].replay_id == "m1-20261116T110000Z" and live.score(s["m1"]) == (0, 1)   # the old goal is gone
-    assert live.current_frame(s["m1"])[0] == 3
+    assert live.current_frame(s["m1"])[0] == 16
     late_old = routed([event("m1-e00002", 40, "goal", "HOME", "H02", T0)] + second(50, T0), "m1-20261116T100000Z", s)
     assert late_old["m1"] is s["m1"]                                      # a late message of the old replay is ignored
 
@@ -138,3 +139,21 @@ def test_the_live_pitch_is_drawn_in_silvers_frame_in_both_halves():
     assert ts == 60 and players["H03"] == (95.0, 8.0, True)       # (10, 60) seen by the camera, mirrored
     assert players["H01"] == (105.0, 34.0, True)                  # (-35, 34) off the pitch: clipped, as Silver
     assert players["A03"][2] is False
+
+
+def ball(ts, x, y, period=1):
+    return ("ball", {"match_id": "m1", "ts": ts, "period": period, "x": x, "y": y, "z": 0.0, "possession": None},
+            T0 + ts * PACE)
+
+
+def test_the_score_changes_when_the_ball_is_in_the_goal_not_when_the_attack_starts():
+    s = run([event("m1-e00001", 30, "goal", "HOME", "H03"), ball(31, 90.0, 30.0), ball(32, 104.0, 34.0)], halves())
+    assert live.score(s) == (0, 0)                                    # the shot is on its way
+    s = run([ball(33, 106.0, 35.0)], s)                               # past the line, between the posts
+    assert live.score(s) == (1, 0) and s.goals["m1-e00001"][4] == 33
+    # AWAY, second half (camera mirrored: x = 103 is x = 2 in Silver's frame), the ball never seen in the goal
+    s = run([event("m1-e00002", 70, "goal", "AWAY", "A03"), ball(72, 103.0, 34.0, 2), ball(75, 60.0, 30.0, 2),
+             ball(79, 50.0, 30.0, 2)], s)
+    assert live.score(s) == (1, 0)                                    # undecided until 10 s after the event
+    s = run([ball(80, 50.0, 30.0, 2)], s)
+    assert live.score(s) == (1, 1) and s.goals["m1-e00002"][4] == 72  # the second the ball was nearest the goal

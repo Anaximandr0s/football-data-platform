@@ -15,6 +15,110 @@
 | - | Replay of a stored match (product.md R1, S1) | stack | both | done: `gold_replay_frames` (17th Gold table, 6 Soda checks), the Replay page (pitch.js plays the match in the browser: 0.25x-8x, scrubber, goal marks, smooth movement between seconds, trails, names, detected only, Voronoi) and its panel up to the replay time; Live drawn in the same Silver frame | on 2026-11-16, m001: 110 positions drawn at 5 random seconds equal `silver.tracking` (largest difference 1.4e-14 m); Live and Replay at 6 seconds of both halves: 132 positions, difference 0; the panel at 24:59, half time and full time equals Gold (score, possession seconds, windows, tracked seconds, distance, sprints, top speed); the Goodwin chip shows 2-2, then 2-3 at 62:57 ([screenshot](img/replay_m001_after_goodwin.png)); payload 1.69-2.06 MB per match sent once; the whole of m001 at 8x with trails, names and Voronoi: 59-60 fps, browser heap 36-68 MB ([Voronoi](img/replay_m001_voronoi_goodwin.png), [full time](img/replay_m001_full_time.png)); `python -m pytest tests/app` |
 
 Status: todo · in progress · done (with proof: command, file or screenshot).
+## Data corrections (2026-11-17)
+
+### Top speed (F5): best speed held over two consecutive detected seconds
+
+Before: the fastest single second whose two positions the camera saw (m003: T. Okamoto 39.5 km/h, impossible).
+After: `max(min(v(ts - 1), v(ts)))` with the positions of ts - 2, ts - 1 and ts detected, in `gold_player_card`,
+Live and Replay (`playerstats.py`), shown on the Player page and the Match story. The after column, recomputed
+here from Silver, equals `gold_player_card.top_speed_kmh` for all 123 players (to its 1 decimal).
+Fastest overall: before 39.5 km/h, after 33.1 km/h; players above 36 km/h:
+before 1, after 0.
+
+**m001**
+
+| # | 10 fastest before (km/h) | after | 10 fastest after (km/h) | before |
+|---|---|---|---|---|
+| 1 | C. Brown (LB) 33.0 | 25.6 | A. Goodwin (CF) 31.9 | 32.8 |
+| 2 | A. Goodwin (CF) 32.8 | 31.9 | B. Folami (LW) 31.4 | 31.7 |
+| 3 | D. Pierias (RB) 32.3 | 30.9 | B. Halloran (LW) 31.3 | 31.6 |
+| 4 | A. Burke-Gilroy (RB) 31.7 | 30.6 | R. Kitto (LB) 31.2 | 31.6 |
+| 5 | B. Folami (LW) 31.7 | 31.4 | D. Pierias (RB) 30.9 | 32.3 |
+| 6 | R. Kitto (LB) 31.6 | 31.2 | S. Klein (RDM) 30.7 | 30.9 |
+| 7 | B. Halloran (LW) 31.6 | 31.3 | A. Burke-Gilroy (RB) 30.6 | 31.7 |
+| 8 | B. Warland (LCB) 31.6 | 27.9 | E. Alagich (LDM) 30.4 | 30.7 |
+| 9 | S. Klein (RDM) 30.9 | 30.7 | H. Bility (RCB) 29.6 | 30.1 |
+| 10 | F. Bérenguer (LW) 30.9 | 29.2 | T. Waddingham (CF) 29.4 | 30.8 |
+
+**m002**
+
+| # | 10 fastest before (km/h) | after | 10 fastest after (km/h) | before |
+|---|---|---|---|---|
+| 1 | A. Faisal (LW) 31.6 | 29.0 | H. Van Der Saag (RB) 29.1 | 31.4 |
+| 2 | H. Van Der Saag (RB) 31.4 | 29.1 | A. Faisal (LW) 29.0 | 31.6 |
+| 3 | J. Risdon (RB) 30.7 | 28.2 | A. Burke-Gilroy (LB) 28.3 | 29.1 |
+| 4 | T. Ostler (RW) 29.9 | 27.2 | J. Risdon (RB) 28.2 | 30.7 |
+| 5 | R. Warland (LB) 29.5 | 27.6 | N. Blair (CF) 27.9 | 28.4 |
+| 6 | A. Burke-Gilroy (LB) 29.1 | 28.3 | T. Waddingham (CF) 27.9 | 28.0 |
+| 7 | F. Bérenguer (AM) 28.9 | 26.2 | R. Warland (LB) 27.6 | 29.5 |
+| 8 | N. Blair (CF) 28.4 | 27.9 | Walid Shour (RDM) 27.4 | 28.2 |
+| 9 | N. Pennington (LM) 28.4 | 25.5 | K. Jelacic (LW) 27.3 | 27.7 |
+| 10 | Walid Shour (RDM) 28.2 | 27.4 | A. Zimarino (RW) 27.3 | 27.5 |
+
+**m003**
+
+| # | 10 fastest before (km/h) | after | 10 fastest after (km/h) | before |
+|---|---|---|---|---|
+| 1 | T. Okamoto (RB) 39.5 | 31.3 | J. Anasmo (RW) 31.3 | 33.5 |
+| 2 | J. Anasmo (RW) 33.5 | 31.3 | T. Okamoto (RB) 31.3 | 39.5 |
+| 3 | K. Jelacic (CF) 32.9 | 27.8 | P. Wood (CF) 30.7 | 32.0 |
+| 4 | P. Wood (CF) 32.0 | 30.7 | A. Burke-Gilroy (RB) 29.8 | 30.6 |
+| 5 | N. Mileusnić (RW) 31.7 | 28.9 | B. Halloran (RW) 29.5 | 30.9 |
+| 6 | B. Halloran (RW) 30.9 | 29.5 | N. Mileusnić (RW) 28.9 | 31.7 |
+| 7 | A. Burke-Gilroy (RB) 30.6 | 29.8 | A. Taggart (CF) 28.9 | 30.4 |
+| 8 | N. Amanatidis (CF) 30.4 | 27.6 | J. Hingert (RB) 28.7 | 29.6 |
+| 9 | A. Taggart (CF) 30.4 | 28.9 | J. Pearman (CF) 28.5 | 30.1 |
+| 10 | J. Pearman (CF) 30.1 | 28.5 | S. Klein (RM) 28.3 | 28.8 |
+
+**m004**
+
+| # | 10 fastest before (km/h) | after | 10 fastest after (km/h) | before |
+|---|---|---|---|---|
+| 1 | Z. Clough (RW) 34.3 | 33.1 | Z. Clough (RW) 33.1 | 34.3 |
+| 2 | D. Pierias (RB) 33.4 | 33.0 | D. Pierias (RB) 33.0 | 33.4 |
+| 3 | A. Segecic (RDM) 32.9 | 30.7 | P. Klimala (CF) 31.1 | 31.8 |
+| 4 | P. Klimala (CF) 31.8 | 31.1 | A. Ayoubi (RW) 30.9 | 31.2 |
+| 5 | A. Goodwin (CF) 31.7 | 30.3 | A. Segecic (RDM) 30.7 | 32.9 |
+| 6 | A. Ayoubi (RW) 31.2 | 30.9 | A. Goodwin (CF) 30.3 | 31.7 |
+| 7 | J. Courtney-Perkins (LB) 30.8 | 29.5 | J. Lolley (RW) 30.0 | 30.5 |
+| 8 | J. Lolley (RW) 30.5 | 30.0 | R. Grant (RCB) 29.7 | 30.0 |
+| 9 | A. Ouahim (LW) 30.2 | 29.2 | Z. de Jesus (RB) 29.7 | 29.8 |
+| 10 | J. Yull (LW) 30.1 | 29.2 | A. Cáceres (AM) 29.6 | 30.0 |
+
+### Goal moment: the second the ball was in the goal
+
+A goal event's ts is the start of the possession that ended with the shot. Live and Replay now change the score
+at `gold_events.goal_ts`: within 10 s, the first second with the ball past the goal line between the posts, else
+the second the ball was nearest the goal mouth (the ball is extrapolated after many shots and the camera often
+cuts away). The same rule in dbt and `app/streamlit/goalmoment.py` (Live): equal on the 15 goals. The minute of
+a goal (6', 62') still comes from its ts: no minute changes.
+
+| Match | Scorer | Old second (clock) | New second (clock) | Later by | How |
+|---|---|---|---|---|---|
+| m001 | K. Jelacic | 326 (05:26) | 330 (05:30) | 4 s | ball_in_goal |
+| m001 | S. Mauk | 1934 (32:14) | 1936 (32:16) | 2 s | ball_in_goal |
+| m001 | J. O'Shea | 2538 (42:18) | 2539 (42:19) | 1 s | ball_nearest_goal |
+| m001 | Z. Clough | 2936 (45:37) | 2936 (45:37) | 0 s | ball_nearest_goal |
+| m001 | A. Goodwin | 3890 (61:31) | 3892 (61:33) | 2 s | ball_in_goal |
+| m002 | D. Williams | 4429 (68:25) | 4430 (68:26) | 1 s | ball_nearest_goal |
+| m003 | L. Amos | 411 (06:51) | 414 (06:54) | 3 s | ball_nearest_goal |
+| m003 | Asumah Abubakar | 2165 (36:05) | 2169 (36:09) | 4 s | ball_nearest_goal |
+| m003 | S. Klein | 3194 (50:38) | 3196 (50:40) | 2 s | ball_in_goal |
+| m003 | S. Klein | 5473 (88:37) | 5477 (88:41) | 4 s | ball_nearest_goal |
+| m004 | J. Lolley | 2127 (35:27) | 2128 (35:28) | 1 s | ball_in_goal |
+| m004 | P. Klimala | 2818 (45:16) | 2820 (45:18) | 2 s | ball_nearest_goal |
+| m004 | D. Pierias | 3033 (48:51) | 3039 (48:57) | 6 s | ball_in_goal |
+| m004 | A. Segecic | 4576 (74:34) | 4582 (74:40) | 6 s | ball_in_goal |
+| m004 | A. Cáceres | 5073 (82:51) | 5080 (82:58) | 7 s | ball_in_goal |
+
+Checked in a browser on 2026-11-17: every goal of m001 to m004 played from its chip at 4x; for all 15, the score is
+the old one before the goal second, the GOAL! banner appears at it with the new score, the replay holds 3 s and
+plays on ([m004](img/replay_goal_banner_m004.png), [m001](img/replay_goal_banner_m001.png)). Live, m001 from
+05:12 at x1: 0-0 until 05:28, 1-0 at 05:29 ([screenshot](img/live_goal_moment_m001.png)). While playing, the
+panel trails by a median of 1 s of match time at 4x and 8x (max 2 s, 95 samples each); 8 clicks on players at 8x
+each selected the player in 0.4-0.6 s ([screenshot](img/replay_click_at_8x.png)).
+
 ## Dagster runs (2026-11-16)
 
 Every match went through the automatic chain: each run below marked `sensor` started by itself when its replay sent

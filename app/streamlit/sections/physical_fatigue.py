@@ -79,5 +79,7 @@ else:
     st.bar_chart(one.set_index("minutes")["distance_m"], color=colors[team], sort=False)
     st.caption("Distance in each window (m). A short window (45+, 90+) or one with little tracking is under-estimated.")
     st.dataframe(one[["minutes", "coverage", "distance_m", "sprint_seconds", "max_speed_kmh", "passes", "pressures"]],
-                 hide_index=True, width="stretch")
+                 hide_index=True, width="stretch",
+                 column_config={"max_speed_kmh": st.column_config.NumberColumn(
+                     "fastest second (raw)", help="One second, estimated positions included: not the top speed (F5)")})
 st.caption(CAVEAT)

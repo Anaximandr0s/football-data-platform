@@ -115,7 +115,7 @@ table_rows = {
                             for t in ("HOME", "AWAY")],
     "Distance (km, tracked time)": [f"{rows.loc[t, 'distance_km']:.1f}" for t in ("HOME", "AWAY")],
     "Sprint efforts": [f"{int(rows.loc[t, 'sprint_count'])}" for t in ("HOME", "AWAY")],
-    "Top speed (km/h, detected)": [f"about {top[t]:.0f}" if pd.notna(top.get(t)) else "n/a" for t in ("HOME", "AWAY")],
+    "Top speed (km/h, held 2 s)": [f"about {top[t]:.0f}" if pd.notna(top.get(t)) else "n/a" for t in ("HOME", "AWAY")],
 }
 st.dataframe(pd.DataFrame(table_rows, index=[short["HOME"], short["AWAY"]]).T, width="stretch")
 say(story.fastest(card, short))

@@ -138,4 +138,4 @@ def test_live_page_shows_the_5_minute_windows_of_the_streaming_job(monkeypatch):
     table = at.dataframe[-1].value
     assert list(table.minutes) == ["5-10'", "0-5'"] and list(table.status) == ["in progress", "complete"]
     assert list(table.iloc[:, 2]) == ["-", "60% - 40%"] and list(table.iloc[:, 3]) == ["-", "1.20"] and list(table.iloc[:, 4]) == ["-", "-"]
-    assert "P. H09 150 m/min (top 28 km/h)" in texts(at)
+    assert "P. H09 150 m/min" in texts(at) and "top 28" not in texts(at)

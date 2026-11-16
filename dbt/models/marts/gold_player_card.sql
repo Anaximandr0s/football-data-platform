@@ -2,15 +2,23 @@
 -- tracking rows); dpm divides by the seconds that have a speed. Scores rank the eligible players of both teams
 -- (outfield, at least 20 tracked minutes) inside one match: 100 = best. Other players keep their values, without scores.
 with flagged as (
-    select *, lag(is_detected) over (partition by match_id, player_id order by ts) as previous_detected
+    select *,
+           lag(is_detected, 1) over w as previous_detected,
+           lag(is_detected, 2) over w as before_previous_detected,
+           lag(speed_kmh) over w      as previous_speed_kmh,
+           lag(ts, 2) over w          as before_previous_ts
     from {{ ref('stg_tracking') }}
+    window w as (partition by match_id, player_id order by ts)
 ),
 
--- a speed joins two positions one second apart: the top speed uses only speeds whose two positions the camera saw,
--- because every speed above 33 km/h in m001 and m002 had an estimated position at one end
+-- F5: the best speed HELD over two consecutive seconds, min(v(ts - 1), v(ts)), with the three positions ts - 2, ts - 1
+-- and ts seen by the camera. A speed joins two positions one second apart, so one bad position makes one fast second:
+-- a single fast second (m003: 39.5 km/h) is not a top speed.
 spd as (
     select match_id, player_id, sum(speed_kmh / 3.6) as distance_m, count(speed_kmh) as speed_seconds,
-           max(speed_kmh) filter (where is_detected and previous_detected) as top_speed_kmh
+           max(least(speed_kmh, previous_speed_kmh)) filter (
+               where is_detected and previous_detected and before_previous_detected and before_previous_ts = ts - 2
+                 and speed_kmh is not null and previous_speed_kmh is not null) as top_speed_kmh
     from flagged
     group by 1, 2
 ),

@@ -34,6 +34,17 @@ def team_colors(teams: pd.DataFrame, match_id: str) -> dict[str, str]:
     return colors
 
 
+def possession_bar(home_share: float, colors: dict[str, str], names: dict[str, str]) -> str:
+    """HTML of the possession bar of Live and Replay: the two team names and shares above a bar in their colours."""
+    away_share = 1 - home_share
+    return (f"<div style='display:flex;justify-content:space-between;font-size:.85rem;margin-bottom:3px'>"
+            f"<span><b style='color:{colors['HOME']}'>&#9632;</b> {names['HOME']} {home_share:.0%}</span>"
+            f"<span>{away_share:.0%} {names['AWAY']} <b style='color:{colors['AWAY']}'>&#9632;</b></span></div>"
+            f"<div style='display:flex;height:16px;border-radius:4px;overflow:hidden'>"
+            f"<div style='width:{home_share:.0%};background:{colors['HOME']}'></div>"
+            f"<div style='width:{away_share:.0%};background:{colors['AWAY']}'></div></div>")
+
+
 def _luminance(color: str) -> float:
     """Relative brightness 0 (black) to 1 (white)."""
     r, g, b = (int(color[i:i + 2], 16) / 255 for i in (1, 3, 5))

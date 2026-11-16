@@ -46,11 +46,13 @@ if frames.empty:
 roster = frames[frames.object_type == "player"].drop_duplicates("object_id").set_index("object_id")
 cards = table("gold_player_card")
 short = dict(zip(cards[cards.match_id == match].player_id, cards[cards.match_id == match].short_name, strict=False))
-players = {pid: [r.team_id, int(r.shirt_number), short.get(pid, pid)] for pid, r in roster.iterrows()}
+players = {pid: [r.team_id, int(r.shirt_number), short.get(pid, pid), r.position == "GK"] for pid, r in roster.iterrows()}
 events = table("gold_events")
-goals = replayer.goals(events[events.match_id == match], *bounds)
+events = events[events.match_id == match]
+goals = replayer.goals(events, *bounds)
 first, last = payload["t"][0], int(info.p2_end_ts)
 controls = {"start": first, "end": last, "goals": goals, "names": [names["HOME"], names["AWAY"]],
+            "shots": replayer.shots(events, *bounds), "events": replayer.key_events(events, names, *bounds),
             "clock": replayer.clock_labels(first, last, *bounds)}
 timeline = table("gold_match_timeline")
 timeline = timeline[timeline.match_id == match]
@@ -59,7 +61,7 @@ space = space[(space.match_id == match) & (space.team_id == "HOME")]
 
 
 def player_panel(player_id: str, ts: int) -> None:
-    team, shirt, name = players[player_id]
+    team, shirt, name, _ = players[player_id]
     stats = replayer.player_until(frames, player_id, ts)
     top = "not yet" if stats.top_speed_kmh is None else f"about {stats.top_speed_kmh:.0f} km/h"
     st.markdown(f"<div class='ml-kicker'>SELECTED PLAYER</div>"
@@ -87,10 +89,7 @@ def panel(ts: int) -> None:
         st.divider()
     h, a = replayer.possession_until(frames, ts)
     if h + a:
-        st.markdown(f"<div style='display:flex;height:18px;border-radius:4px;overflow:hidden'>"
-                    f"<div style='width:{h / (h + a):.0%};background:{colors['HOME']}'></div>"
-                    f"<div style='width:{a / (h + a):.0%};background:{colors['AWAY']}'></div></div>",
-                    unsafe_allow_html=True)
+        st.markdown(viz.possession_bar(h / (h + a), colors, names), unsafe_allow_html=True)
         st.caption(f"Possession so far {h / (h + a):.0%} - {a / (h + a):.0%} over {(h + a) // 60} min with a known owner")
     share = replayer.space_now(frames, ts)
     if share is not None:
@@ -117,15 +116,17 @@ def replay_view() -> None:
     left, right = st.columns([3, 1])
     with left:
         selected = st.session_state.get("replay_player", {}).get(match)
-        result = pitch.replay(key=f"replay_{match}", players=players, colors=colors, replay=controls,
+        result = pitch.replay(key=f"replay_{match}", players=players, colors=colors, replay=controls, names=names,
                               frames=payload if full else {"key": payload["key"]}, selected=selected)
         if full:
             st.session_state["replay_sent"] = payload["key"]
         elif result.reload == payload["key"]:         # the browser lost its copy (remount): send the match again
             st.session_state["replay_sent"] = None
             st.rerun(scope="fragment")
-        if result.player:
-            st.session_state["replay_player"] = {**st.session_state.get("replay_player", {}), match: result.player}
+        pick = result.pick                            # {player, n}: a click counts once, even after "Close"
+        if pick and pick.get("n") != st.session_state.get("replay_pick"):
+            st.session_state["replay_pick"] = pick["n"]
+            st.session_state["replay_player"] = {**st.session_state.get("replay_player", {}), match: pick["player"]}
         st.caption(f"{names['HOME']} attacks to the right in both halves. Positions are 1 per second (Gold, 1 Hz): "
                    "Smooth movement draws the straight line between two consecutive seconds at the screen's frame "
                    "rate, never across a camera gap; switch it off to see the raw 1 Hz jumps. Lighter dots are "

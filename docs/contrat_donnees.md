@@ -447,7 +447,7 @@ The source gives no saved / blocked / off-target outcome: there is no expected-g
 | source_player_id | BIGINT | SkillCorner id: the same player across matches |
 | shirt_number | INTEGER | |
 | is_outfield, is_eligible | BOOLEAN | eligible = outfield and `tracked_minutes >= 20` |
-| tracked_minutes, dpm, top_speed_kmh | DOUBLE | tracking rows / 60; m per minute with a speed; fastest speed whose two positions (this second and the one before) are both detected, shown "about N km/h" (`gold_player_match_stats.max_speed_kmh` keeps all positions) |
+| tracked_minutes, dpm, top_speed_kmh | DOUBLE | tracking rows / 60; m per minute with a speed; best speed held over two consecutive seconds, `max(min(v(ts - 1), v(ts)))`, with the positions of ts - 2, ts - 1 and ts detected (F5, rule of 2026-11-17), shown "about N km/h" (`gold_player_match_stats.max_speed_kmh` keeps the raw fastest second) |
 | sprint_count, passes_successful, progressive_passes, progressive_passes_successful, defensive_actions, goals, passes_received_successful | BIGINT | |
 | sprints_per_min, passes_successful_per_min, progressive_passes_successful_per_min, defensive_actions_per_min | DOUBLE | per tracked minute |
 | score_work_rate, score_sprints, score_passing, score_progression, score_defending | INTEGER | `round(100 x percent_rank())` among the eligible players of the match, of dpm and the four rates above; null if not eligible |
@@ -553,7 +553,9 @@ Added 2026-11-16.
 | ts, period | INTEGER | |
 | team_id | VARCHAR | HOME or AWAY; null for the ball |
 | shirt_number | INTEGER | null for the ball |
+| position | VARCHAR | the player's position (`GK` for a goalkeeper), from `players`; null for the ball. Added 2026-11-17 |
 | x, y | DOUBLE | Silver frame (HOME attacks toward x = 105), as `silver.tracking` and `silver.ball`: players inside 105 x 68, the ball may be outside |
+| z | DOUBLE | height of the ball in metres (`silver.ball`); null for a player. Added 2026-11-17 |
 | speed_kmh | DOUBLE | the player's Silver speed (null above 40 km/h and after a gap); null for the ball |
 | is_detected | BOOLEAN | seen by the camera; null for the ball |
 | possession | VARCHAR | owner of the ball in this second (`silver.ball`): HOME, AWAY or null |
@@ -571,6 +573,8 @@ number, and every tracked second of `gold_match_library` present.
 | player_short_name, receiver_short_name | VARCHAR | |
 | shirt_number | INTEGER | of the player |
 | third, lane | VARCHAR | of the start: `own` / `middle` / `final`, `left` / `centre` / `right`; null without a start |
+| goal_ts | INTEGER | goals only: the second the ball was in the goal (the score changes then on Live and Replay). `ts` is the start of the possession that ended with the shot. Within 10 s after `ts`: the first second with the ball past the goal line the team attacks, between the posts; else the second with the ball nearest the goal mouth; else `ts`. Same rule as `app/streamlit/goalmoment.py` (Live). Added 2026-11-17 |
+| goal_ts_method | VARCHAR | `ball_in_goal`, `ball_nearest_goal` or `event_start` (8, 7 and 0 of the 15 goals of m001-m004) |
 
 ### 10.4 Known characteristics (measured on 2026-11-16, one replay of each match)
 

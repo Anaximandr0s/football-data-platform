@@ -92,8 +92,9 @@ def _matches(home_score=1):
 
 
 def _write_silver(root: Path, home_score=1):
-    ball = pd.DataFrame({"match_id": [M], "ts": [0], "period": [1], "x": [52.5], "y": [34.0], "z": [0.0],
-                         "possession": ["HOME"]})
+    # ts 6 and 7: the ball of the goal of ts 5, near the goal then past the line between the posts (no owner)
+    ball = pd.DataFrame({"match_id": [M] * 3, "ts": [0, 6, 7], "period": [1] * 3, "x": [52.5, 100.0, 106.0],
+                         "y": [34.0, 34.0, 33.0], "z": [0.0] * 3, "possession": ["HOME", None, None]})
     for name, df in (("tracking", _tracking()), ("events", _events()), ("players", _players()),
                      ("matches", _matches(home_score)), ("ball", ball)):
         (root / name).mkdir(parents=True)
@@ -272,11 +273,12 @@ def test_events_keep_runs_and_see_the_pitch_from_their_team(gold):
     assert (e["e1"]["player_short_name"], e["e1"]["receiver_short_name"], e["e1"]["lane"]) == ("H. One", "H. Two", "centre")
 
 
-def test_card_top_speed_uses_two_detected_positions(gold):
+def test_card_top_speed_is_the_best_speed_held_over_two_detected_seconds(gold):
     c = rows(gold, "select c.top_speed_kmh, s.max_speed_kmh from gold_player_card c "
                    "join gold_player_match_stats s using (match_id, player_id) where player_id = 'H01'")[0]
-    # 30 km/h at ts 2 and 3 joins the estimated position of ts 2: left out; the fastest left is 28 at ts 12
-    assert (c["max_speed_kmh"], c["top_speed_kmh"]) == (30.0, 28.0)
+    # 30 at ts 2-3 joins the estimated position of ts 2; 28 at ts 12 is one second alone (ts 11 missing);
+    # 27 is held at ts 9 and 10 with positions 8, 9 and 10 seen by the camera
+    assert (c["max_speed_kmh"], c["top_speed_kmh"]) == (30.0, 27.0)
 
 
 def test_team_rates_are_per_90_tracked_minutes_of_the_team(gold):
@@ -301,3 +303,15 @@ def test_football_windows_of_dbt_equal_the_python_definition(gold):
     trk = rows(gold, "select t.ts, t.period, w.window_index from stg_tracking t join gold_player_5min w using (player_id) "
                      "where t.ts >= w.window_start_ts and t.ts < w.window_end_ts")
     assert trk and all(r["window_index"] == clock.window_index(r["ts"], r["period"], 0, 101) for r in trk)
+
+
+def test_the_goal_moment_of_dbt_equals_the_app_rule(gold):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("goalmoment", DBT_DIR.parent / "app" / "streamlit" / "goalmoment.py")
+    goalmoment = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(goalmoment)
+    ball = [(r["ts"], r["x"], r["y"]) for r in rows(gold, "select ts, x, y from stg_ball")]
+    goals = rows(gold, "select ts, team_id, goal_ts, goal_ts_method from gold_events where type = 'goal'")
+    assert [(g["goal_ts"], g["goal_ts_method"]) for g in goals] == [(7, "ball_in_goal")]     # the shot started at 5
+    assert all(goalmoment.goal_moment(g["team_id"], g["ts"], ball, 10_000) == (g["goal_ts"], g["goal_ts_method"])
+               for g in goals)

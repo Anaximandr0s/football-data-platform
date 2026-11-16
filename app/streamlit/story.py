@@ -169,11 +169,11 @@ def hub(card: pd.DataFrame, team: str, short: dict) -> Sentence | None:
 
 
 def fastest(card: pd.DataFrame, short: dict) -> Sentence | None:
-    """F5: top speed from detected positions only (gold_player_card.top_speed_kmh)."""
+    """F5: the best speed held over two detected seconds (gold_player_card.top_speed_kmh)."""
     c = card.dropna(subset=["top_speed_kmh"])
     if c.empty:
         return None
     f = c.loc[c.top_speed_kmh.idxmax()]
-    return Sentence(f"Fastest player: {f.short_name} ({short[f.team_id]}), about {f.top_speed_kmh:.0f} km/h, counting "
-                    f"only the positions the camera saw.",
+    return Sentence(f"Fastest player: {f.short_name} ({short[f.team_id]}), about {f.top_speed_kmh:.0f} km/h, held over "
+                    f"two seconds the camera saw.",
                     {"player_id": f.player_id, "top_speed_kmh": float(f.top_speed_kmh)})

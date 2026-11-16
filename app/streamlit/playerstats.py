@@ -4,7 +4,8 @@ They are the formulas of Silver and Gold, so the live values at full time equal 
   position   Silver frame: mirrored where HOME attacks toward x = 0 in that period, clipped to 105 x 68, 2 decimals
   distance   sum(speed_kmh / 3.6) over the seconds with a speed (gold_player_match_stats.distance_m)
   sprints    efforts: a second above 25 km/h that does not continue a sprint second of ts - 1 (sprint_count)
-  top speed  fastest speed whose two positions, this second and the previous row, are detected (gold_player_card, F5)
+  top speed  best speed held over two consecutive seconds, min(v(ts - 1), v(ts)), with the positions of ts - 2, ts - 1
+             and ts detected (gold_player_card, F5): one fast second is often one bad position
   heatmap    seconds per cell of the 6 x 4 grid (gold_zone_occupancy)
 Pure functions: no Kafka, no Streamlit.
 """
@@ -58,7 +59,7 @@ def zone_of(x: float, y: float) -> int:
 def player_stats(seconds: list[Second]) -> PlayerStats:
     """Stats of one player over the seconds seen so far (any order, one per ts)."""
     distance, sprints, top, zones = 0.0, 0, None, {}
-    prev = None
+    prev = before = None
     for s in sorted(seconds, key=lambda s: s.ts):
         if s.speed_kmh is not None:
             distance += s.speed_kmh / 3.6
@@ -66,11 +67,15 @@ def player_stats(seconds: list[Second]) -> PlayerStats:
         prev_sprint = prev is not None and prev.speed_kmh is not None and prev.speed_kmh > SPRINT_KMH
         if sprint and not (prev_sprint and s.ts - prev.ts == 1):
             sprints += 1
-        if s.speed_kmh is not None and s.is_detected and prev is not None and prev.is_detected:
-            top = s.speed_kmh if top is None else max(top, s.speed_kmh)
+        held = (prev is not None and before is not None and s.ts - prev.ts == 1 and prev.ts - before.ts == 1
+                and s.is_detected and prev.is_detected and before.is_detected
+                and s.speed_kmh is not None and prev.speed_kmh is not None)
+        if held:
+            speed = min(s.speed_kmh, prev.speed_kmh)
+            top = speed if top is None else max(top, speed)
         zone = zone_of(s.x, s.y)
         zones[zone] = zones.get(zone, 0) + 1
-        prev = s
+        before, prev = prev, s
     return PlayerStats(len(seconds), distance, sprints, top, zones)
 
 
