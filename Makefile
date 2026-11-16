@@ -61,6 +61,12 @@ check: ## Compare bronze row counts with the prepared match
 silver: ## Bronze -> Silver on the Spark cluster: make silver MATCH="m001 m002" [ARGS=--dry-run]
 	$(COMPOSE) --profile jobs run --rm silver --match $(MATCH) $(ARGS)
 
+streaming: ## Spark Structured Streaming (FOO-08): Kafka -> 5/15-minute live stats -> foot-live-stats (start BEFORE a replay)
+	$(COMPOSE) --profile jobs run --rm -d -p 127.0.0.1:4040:4040 --name streaming-5min streaming
+
+streaming-stop: ## Stop the streaming job (its checkpoint keeps the state for the next start)
+	docker stop streaming-5min
+
 gold: ## Silver -> Gold with dbt + DuckDB in Docker (models, tests, export to s3://gold): make gold [ARGS="--select gold_shots"]
 	$(COMPOSE) --profile jobs run --rm dbt build --vars '{export_gold: true}' $(ARGS)
 

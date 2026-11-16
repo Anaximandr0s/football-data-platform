@@ -58,6 +58,7 @@ services:
         for b in $$(echo "$$BUCKETS" | tr ',' ' '); do
           mc mb --ignore-existing "local/$$b"
         done
+        mc mb --ignore-existing local/checkpoints   # Spark Structured Streaming checkpoints (FOO-08)
         echo "buckets ready"
     mem_limit: 128m
 
@@ -116,6 +117,9 @@ services:
           /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists \
             --topic "$$name" --partitions "$$parts" --replication-factor 1
         done
+        # FOO-08 output: one row per window, the latest value per key kept (log compaction)
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists \
+          --topic foot-live-stats --partitions 1 --replication-factor 1 --config cleanup.policy=compact
         echo "topics ready"
     mem_limit: 256m
 
@@ -203,6 +207,58 @@ services:
       - --packages
       - ""
     command: ["--match", "m001"]
+    mem_limit: 1536m
+
+  # --- Streaming: Spark Structured Streaming, FOO-08 (profile "jobs": `make streaming`, runs until stopped) ---
+  # Reads the replay topics, writes the 5- and 15-minute live stats to the compacted topic foot-live-stats.
+  # One core of the worker, so a `make silver` can run beside it. Checkpoints: s3a://checkpoints/streaming-5min.
+  streaming:
+    profiles: ["jobs"]
+    image: ${SPARK_IMAGE:-apache/spark:4.0.0-scala2.13-java17-python3-ubuntu}
+    user: "0:0"
+    working_dir: /app
+    depends_on:
+      spark-master:
+        condition: service_healthy
+      spark-worker:
+        condition: service_started
+      kafka:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      PYTHONPATH: /app:/app/app/streamlit
+      KAFKA_BOOTSTRAP: kafka:9092
+    volumes:
+      - ./:/app
+      - spark-ivy:/tmp/ivy
+    entrypoint:
+      - /opt/spark/bin/spark-submit
+      - --master
+      - spark://spark-master:7077
+      - --packages
+      - org.apache.spark:spark-sql-kafka-0-10_2.13:4.0.0,org.apache.hadoop:hadoop-aws:3.4.1
+      - --conf
+      - spark.jars.ivy=/tmp/ivy
+      - --conf
+      - spark.cores.max=1
+      - --conf
+      - spark.hadoop.fs.s3a.endpoint=http://minio:9000
+      - --conf
+      - spark.hadoop.fs.s3a.path.style.access=true
+      - --conf
+      - spark.hadoop.fs.s3a.connection.ssl.enabled=false
+      - --conf
+      - spark.hadoop.fs.s3a.access.key=${MINIO_ROOT_USER}
+      - --conf
+      - spark.hadoop.fs.s3a.secret.key=${MINIO_ROOT_PASSWORD}
+      - --py-files
+      - /app/app/streamlit/clock.py
+      - --driver-memory
+      - 1g
+      - --executor-memory
+      - 768m
+      - /app/spark/streaming/live_stats.py
     mem_limit: 1536m
 
   # --- Gold: dbt + DuckDB (profile "jobs": run on demand, not started by `docker compose up`) ---
