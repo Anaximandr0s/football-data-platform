@@ -456,6 +456,7 @@ function lastBefore(list, sec) {    // the last [ts, ...] item with ts <= sec (l
 function replayFrame(s, now) {
   const f = s.frames, d = s.data, rp = s.rp, end = d.replay.end;
   if (!rp.playing && rp.resumeAt && now >= rp.resumeAt) { rp.playing = true; rp.resumeAt = null; rp.last = null; }
+  if (rp.goalFx && now >= rp.goalFx.until) rp.goalFx = null;     // the banner and the flash last the pause only
   if (rp.playing) {
     if (rp.last != null) rp.ts = Math.min(end, rp.ts + (now - rp.last) / 1000 * rp.speed);
     rp.last = now;
