@@ -447,7 +447,7 @@ The source gives no saved / blocked / off-target outcome: there is no expected-g
 | source_player_id | BIGINT | SkillCorner id: the same player across matches |
 | shirt_number | INTEGER | |
 | is_outfield, is_eligible | BOOLEAN | eligible = outfield and `tracked_minutes >= 20` |
-| tracked_minutes, dpm, top_speed_kmh | DOUBLE | tracking rows / 60; m per minute with a speed; fastest speed whose two positions (this second and the one before) are both detected, shown "about N km/h" (`gold_player_match_stats.max_speed_kmh` keeps all positions) |
+| tracked_minutes, dpm, top_speed_kmh | DOUBLE | tracking rows / 60; m per minute with a speed; best speed held over two consecutive seconds, `max(min(v(ts - 1), v(ts)))`, with the positions of ts - 2, ts - 1 and ts detected (F5, rule of 2026-11-17), shown "about N km/h" (`gold_player_match_stats.max_speed_kmh` keeps the raw fastest second) |
 | sprint_count, passes_successful, progressive_passes, progressive_passes_successful, defensive_actions, goals, passes_received_successful | BIGINT | |
 | sprints_per_min, passes_successful_per_min, progressive_passes_successful_per_min, defensive_actions_per_min | DOUBLE | per tracked minute |
 | score_work_rate, score_sprints, score_passing, score_progression, score_defending | INTEGER | `round(100 x percent_rank())` among the eligible players of the match, of dpm and the four rates above; null if not eligible |

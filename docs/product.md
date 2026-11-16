@@ -89,14 +89,18 @@ team won or lost. Every metric has one plain sentence under it, numbers are roun
 | F2 | Who had the ball? | Possession % per team and per 5 min | `possession_seconds(T, w5) / (possession_seconds(HOME, w5) + possession_seconds(AWAY, w5))`; match total over all seconds. A window with under 60 known seconds is greyed out | Match story, Live | live (per 5 min) + post |
 | F3 | Who played well? | Player card: 5 scores ranked within the match (section 3.1) | `gold_player_card` | Player cards | post |
 | F4 | Who worked the hardest? | Distance per tracked minute | `dpm` per player from `silver.tracking` | Player cards, Live | live (per 5 min) + post |
-| F5 | Who was the fastest? | Top speed (approximate) | `max(speed_kmh)` per player over the speeds whose two positions (this second and the one before) are both detected, shown as "about N km/h" | Player cards, Live | live (per 5 min) + post |
+| F5 | Who was the fastest? | Top speed (approximate) | the best speed **held over two consecutive seconds**: `max(min(v(ts - 1), v(ts)))` per player, with the three positions ts - 2, ts - 1 and ts detected by the camera; shown as "about N km/h" (rule of 2026-11-17: a single fast second gave 39.5 km/h in m003) | Player cards, Match story, Live, Replay | post, and so far on Live and Replay |
 | F6 | Who made the team play? | Pass network hub | `involvement(p) = (successful passes made by p + successful passes received by p) / (2 x successful passes of the team)`; hub = player with the highest `involvement` in their team | Passing | post |
 | F7 | Why did we win or lose? | Three biggest differences between the teams | for each team metric `m` in {possession %, field tilt, shots + goals, progressive passes, defensive actions per opponent pass, dpm of outfield players}: `gap = (m_T - m_O) / ((m_T + m_O) / 2)`; show the 3 largest `abs(gap)` as sentences ("Brisbane had 63 % of the ball") | Match story | post |
 | F8 | How is my player doing across matches? | The player's card in each match, side by side | `gold_player_card` rows sharing one `source_player_id` (11 Brisbane Roar players in m001 and m002), one column per match; scores stay ranked within their own match, and each column names the opponent | Player cards | post |
 
 F5 uses detected positions only because a speed joins two positions one second apart, and every speed above 33 km/h
 in m001 and m002 (up to 39.2 km/h) had an estimated position at one end; with both ends detected the fastest second is
-33.0 km/h in m001 and 31.7 km/h in m002. The other Gold tables keep `max_speed_kmh` over all positions.
+33.0 km/h in m001 and 31.7 km/h in m002. Both ends detected was not enough: m003 had one second at 39.5 km/h (T. Okamoto),
+impossible for a player. Since 2026-11-17 the speed must be held over two consecutive detected seconds: the fastest is
+then 33.1 km/h over the four matches, and no player is above 36 km/h (10 fastest per match before and after:
+`requirements-coverage.md`). The other Gold tables keep `max_speed_kmh`, the raw fastest second, which the app does not
+show as a top speed.
 
 F7 states differences, not causes: the sentences say "had more", never "won because". F8 compares ranks, not raw
 values: a score of 80 means "better than 80 % of the eligible players of that match", and the opponent differs.

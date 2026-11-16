@@ -139,8 +139,8 @@ if coach:
                    "Successful passes", "Progressive passes", "Successful progressive passes",
                    "Defensive actions (pressure + tackle + foul)", "Involvement in team passes"])
             .map(lambda v: "" if pd.isna(v) else f"{v:.3f}".rstrip("0").rstrip(".")), width="stretch")
-        st.caption("Ranked when outfield and at least 20 tracked minutes. Top speed uses only speeds whose two positions "
-                   "the camera saw. Progressive pass: 10 m or more toward the opponent's goal.")
+        st.caption("Ranked when outfield and at least 20 tracked minutes. Top speed: the best speed held over two consecutive "
+                   "seconds the camera saw. Progressive pass: 10 m or more toward the opponent's goal.")
     with fatigue_col:
         st.markdown("**Fatigue** (C6)")
         fat = table("gold_player_fatigue")

@@ -26,7 +26,7 @@ def test_match_story_tells_the_match_in_sentences(app_env):
     assert "One goal: Home scored it in minute 1 (H. One), final score 1-0." in page      # ts 5
     assert "H. One and H. Two shared the hub role of Home" in page
     assert "won because" not in page and page.count("class='ml-say'") >= 6
-    assert "about 28 km/h" in page and "about 30" not in page                    # top speed from detected positions
+    assert "about 27 km/h" in page and "about 30" not in page                    # held over two detected seconds
     assert "It is not xG" in " ".join(c.value for c in at.caption)
 
 
@@ -38,7 +38,7 @@ def test_player_page_fan_mode_shows_card_badges_scores_pitch_and_f8(app_env):
     assert metrics["Sprints"] == "4" and metrics["Passes"] == "1"
     page = texts(at)
     assert "1 goal" in page and "Hub of the team" in page
-    assert "Top speed about 28 km/h" in page               # 30 km/h joined an estimated position (fixture)
+    assert "Top speed about 27 km/h" in page               # held over two detected seconds (fixture)
     assert "Not ranked: under 20 tracked minutes" in page
     assert "one stored match only" in " ".join(c.value for c in at.caption)
     assert "COACH MODE" not in page

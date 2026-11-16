@@ -36,7 +36,7 @@ def test_sprint_efforts_top_speed_and_heat():
     stats = playerstats.player_stats([s(1, 10, 10, 26.0, True), s(2, 10, 10, 27.0, True), s(4, 10, 10, 30.0, False),
                                       s(5, 10, 10, 20.0, True), s(0, 10, 10, None, True)])
     assert stats.sprint_count == 2                          # ts 1-2 is one effort; ts 4 follows a missing second
-    assert stats.top_speed_kmh == 27.0                      # 30 at ts 4 has an estimated position
+    assert stats.top_speed_kmh == 26.0                      # 26 then 27 held over ts 1-2; 30 at ts 4 is estimated
     assert stats.distance_m == pytest.approx((26 + 27 + 30 + 20) / 3.6)
     assert playerstats.heat_cells(stats.zones)[0] == 1.0
 
@@ -67,7 +67,7 @@ def test_live_stats_at_full_time_equal_gold(gold_env):
             round(stats.top_speed_kmh, 1) == row.top_speed_kmh
         assert stats.zones == {int(z.zone_id): int(z.seconds) for z in zones[zones.player_id == row.player_id].itertuples()}
     h01 = live.player_stats(state, "H01")
-    assert (h01.sprint_count, h01.top_speed_kmh) == (4, 28.0)               # 30 km/h joins an estimated position
+    assert (h01.sprint_count, h01.top_speed_kmh) == (4, 27.0)               # held over ts 9-10, as gold_player_card
 
 
 def test_a_new_replay_starts_the_stats_again(gold_env):

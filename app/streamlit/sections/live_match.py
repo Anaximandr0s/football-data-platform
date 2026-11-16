@@ -51,7 +51,7 @@ def player_panel(state: live.MatchState, player_id: str, colors: dict[str, str],
                heat={"nx": 6, "ny": 4, "cells": playerstats.heat_cells(stats.zones), "color": colors[team]},
                arrows={"home": "right"})
     st.caption(f"So far: {stats.tracked_seconds / 60:.0f} tracked minutes. Heatmap with HOME attacking to the right; "
-               "top speed counts only speeds whose two positions the camera saw.")
+               "top speed is the best speed held over two consecutive seconds the camera saw.")
     st.button("Close", key="live_close", on_click=lambda: st.session_state.pop("live_player", None))
 
 
@@ -83,7 +83,7 @@ def five_minutes(state: live.MatchState, stats: list[dict], names: dict | None) 
         label = next(iter(windows[latest].values()))["window_label"]
         st.caption(f"Most ground covered in {label}': " + ", ".join(
             f"{state.players.get(r['player_id'], {}).get('short_name', r['player_id'])} "
-            f"{r['distance_m'] / (r['tracked_seconds'] / 60):.0f} m/min (top {r['max_speed_kmh'] or 0:.0f} km/h)"
+            f"{r['distance_m'] / (r['tracked_seconds'] / 60):.0f} m/min"
             for r in best))
     st.caption("Complete: tracking has passed the end of the window by 10 s of match time. \"-\": under the thresholds "
                "of Gold (60 seconds with a known owner, 10 opponent passes).")
