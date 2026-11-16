@@ -1,6 +1,7 @@
 -- Grain: one row per team per 15-minute football window per match (int_football_windows: 0-15', 15-30', 30-45', 45+,
 -- 45-60', 60-75', 75-90', 90+), every window of the match (C3). ppp = defensive actions of the team / passes of the
--- opponent in the window; thirds by x_att of the action start.
+-- opponent in the window; thirds by x_att of the action start. ppp_greyed: the opponent made fewer than 10 passes in
+-- the window (a short stoppage window, say), too few to trust the ratio; flagged, not removed.
 with windows as (
     select match_id, window_index, period, window_label, window_start_ts, window_end_ts, window_seconds
     from {{ ref('int_football_windows') }}
@@ -41,6 +42,7 @@ select
     coalesce(da.defensive_actions, 0)              as defensive_actions,
     coalesce(p.passes, 0)                          as opponent_passes,
     round(coalesce(da.defensive_actions, 0) / nullif(p.passes, 0), 4) as ppp,
+    coalesce(p.passes, 0) < 10                     as ppp_greyed,
     coalesce(da.defensive_actions_own_third, 0)    as defensive_actions_own_third,
     coalesce(da.defensive_actions_middle_third, 0) as defensive_actions_middle_third,
     coalesce(da.defensive_actions_final_third, 0)  as defensive_actions_final_third,

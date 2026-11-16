@@ -26,7 +26,8 @@ def _tracking():
 
     def add(pid, team, series, estimated=()):
         for ts, speed, x, y in series:
-            rows.append((M, pid, team, 1, ts, x, y, speed, bool(speed and speed > 25), False, False, ts not in estimated))
+            rows.append((M, pid, team, 1, ts, x, y, speed, False, bool(speed and speed > 25), False, False,
+                         ts not in estimated))
 
     # H01: speeds 10,30,30,10,26 then a gap, 27,27, a gap, 28. Positions chosen to hit zone edges.
     h01 = [(0, None, 0.0, 0.0), (1, 10.0, 104.9, 67.9), (2, 30.0, 105.0, 68.0), (3, 30.0, 50.0, 34.0),
@@ -36,7 +37,7 @@ def _tracking():
     add("H02", "HOME", [(0, None, 20.0, 10.0), (1, 5.0, 20.0, 10.0), (2, 5.0, 20.0, 10.0)])
     add("A01", "AWAY", [(0, None, 80.0, 30.0), (1, 8.0, 80.0, 30.0)])
     add("A02", "AWAY", [(0, None, 70.0, 50.0), (1, 8.0, 70.0, 50.0)])
-    cols = ["match_id", "player_id", "team_id", "period", "ts", "x", "y", "speed_kmh",
+    cols = ["match_id", "player_id", "team_id", "period", "ts", "x", "y", "speed_kmh", "speed_rejected",
             "is_sprint", "was_corrected", "is_after_gap", "is_detected"]
     return pd.DataFrame(rows, columns=cols)
 

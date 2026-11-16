@@ -66,12 +66,14 @@ chart = alt.Chart(p).mark_bar(cornerRadius=2).encode(
     xOffset=alt.XOffset("team_name:N", sort=[short["HOME"], short["AWAY"]]),
     y=alt.Y("ppp:Q", title="per opponent pass", axis=alt.Axis(labelColor=TEXT, titleColor=TEXT)),
     color=alt.Color("team_id:N", scale=alt.Scale(domain=list(colors), range=list(colors.values())), legend=None),
+    opacity=alt.condition("datum.ppp_greyed", alt.value(0.3), alt.value(1)),
     tooltip=[alt.Tooltip("team_name:N", title="team"), alt.Tooltip("label:N", title="minutes"),
              alt.Tooltip("ppp:Q", format=".2f"), alt.Tooltip("defensive_actions:Q", title="defensive actions"),
              alt.Tooltip("opponent_passes:Q", title="opponent passes")]).properties(height=220)
 st.altair_chart(chart, width="stretch")
 st.caption("Pressures, tackles and fouls per pass of the opponent, per 15 minutes of the football clock (45+ and 90+: "
-           "stoppage time). Higher = more intense.")
+           "stoppage time). Higher = more intense. Faded: the opponent made fewer than 10 passes in that window, too "
+           "few to trust the ratio.")
 say(coach.pressing(press, profile, team, short))
 
 # ---------------------------------------------------------------- build-up and attack side (C4, C5)

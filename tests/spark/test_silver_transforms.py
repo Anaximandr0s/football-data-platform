@@ -62,7 +62,7 @@ def test_tracking_gets_team_is_sorted_and_unique(spark, players, matches):
     got = [(r["player_id"], r["ts"], r["team_id"]) for r in out.collect()]
     assert got == [("A01", 1, "AWAY"), ("H01", 1, "HOME"), ("H01", 3, "HOME")]
     assert out.columns == ["match_id", "player_id", "team_id", "period", "ts", "x", "y",
-                           "speed_kmh", "is_sprint", "was_corrected", "is_after_gap", "is_detected"]
+                           "speed_kmh", "speed_rejected", "is_sprint", "was_corrected", "is_after_gap", "is_detected"]
 
 
 def test_period_2_is_mirrored_for_both_teams_period_1_is_not(spark, players, matches):
@@ -108,13 +108,15 @@ def test_a_speed_above_40_becomes_null_and_is_no_sprint(spark, players, matches)
     out = by_ts(transforms.clean_tracking(tracking(spark, rows), players, matches))
     assert out[1]["speed_kmh"] == 40.0 and out[1]["is_sprint"] is True        # 40 is still possible
     assert out[2]["speed_kmh"] is None and out[2]["is_sprint"] is False       # a jump from an estimated position
+    assert (out[1]["speed_rejected"], out[2]["speed_rejected"]) == (False, True)
 
 
 def test_evaluate_counts_the_nulled_speeds_against_the_manifest():
     nulled = _metrics(tracking={**_metrics()["tracking"], "speed_null": 5, "speed_over_max_bronze": 2,
-                                "speed_max": 39.0})
+                                "speed_rejected": 2, "speed_max": 39.0})
     assert all(ok for _, ok, _ in checks.evaluate(nulled, MANIFEST))
-    lost = _metrics(tracking={**_metrics()["tracking"], "speed_null": 4, "speed_over_max_bronze": 2})
+    lost = _metrics(tracking={**_metrics()["tracking"], "speed_null": 4, "speed_over_max_bronze": 2,
+                              "speed_rejected": 2})
     assert [n for n, ok, _ in checks.evaluate(lost, MANIFEST) if not ok] == [
         "tracking: null speeds = manifest nulls + bronze speeds above 40 km/h (set to null)"]
     fast = _metrics(tracking={**_metrics()["tracking"], "speed_max": 41.0})

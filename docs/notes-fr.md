@@ -288,3 +288,16 @@ contre le monde réel.
 
 **Ajouter des données réelles est le meilleur test.** Deux matchs de plus ont trouvé une vitesse impossible et un
 écart de 3 s au début d'une mi-temps, que les deux premiers matchs ne montraient pas.
+
+### Corrections après la revue de l'étape 5
+
+- **`speed_rejected`** : Silver garde la vitesse à null au-dessus de 40 km/h, mais marque la ligne ; Soda vérifie qu'une
+  ligne marquée a bien une vitesse nulle, et la page Data quality montre le nombre par match (4 pour m003).
+- **Pressing grisé** : une fenêtre où l'adversaire a fait moins de 10 passes est grisée et ne peut plus être « le
+  moment le plus intense ». Seuil écrit dans `product.md`.
+- **Comparaison avant/après** : la Gold du code de `main` et celle de cette branche, construites sur le même Silver,
+  sont identiques ligne à ligne pour les 12 tables qui ne devaient pas changer ; les 4 tables à fenêtres gardent les
+  mêmes totaux par match.
+
+L'idée à retenir : **marquer plutôt qu'effacer en silence**. Une valeur corrigée doit laisser une trace qu'on peut
+compter et montrer.

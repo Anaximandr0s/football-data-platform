@@ -33,6 +33,11 @@ def summary(ev: pd.DataFrame) -> pd.DataFrame:
     return out.sort_values("count", ascending=False)
 
 
+def as_text(df: pd.DataFrame, formats: dict) -> pd.DataFrame:
+    """Numbers as text for the table, "-" where there is no value (a shot has no success rate)."""
+    return df.apply(lambda col: col.map(lambda v: "-" if pd.isna(v) else formats.get(col.name, "{}").format(v)))
+
+
 def heat_cells(ev: pd.DataFrame) -> list[float]:
     nx, ny = GRID
     zx = np.minimum((ev.x_start / 105 * nx).astype(int), nx - 1)
@@ -102,9 +107,8 @@ with view_col:
     say(coach.events_summary(ev))
 with table_col:
     st.markdown("**Summary**")
-    st.dataframe(summary(ev), width="stretch",
-                 column_config={"success": st.column_config.NumberColumn(format="percent"),
-                                "xthreat": st.column_config.NumberColumn("SkillCorner xThreat (mean)", format="%.3f")})
+    st.dataframe(as_text(summary(ev), {"count": "{:.0f}", "success": "{:.0%}", "xthreat": "{:.3f}"})
+                 .rename(columns={"xthreat": "SkillCorner xThreat (mean)"}), width="stretch")
     st.caption("Success: successful passes, received runs. xThreat values the option a pass or run aimed at; it is not xG.")
     st.markdown("**Head-to-head** on the same filters")
     everyone = dict(zip(events.player_id, events.player_short_name, strict=False))
@@ -125,7 +129,9 @@ with table_col:
                                "pass success": (passes.outcome == "successful").mean() if len(passes) else np.nan,
                                "in the final third": int((mine.third == "final").sum()),
                                "mean xThreat": mine.xthreat.mean()}
-    st.dataframe(pd.DataFrame(duel).round(3), width="stretch")
+    st.dataframe(as_text(pd.DataFrame(duel).T, {"events": "{:.0f}", "passes": "{:.0f}", "pass success": "{:.0%}",
+                                              "in the final third": "{:.0f}", "mean xThreat": "{:.3f}"}).T,
+                 width="stretch")
 with st.expander(f"The {len(ev)} events"):
     st.dataframe(ev[["minute", "type", "player_short_name", "outcome", "third", "lane", "phase", "xthreat"]]
                  .rename(columns={"player_short_name": "player", "xthreat": "SkillCorner xThreat"}),

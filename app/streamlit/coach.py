@@ -32,10 +32,15 @@ def shape(team_shape: pd.DataFrame, team: str, short: dict) -> Sentence | None:
 def pressing(pressing_rows: pd.DataFrame, profile: pd.DataFrame, team: str, short: dict) -> Sentence:
     """C3: pressure, tackles and fouls per opponent pass over the match, the most intense 15-minute spell, high press."""
     prof = profile.set_index("team_id").loc[team]
-    mine = pressing_rows[(pressing_rows.team_id == team) & pressing_rows.ppp.notna()]
-    if mine.empty or pd.isna(prof.ppp):
+    if pd.isna(prof.ppp):
         return Sentence(f"{short[_other(team)]} made no pass: pressing per opponent pass cannot be measured.",
                         {"ppp": None})
+    # a greyed window (fewer than 10 opponent passes) never names the most intense spell
+    mine = pressing_rows[(pressing_rows.team_id == team) & pressing_rows.ppp.notna() & ~pressing_rows.ppp_greyed]
+    if mine.empty:
+        return Sentence(f"{short[team]} made {prof.ppp:.2f} pressures, tackles and fouls per {short[_other(team)]} pass; "
+                        f"no 15-minute spell had the 10 opponent passes needed to compare spells.",
+                        {"ppp": float(prof.ppp)})
     best = mine.loc[mine.ppp.idxmax()]
     # the counts go with the ratio: a short stoppage window can reach a high ratio on a few passes
     return Sentence(f"{short[team]} made {prof.ppp:.2f} pressures, tackles and fouls per {short[_other(team)]} pass; its "
