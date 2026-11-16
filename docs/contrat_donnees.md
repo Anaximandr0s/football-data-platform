@@ -231,6 +231,7 @@ halves. In `events` the source already gives the acting team attacking toward x 
 | ts | int32 | no | second since kick-off |
 | x, y | float64 | no | metres, 2 decimals, inside the pitch (clipped), Silver frame |
 | speed_kmh | float64 | yes | as in bronze: distance to the position at `ts - 1`, times 3.6. Null on the first second of a stretch, and above 40 km/h (impossible for a player: Silver sets it to null, its gate counts them against bronze) |
+| speed_rejected | boolean | no | true where bronze had a speed above 40 km/h: the speed is set to null (a jump from a position SkillCorner estimated; m003: 4 rows). Rule: `speed_rejected` implies `speed_kmh` is null (Soda); their count equals the bronze rows above 40 km/h (Silver job gate) |
 | is_sprint | bool | no | `speed_kmh > 25`; false when the speed is null |
 | was_corrected | bool | no | the position delivered by bronze was outside 105 x 68 (before clipping) |
 | is_after_gap | bool | no | the player's previous tracked second is more than 1 s earlier. False for a player's first row (nothing is missing before it) |
@@ -444,6 +445,7 @@ Key (match_id, team_id, window_index).
 | window_index, period, window_start_ts, window_end_ts, window_label, window_seconds | | the 15-minute football window, as in `gold_match_timeline` |
 | defensive_actions, opponent_passes | BIGINT | |
 | ppp | DOUBLE | defensive_actions / opponent_passes, null if no opponent pass |
+| ppp_greyed | BOOLEAN | `opponent_passes < 10`: too few passes to trust the ratio, greyed out (product.md, C3) |
 | defensive_actions_own_third, defensive_actions_middle_third, defensive_actions_final_third | BIGINT | by third of `x_att` at the start |
 | high_press_share | DOUBLE | final third / all, null if none |
 
@@ -501,6 +503,7 @@ a 1 m grid whose nearest player, detected or not, is HOME).
 | home_team, away_team, home_color, away_color | VARCHAR | from `matches` |
 | home_team_short, away_team_short | VARCHAR | the name fans use (dbt seed `team_names.csv`: "Brisbane Roar", not the source's "Brisbane FC"); the source short name for a team not in the seed |
 | p1_start_ts, p1_end_ts, p2_start_ts, p2_end_ts | INTEGER | first and last second of each period: the app's football clock restarts the second half at 45:00 from `p2_start_ts` |
+| speeds_rejected | BIGINT | player-seconds whose speed Silver rejected (above 40 km/h); shown on the Data quality page |
 | home_score, away_score | INTEGER | final score |
 | kickoff_utc | VARCHAR | ISO 8601, as in `matches` |
 | match_date | DATE | kick-off day (UTC) |
@@ -519,20 +522,26 @@ a 1 m grid whose nearest player, detected or not, is HOME).
 | shirt_number | INTEGER | of the player |
 | third, lane | VARCHAR | of the start: `own` / `middle` / `final`, `left` / `centre` / `right`; null without a start |
 
-### 10.4 Known characteristics (measured on 2026-11-15 after one clean replay of each match)
+### 10.4 Known characteristics (measured on 2026-11-16, one replay of each match)
 
-| Item | m001 | m002 |
-|---|---|---|
-| Rows: player stats / team stats / zones / pass network / shots / 5-minute windows | 32 / 2 / 638 / 261 / 26 / 469 | 32 / 2 / 627 / 258 / 30 / 471 |
-| Rows: timeline / cards / shape / pressing / build-up / fatigue / space / profile / events | 42 / 32 / 6 / 14 / 2 / 32 / 42 / 2 / 2,276 | 42 / 32 / 6 / 14 / 2 / 32 / 42 / 2 / 2,376 |
-| Shots table | 21 shots + 5 goals; running score ends 2-3 (= real score) | 29 shots + 1 goal; ends 0-1 |
-| Passes | 837 (700 successful, 135 unsuccessful, 2 offside), all with a receiver | 912 |
-| Possession HOME / AWAY (seconds with an owner) | 39.5 % / 60.5 % | 62.9 % / 37.1 % |
-| Greyed possession windows (under 60 known seconds) | 1 of 21 (the last, 10 s) | 0 of 21 |
-| Eligible player cards / fatigue rows | 26 / 24 of 32 | 27 / 27 of 32 |
-| Space control HOME / AWAY (mean over tracked seconds) | 45.5 % / 54.5 % | 55.8 % / 44.2 % |
-| Width, length (outfield, all seconds) HOME / AWAY | 38.1 m, 30.2 m / 41.7 m, 32.2 m | 39.0 m, 32.9 m / 34.3 m, 29.2 m |
-| Length against SkillCorner `phases_of_play` | ours is about 21 m shorter: SkillCorner includes the goalkeeper; with him, ours matches (median gap 0.26 m) | not compared |
+| Item | m001 | m002 | m003 | m004 |
+|---|---|---|---|---|
+| Match | Brisbane Roar 2-3 Adelaide United | Brisbane Roar 0-1 Perth Glory | Perth Glory 1-3 Brisbane Roar | Sydney FC 4-1 Adelaide United |
+| SkillCorner id | 1874553 | 1925299 | 2007448 | 1996435 |
+| Rows: player stats / team stats / zones / pass network / shots / 5-minute windows | 32 / 2 / 638 / 261 / 26 / 450 | 32 / 2 / 627 / 258 / 30 / 449 | 29 / 2 / 586 / 225 / 26 / 446 | 30 / 2 / 593 / 236 / 30 / 448 |
+| Rows: timeline / cards / shape / pressing / build-up / fatigue / space / profile / events | 40 / 32 / 6 / 16 / 2 / 32 / 40 / 2 / 2,276 | 40 / 32 / 6 / 16 / 2 / 32 / 40 / 2 / 2,376 | 40 / 29 / 6 / 16 / 2 / 29 / 40 / 2 / 2,060 | 40 / 30 / 6 / 16 / 2 / 30 / 40 / 2 / 2,448 |
+| Shots table: shots + goals; running score ends | 21 + 5; 2-3 | 29 + 1; 0-1 | 22 + 4; 1-3 | 25 + 5; 4-1 |
+| Passes (successful) | 837 (700) | 912 (780) | 752 (632) | 878 (741) |
+| Tracked share of the match | 73.6 % | 78.3 % | 76.5 % | 75.6 % |
+| Speeds rejected (above 40 km/h, null in Silver) | 0 | 0 | 4 | 0 |
+| Possession HOME / AWAY | 39.5 % / 60.5 % | 62.9 % / 37.1 % | 50.0 % / 50.0 % | 52.5 % / 47.5 % |
+| Greyed windows: possession (of 20) / pressing (of 16 team rows) | 0 / 2 | 0 / 1 | 1 / 2 | 0 / 2 |
+| Eligible player cards / fatigue rows | 26 / 24 of 32 | 27 / 27 of 32 | 22 / 22 of 29 | 22 / 22 of 30 |
+| Space control HOME / AWAY | 45.5 % / 54.5 % | 55.8 % / 44.2 % | 48.0 % / 52.0 % | 50.6 % / 49.4 % |
+| Width, outfield block length HOME / AWAY (m) | 38.1, 30.2 / 41.7, 32.2 | 39.0, 32.9 / 34.3, 29.2 | 37.4, 30.7 / 37.8, 31.1 | 38.2, 32.7 / 40.0, 33.0 |
+
+Windows: 20 football windows of 5 minutes and 8 of 15 minutes per match (section 10.2). The external check of goal
+minutes and possession is in [`requirements-coverage.md`](requirements-coverage.md).
 
 ## 11. Quality gates
 

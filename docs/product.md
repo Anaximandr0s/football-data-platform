@@ -127,7 +127,7 @@ and weaknesses, and how one match compares with another.
 |---|---|---|---|---|---|
 | C1 | What shape does the team take, with and without the ball? | Width, length, compactness | per tracked second `s` and team T, over outfield players: `width = max(y) - min(y)`, `length = max(x_att) - min(x_att)` (label: "outfield block length"), `area = width x length` (smaller = more compact); then the mean over seconds, split by phase (T in possession / opponent in possession / unknown). Live: the current second only, computed in the page from the Kafka positions | Team shape, Live | live (current second) + post |
 | C2 | How high does the team defend? | Defensive line height | per second: mean `x_att` of the 4 outfield players with the smallest `x_att` (assumes a back four); mean over seconds when the opponent has the ball | Team shape | post |
-| C3 | How hard and where does the team press? | Defensive actions per opponent pass per 15 min; pressing zones | `ppp(T, w15) = defensive actions of T in w15 / passes of the opponent in w15` (higher = more intense); zones: share of T's defensive actions by third of `x_att(x_start)`, `high_press_share` = final third. Live: the same ratio per 5-min window | Pressing, Live (ppp) | live (per 5 min) + post |
+| C3 | How hard and where does the team press? | Defensive actions per opponent pass per 15 min; pressing zones | `ppp(T, w15) = defensive actions of T in w15 / passes of the opponent in w15` (higher = more intense); a window where the opponent made fewer than 10 passes is greyed out (a short stoppage window can reach 2.6 on a handful of passes); zones: share of T's defensive actions by third of `x_att(x_start)`, `high_press_share` = final third. Live: the same ratio per 5-min window | Pressing, Live (ppp) | live (per 5 min) + post |
 | C4 | How does the team move the ball forward? | Progressive passes | count and successful count of progressive passes per team and per player; per 90 tracked minutes for comparison (team rate). No success rate (see below) | Build-up and attack | post |
 | C5 | Which side does the team attack? | Attack side | successful passes of T ending in the final third (`x_att(x_end) >= 70`), by lane of `y_att(y_end)`: left `> 45.33`, centre, right `< 22.67`; shares of the three lanes | Build-up and attack | post |
 | C6 | Who is getting tired? | Fatigue | per outfield player with at least 30 minutes on the pitch: `dpm` in their first 15 minutes on the pitch (`start_ts <= ts < start_ts + 900`) vs their last 5 (`end_ts - 300 < ts <= end_ts`); `drop = 1 - dpm_last5 / dpm_first15`. Shown only with at least 5 tracked minutes in the first window and 2 in the last | Fatigue | post |
@@ -169,7 +169,8 @@ The 36 tackles and 7 fouls raise `ppp` by 4.3 % (HOME) and 6.2 % (AWAY) and leav
 - **xThreat is SkillCorner's, and it is not xG.** It values the option a pass or run aimed at, before the outcome. It is
   shown as "SkillCorner xThreat" and never summed into expected goals.
 - **Small samples are greyed out**, not hidden: thresholds are written next to each metric (20 tracked minutes for a
-  card, 60 known seconds for a possession window, the fatigue thresholds of C6).
+  card, 60 known seconds for a possession window, 10 opponent passes for a pressing window, the fatigue
+  thresholds of C6).
 - **Shape uses estimated positions.** 42 % of m001's player positions are extrapolated by SkillCorner, not seen by the
   camera. The shape pages show the detected share of the positions they use.
 
