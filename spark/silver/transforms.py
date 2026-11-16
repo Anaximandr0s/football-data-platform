@@ -78,7 +78,7 @@ def clean_matches(matches: DataFrame) -> DataFrame:
 
 def clean_tracking(tracking: DataFrame, players: DataFrame, matches: DataFrame) -> DataFrame:
     """silver.tracking: grain player x second (FOO-03). Columns: match_id, player_id, team_id,
-    period, ts, x, y, speed_kmh, is_sprint, was_corrected, is_after_gap, is_detected.
+    period, ts, x, y, speed_kmh, speed_rejected, is_sprint, was_corrected, is_after_gap, is_detected.
     `players` and `matches` are the Silver (already deduplicated) tables."""
     t = dedup(tracking, KEYS["tracking"])
 
@@ -103,7 +103,8 @@ def clean_tracking(tracking: DataFrame, players: DataFrame, matches: DataFrame) 
     # it is a jump from a position SkillCorner estimated (m003: 4 seconds of 43-52 km/h), so it becomes null and adds
     # nothing to a distance. Null never counts as a sprint. Clipping does not recompute the speed: it describes the
     # real movement between two seconds.
-    t = t.withColumn("speed_kmh", F.when(F.col("speed_kmh") <= MAX_SPEED_KMH, F.col("speed_kmh")))
+    t = t.withColumn("speed_rejected", F.coalesce(F.col("speed_kmh") > MAX_SPEED_KMH, F.lit(False)))
+    t = t.withColumn("speed_kmh", F.when(~F.col("speed_rejected"), F.col("speed_kmh")))
     t = t.withColumn("is_sprint", F.coalesce(F.col("speed_kmh") > SPRINT_KMH, F.lit(False)))
 
     # 2 + 7. order by time per player, flag the first tracked second after a gap. Nothing is invented:
@@ -112,7 +113,7 @@ def clean_tracking(tracking: DataFrame, players: DataFrame, matches: DataFrame) 
     t = t.withColumn("is_after_gap", F.coalesce(F.col("ts") - F.lag("ts").over(w) > 1, F.lit(False)))
 
     return (t.withColumn("period", F.col("period").cast("int"))
-             .select("match_id", "player_id", "team_id", "period", "ts", "x", "y", "speed_kmh",
+             .select("match_id", "player_id", "team_id", "period", "ts", "x", "y", "speed_kmh", "speed_rejected",
                      "is_sprint", "was_corrected", "is_after_gap", "is_detected")
              .orderBy("player_id", "ts"))
 

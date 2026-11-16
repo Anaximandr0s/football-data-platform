@@ -30,6 +30,7 @@ def measure(raw_counts: dict[str, int], tracking: DataFrame, events: DataFrame, 
         F.max("speed_kmh").alias("speed_max"),
         F.countDistinct("ts").alias("seconds"),
         F.sum(F.col("is_detected").cast("int")).alias("detected"),
+        F.sum(F.col("speed_rejected").cast("int")).alias("rejected"),
     ).first()
     e = events.agg(F.count("*").alias("rows"), F.countDistinct("event_id").alias("distinct_keys")).first()
     by_type = {r["type"]: r["n"] for r in events.groupBy("type").agg(F.count("*").alias("n")).collect()}
@@ -52,7 +53,8 @@ def measure(raw_counts: dict[str, int], tracking: DataFrame, events: DataFrame, 
                      "sprints": t["sprints"] or 0, "after_gap": t["after_gap"] or 0,
                      "team_null": t["team_null"] or 0, "outside_after_clip": t["outside_after"] or 0,
                      "speed_max": t["speed_max"], "seconds_with_data": t["seconds"],
-                     "detected": t["detected"] or 0, "speed_over_max_bronze": speed_over_max},
+                     "detected": t["detected"] or 0, "speed_over_max_bronze": speed_over_max,
+                     "speed_rejected": t["rejected"] or 0},
         "events_by_type": by_type,
         "ball_with_possession": b["with_possession"],
         "shot_avg_x": shots,      # {team: [mean x_start of its shots and goals, how many]}
@@ -77,6 +79,9 @@ def evaluate(metrics: dict, manifest: dict | None) -> list[tuple[str, bool, str]
                 f"{tr['outside_after_clip']} outside"))
     out.append(("tracking: no speed above 40 km/h", (tr.get("speed_max") or 0) <= MAX_SPEED_KMH,
                 f"max {tr.get('speed_max')}"))
+    out.append(("tracking: speed_rejected rows = bronze speeds above 40 km/h",
+                tr.get("speed_rejected", 0) == tr.get("speed_over_max_bronze", 0),
+                f"{tr.get('speed_rejected', 0)} vs {tr.get('speed_over_max_bronze', 0)}"))
     goals, score = metrics["goals_home_away"], metrics["score_home_away"]
     out.append(("events: goals equal the final score", goals == score, f"goals={goals} score={score}"))
 

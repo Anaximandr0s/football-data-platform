@@ -7,7 +7,7 @@ checks for silver_tracking:
   - schema:
       name: tracking follows the data contract
       fail:
-        when required column missing: [match_id, player_id, team_id, period, ts, x, y, speed_kmh, is_sprint, was_corrected, is_after_gap, is_detected]
+        when required column missing: [match_id, player_id, team_id, period, ts, x, y, speed_kmh, speed_rejected, is_sprint, was_corrected, is_after_gap, is_detected]
         when forbidden column present: [kafka_partition, kafka_offset, kafka_ts, ingested_at]
         when wrong column type:
           match_id: VARCHAR
@@ -22,6 +22,7 @@ checks for silver_tracking:
           was_corrected: BOOLEAN
           is_after_gap: BOOLEAN
           is_detected: BOOLEAN
+          speed_rejected: BOOLEAN
   - row_count > 0:
       name: tracking is not empty
   # --- grain: one row per player per second (deduplication worked) ---
@@ -39,6 +40,10 @@ checks for silver_tracking:
   - missing_count(was_corrected) = 0
   - missing_count(is_after_gap) = 0
   - missing_count(is_detected) = 0
+  - missing_count(speed_rejected) = 0
+  - failed rows:
+      name: a rejected speed (above 40 km/h in bronze) is null in Silver
+      fail condition: speed_rejected and speed_kmh is not null
   - invalid_count(team_id) = 0:
       name: tracking team_id is HOME or AWAY
       valid values: [HOME, AWAY]
