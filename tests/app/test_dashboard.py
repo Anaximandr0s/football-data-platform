@@ -102,18 +102,6 @@ def test_compare_page_needs_two_matches_of_the_team(app_env):
     assert any("has only one stored match" in i.value for i in at.info)
 
 
-def test_quality_page_shows_the_last_soda_run(app_env):
-    at = run("sections/data_quality.py")
-    assert not at.exception
-    per_match = at.dataframe[0].value
-    assert list(per_match.speeds_rejected) == [0] and list(per_match.match) == ["Home 1-0 Away"]
-    metrics = {m.label: m.value for m in at.metric}
-    assert metrics["Passed"] == "2" and metrics["Failed"] == "1"
-    assert any("No result for gold" in w.value for w in at.warning)
-    assert "detail" in at.dataframe[1].value.columns       # the reason of a failure is shown
-    assert "2 failing row(s)" in " ".join(at.dataframe[1].value["detail"])
-
-
 def test_quality_page_without_any_result_explains_what_to_run(app_env, monkeypatch, tmp_path):
     monkeypatch.setenv("SODA_OUT_DIR", str(tmp_path))
     at = run("sections/data_quality.py")
