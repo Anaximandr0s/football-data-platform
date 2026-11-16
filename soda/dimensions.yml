@@ -1,0 +1,259 @@
+# Every Soda check (soda/checks/*.yml) and the data-quality dimension it belongs to, with a plain-English name
+# for the Data quality page. tests/soda checks that every check has an entry here, and only those.
+# Dimensions: completeness (nothing missing), uniqueness (each thing once), validity (possible values),
+# consistency (tables agree), accuracy (agrees with the real world). Freshness has no Soda check: it comes
+# from the Dagster runs.
+
+silver_tracking:
+  "tracking follows the data contract": {dimension: validity, plain: "tracking has the columns and types of the data contract"}
+  "tracking is not empty": {dimension: completeness, plain: "tracking is not empty"}
+  "tracking has one row per (match_id, player_id, ts)": {dimension: uniqueness, plain: "tracking has one row per (match_id, player_id, ts)"}
+  "a rejected speed (above 40 km/h in bronze) is null in Silver": {dimension: validity, plain: "an impossible speed (above 40 km/h) is removed, not kept"}
+  "positions are inside the 105 x 68 pitch": {dimension: validity, plain: "positions are inside the 105 x 68 pitch"}
+  "every existing second has exactly 22 players": {dimension: completeness, plain: "every second the camera saw has 22 players"}
+  "is_sprint is true exactly when speed is above 25 km/h (never for a null speed)": {dimension: validity, plain: "a second counts as a sprint exactly when the speed is above 25 km/h"}
+  "every tracked player exists in silver_players with the same team": {dimension: consistency, plain: "every tracked player is in the team sheet, in the same team"}
+  "tracking stays inside the playing time of the player": {dimension: consistency, plain: "a player is tracked only while he is on the pitch"}
+  "missing_count(match_id) = 0": {dimension: completeness, plain: "every tracking row has a match id"}
+  "missing_count(player_id) = 0": {dimension: completeness, plain: "every tracking row has a player id"}
+  "every tracking row has a team": {dimension: completeness, plain: "every tracking row has a team"}
+  "tracking team_id is HOME or AWAY": {dimension: validity, plain: "every tracked player is HOME or AWAY"}
+  "missing_count(ts) = 0": {dimension: completeness, plain: "every tracking row has a ts"}
+  "missing_count(x) = 0": {dimension: completeness, plain: "every tracking row has a x"}
+  "missing_count(y) = 0": {dimension: completeness, plain: "every tracking row has a y"}
+  "missing_count(is_sprint) = 0": {dimension: completeness, plain: "every tracking row has a is sprint"}
+  "missing_count(was_corrected) = 0": {dimension: completeness, plain: "every tracking row has a was corrected"}
+  "missing_count(is_after_gap) = 0": {dimension: completeness, plain: "every tracking row has a is after gap"}
+  "missing_count(is_detected) = 0": {dimension: completeness, plain: "every tracking row has a is detected"}
+  "missing_count(speed_rejected) = 0": {dimension: completeness, plain: "every tracking row has a speed rejected"}
+  "tracking period is 1 or 2": {dimension: validity, plain: "tracking period is 1 or 2"}
+  "speed is at most 40 km/h (null allowed)": {dimension: validity, plain: "speed is at most 40 km/h (null allowed)"}
+  "speed is never negative": {dimension: validity, plain: "speed is never negative"}
+
+silver_events:
+  "events follow the data contract": {dimension: validity, plain: "events has the columns and types of the data contract"}
+  "row_count > 0": {dimension: completeness, plain: "events is not empty"}
+  "run fields are set on runs only, and every run says if it was targeted and received": {dimension: validity, plain: "runs without the ball say if they were targeted and received"}
+  "every event player exists in silver_players with the same team": {dimension: consistency, plain: "every action's player is in the team sheet, in the same team"}
+  "a pass receiver is a player of the same team": {dimension: consistency, plain: "a pass receiver is a player of the same team"}
+  "events are oriented per team (HOME shots toward x = 105, AWAY shots toward x = 0)": {dimension: validity, plain: "every team shoots toward the goal it attacks"}
+  "goals in events equal home_score + away_score of the match": {dimension: accuracy, plain: "the goals found in the data equal the real final score"}
+  "events have one row per event_id": {dimension: uniqueness, plain: "events have one row per event_id"}
+  "missing_count(event_id) = 0": {dimension: completeness, plain: "every events row has a event id"}
+  "missing_count(match_id) = 0": {dimension: completeness, plain: "every events row has a match id"}
+  "missing_count(player_id) = 0": {dimension: completeness, plain: "every events row has a player id"}
+  "missing_count(team_id) = 0": {dimension: completeness, plain: "every events row has a team id"}
+  "events team_id is HOME or AWAY": {dimension: validity, plain: "events team_id is HOME or AWAY"}
+  "missing_count(type) = 0": {dimension: completeness, plain: "every events row has a type"}
+  "event type is one of pass, shot, goal, tackle, foul, pressure, run": {dimension: validity, plain: "every action is a pass, shot, goal, tackle, foul, pressure or run"}
+  "missing_count(outcome) = 0": {dimension: completeness, plain: "every events row has a outcome"}
+  "events period is 1 or 2": {dimension: validity, plain: "events period is 1 or 2"}
+
+silver_ball:
+  "ball follows the data contract": {dimension: validity, plain: "ball has the columns and types of the data contract"}
+  "row_count > 0": {dimension: completeness, plain: "ball is not empty"}
+  "ball has one row per (match_id, ts)": {dimension: uniqueness, plain: "ball has one row per (match_id, ts)"}
+  "the ball is tracked in the same seconds as the players": {dimension: consistency, plain: "the ball is seen when the players are"}
+  "missing_count(match_id) = 0": {dimension: completeness, plain: "every ball row has a match id"}
+  "missing_count(ts) = 0": {dimension: completeness, plain: "every ball row has a ts"}
+  "missing_count(x) = 0": {dimension: completeness, plain: "every ball row has a x"}
+  "missing_count(y) = 0": {dimension: completeness, plain: "every ball row has a y"}
+  "ball period is 1 or 2": {dimension: validity, plain: "ball period is 1 or 2"}
+  "ball possession is HOME, AWAY or null": {dimension: validity, plain: "the ball belongs to HOME, AWAY or nobody"}
+
+silver_players:
+  "players follow the data contract": {dimension: validity, plain: "players has the columns and types of the data contract"}
+  "row_count > 0": {dimension: completeness, plain: "players is not empty"}
+  "players have one row per (match_id, player_id)": {dimension: uniqueness, plain: "players have one row per (match_id, player_id)"}
+  "a SkillCorner player appears once per match": {dimension: uniqueness, plain: "a real player appears once per match"}
+  "a player enters before he leaves": {dimension: validity, plain: "a player enters before he leaves"}
+  "each team has at least 11 players on record": {dimension: completeness, plain: "each team has at least 11 players on record"}
+  "missing_count(player_id) = 0": {dimension: completeness, plain: "every players row has a player id"}
+  "missing_count(name) = 0": {dimension: completeness, plain: "every players row has a name"}
+  "missing_count(source_player_id) = 0": {dimension: completeness, plain: "every players row has a source player id"}
+  "players team_id is HOME or AWAY": {dimension: validity, plain: "players team_id is HOME or AWAY"}
+
+silver_matches:
+  "matches follow the data contract": {dimension: validity, plain: "matches has the columns and types of the data contract"}
+  "row_count > 0": {dimension: completeness, plain: "matches is not empty"}
+  "the pitch is 105 x 68": {dimension: validity, plain: "the pitch is 105 x 68"}
+  "period 1 ends before period 2 starts": {dimension: validity, plain: "period 1 ends before period 2 starts"}
+  "row counts after deduplication equal the silver guide (section 2)": {dimension: completeness, plain: "after removing replay copies, no row is missing"}
+  "matches have one row per match_id": {dimension: uniqueness, plain: "matches have one row per match_id"}
+  "missing_count(home_team) = 0": {dimension: completeness, plain: "every matches row has a home team"}
+  "missing_count(away_team) = 0": {dimension: completeness, plain: "every matches row has a away team"}
+  "missing_count(home_score) = 0": {dimension: completeness, plain: "every matches row has a home score"}
+  "missing_count(away_score) = 0": {dimension: completeness, plain: "every matches row has a away score"}
+  "invalid_count(home_side_p1) = 0": {dimension: validity, plain: "the side HOME attacks in the first half is known"}
+  "invalid_count(home_side_p2) = 0": {dimension: validity, plain: "the side HOME attacks in the second half is known"}
+
+gold_player_match_stats:
+  "gold_player_match_stats follows the data contract": {dimension: validity, plain: "player match stats has the columns and types of the data contract"}
+  "row_count > 0": {dimension: completeness, plain: "player match stats is not empty"}
+  "one row per player per match": {dimension: uniqueness, plain: "one row per player per match"}
+  "a player never runs more than 16 km in a match": {dimension: validity, plain: "a player never runs more than 16 km in a match"}
+  "sprint efforts never exceed sprint seconds": {dimension: validity, plain: "sprint efforts never exceed sprint seconds"}
+  "successful passes never exceed passes": {dimension: validity, plain: "successful passes never exceed passes"}
+  "tracked seconds never exceed the time on the pitch": {dimension: consistency, plain: "tracked seconds never exceed the time on the pitch"}
+  "average position is inside the pitch": {dimension: validity, plain: "average position is inside the pitch"}
+  "missing_count(team_id) = 0": {dimension: completeness, plain: "every player match stats row has a team id"}
+  "player team_id is HOME or AWAY": {dimension: validity, plain: "player team_id is HOME or AWAY"}
+  "missing_count(name) = 0": {dimension: completeness, plain: "every player match stats row has a name"}
+  "missing_count(distance_m) = 0": {dimension: completeness, plain: "every player match stats row has a distance m"}
+  "no negative distance": {dimension: validity, plain: "no negative distance"}
+  "no speed above 40 km/h": {dimension: validity, plain: "no speed above 40 km/h"}
+
+gold_team_match_stats:
+  "gold_team_match_stats follows the data contract": {dimension: validity, plain: "team match stats has the columns and types of the data contract"}
+  "row_count > 0": {dimension: completeness, plain: "team match stats is not empty"}
+  "one row per team per match": {dimension: uniqueness, plain: "one row per team per match"}
+  "every match has exactly two teams": {dimension: completeness, plain: "every match has exactly two teams"}
+  "pass accuracy is a ratio between 0 and 1": {dimension: validity, plain: "pass accuracy is a ratio between 0 and 1"}
+  "a team scored the goals of its score": {dimension: consistency, plain: "a team scored the goals of its score"}
+  "the two teams of a match have mirrored scores": {dimension: consistency, plain: "the two teams of a match have mirrored scores"}
+  "team totals equal the sum of the player rows": {dimension: consistency, plain: "team totals equal the sum of the player rows"}
+  "team team_id is HOME or AWAY": {dimension: validity, plain: "team team_id is HOME or AWAY"}
+  "missing_count(team_name) = 0": {dimension: completeness, plain: "every team match stats row has a team name"}
+
+gold_zone_occupancy:
+  "gold_zone_occupancy follows the data contract": {dimension: validity, plain: "zone occupancy has the columns and types of the data contract"}
+  "row_count > 0": {dimension: completeness, plain: "zone occupancy is not empty"}
+  "one row per player per zone per match": {dimension: uniqueness, plain: "one row per player per zone per match"}
+  "zone ids are inside the 6 x 4 grid (0 to 23)": {dimension: validity, plain: "zone ids are inside the 6 x 4 grid (0 to 23)"}
+  "every zone cell lies inside the pitch": {dimension: validity, plain: "every zone cell lies inside the pitch"}
+  "the zone shares of a player add up to 1": {dimension: consistency, plain: "the zone shares of a player add up to 1"}
+
+gold_pass_network:
+  "gold_pass_network follows the data contract": {dimension: validity, plain: "pass network has the columns and types of the data contract"}
+  "row_count > 0": {dimension: completeness, plain: "pass network is not empty"}
+  "one row per passer and receiver per match": {dimension: uniqueness, plain: "one row per passer and receiver per match"}
+  "nobody passes to himself": {dimension: validity, plain: "nobody passes to himself"}
+  "successful passes never exceed passes": {dimension: validity, plain: "successful passes never exceed passes"}
+  "network passes never exceed the passes of the player table": {dimension: consistency, plain: "network passes never exceed the passes of the player table"}
+  "missing_count(passer_id) = 0": {dimension: completeness, plain: "every pass network row has a passer id"}
+  "missing_count(receiver_id) = 0": {dimension: completeness, plain: "every pass network row has a receiver id"}
+
+gold_shots:
+  "gold_shots follows the data contract": {dimension: validity, plain: "shots has the columns and types of the data contract"}
+  "row_count > 0": {dimension: completeness, plain: "shots is not empty"}
+  "is_goal is true exactly for type goal": {dimension: validity, plain: "is_goal is true exactly for type goal"}
+  "HOME attacks the goal at x = 105 and AWAY the goal at x = 0": {dimension: validity, plain: "every shot is aimed at the goal its team attacks"}
+  "a shot is taken less than 120 m from the goal it attacks": {dimension: validity, plain: "a shot is taken less than 120 m from the goal it attacks"}
+  "the running score never goes down": {dimension: consistency, plain: "the running score never goes down"}
+  "goals in gold_shots equal the score in gold_team_match_stats": {dimension: consistency, plain: "goals in gold_shots equal the score in gold_team_match_stats"}
+  "the final running score is the final score": {dimension: consistency, plain: "the final running score is the final score"}
+  "one row per shot": {dimension: uniqueness, plain: "one row per shot"}
+  "missing_count(distance_to_goal_m) = 0": {dimension: completeness, plain: "every shots row has a distance to goal m"}
+  "shot type is shot or goal": {dimension: validity, plain: "shot type is shot or goal"}
+
+gold_player_5min:
+  "gold_player_5min follows the data contract": {dimension: validity, plain: "player 5min has the columns and types of the data contract"}
+  "row_count > 0": {dimension: completeness, plain: "player 5min is not empty"}
+  "one row per player per 5-minute window": {dimension: uniqueness, plain: "one row per player per 5-minute window"}
+  "a window lasts its own length (300 seconds, or the stoppage time for 45+ and 90+)": {dimension: validity, plain: "every 5-minute window lasts 5 minutes, or its stoppage time"}
+  "coverage is tracked seconds over the window length (between 0 and 1)": {dimension: validity, plain: "coverage is tracked seconds over the window length (between 0 and 1)"}
+  "a player covers less than 2 km in 5 minutes": {dimension: validity, plain: "a player covers less than 2 km in 5 minutes"}
+  "windows add up to the tracked seconds of the player table": {dimension: consistency, plain: "windows add up to the tracked seconds of the player table"}
+  "missing_count(team_id) = 0": {dimension: completeness, plain: "every player 5min row has a team id"}
+
+gold_match_timeline:
+  "gold_match_timeline follows the data contract": {dimension: validity, plain: "match timeline has the columns and types of the data contract"}
+  "row_count > 0": {dimension: completeness, plain: "match timeline is not empty"}
+  "one row per team per 5-minute window": {dimension: uniqueness, plain: "one row per team per 5-minute window"}
+  "possession and field tilt are shares between 0 and 1": {dimension: validity, plain: "possession and field tilt are shares between 0 and 1"}
+  "a window is greyed exactly when it has fewer than 60 known seconds": {dimension: validity, plain: "possession is greyed out when less than 1 minute is known"}
+  "the two teams of a window share the same known seconds and add up to them": {dimension: consistency, plain: "the two teams of a window share the same known seconds and add up to them"}
+  "the score at the end of the last window is the final score": {dimension: consistency, plain: "the score at the end of the last window is the final score"}
+  "timeline passes add up to the passes of the team table": {dimension: consistency, plain: "timeline passes add up to the passes of the team table"}
+  "windows restart at each kick-off (labels 0-5 ... 45+, 45-50 ... 90+)": {dimension: validity, plain: "the 5-minute windows restart at each kick-off"}
+  "missing_count(possession_greyed) = 0": {dimension: completeness, plain: "every match timeline row has a possession greyed"}
+
+gold_player_card:
+  "gold_player_card follows the data contract": {dimension: validity, plain: "player card has the columns and types of the data contract"}
+  "row_count > 0": {dimension: completeness, plain: "player card is not empty"}
+  "one card per player per match": {dimension: uniqueness, plain: "one card per player per match"}
+  "an eligible player is outfield with at least 20 tracked minutes": {dimension: validity, plain: "an eligible player is outfield with at least 20 tracked minutes"}
+  "an eligible player has 5 scores between 0 and 100, the others none": {dimension: validity, plain: "only players with enough minutes get scores (0 to 100)"}
+  "involvement is a share between 0 and 1": {dimension: validity, plain: "involvement is a share between 0 and 1"}
+  "each team with a successful pass has a hub (several only when they tie)": {dimension: validity, plain: "each team has one main passer (more only when tied)"}
+  "the card top speed never exceeds the fastest speed of the player table": {dimension: consistency, plain: "the card top speed never exceeds the fastest speed of the player table"}
+  "the card agrees with the player table": {dimension: consistency, plain: "the card agrees with the player table"}
+  "missing_count(source_player_id) = 0": {dimension: completeness, plain: "every player card row has a source player id"}
+
+gold_team_shape:
+  "gold_team_shape follows the data contract": {dimension: validity, plain: "team shape has the columns and types of the data contract"}
+  "row_count > 0": {dimension: completeness, plain: "team shape is not empty"}
+  "one row per team per phase per match": {dimension: uniqueness, plain: "one row per team per phase per match"}
+  "width, length and the defensive line fit inside the pitch": {dimension: validity, plain: "width, length and the defensive line fit inside the pitch"}
+  "the seconds of one team in possession are the seconds of the other out of possession": {dimension: consistency, plain: "the seconds of one team in possession are the seconds of the other out of possession"}
+  "phase is in_possession, out_of_possession or unknown": {dimension: validity, plain: "phase is in_possession, out_of_possession or unknown"}
+
+gold_pressing:
+  "gold_pressing follows the data contract": {dimension: validity, plain: "pressing has the columns and types of the data contract"}
+  "row_count > 0": {dimension: completeness, plain: "pressing is not empty"}
+  "one row per team per 15-minute window": {dimension: uniqueness, plain: "one row per team per 15-minute window"}
+  "a 15-minute window lasts 900 seconds, or the stoppage time for 45+ and 90+": {dimension: validity, plain: "a 15-minute window lasts 900 seconds, or the stoppage time for 45+ and 90+"}
+  "the three thirds add up to the defensive actions": {dimension: consistency, plain: "the three thirds add up to the defensive actions"}
+  "a pressing window is greyed exactly when the opponent made fewer than 10 passes": {dimension: validity, plain: "pressing is greyed out when the opponent made under 10 passes"}
+  "opponent passes add up to the passes of the opponent": {dimension: consistency, plain: "opponent passes add up to the passes of the opponent"}
+  "defensive actions are pressures, tackles and fouls, never runs": {dimension: validity, plain: "defending counts pressures, tackles and fouls only"}
+
+gold_team_build_up:
+  "gold_team_build_up follows the data contract": {dimension: validity, plain: "team build up has the columns and types of the data contract"}
+  "row_count > 0": {dimension: completeness, plain: "team build up is not empty"}
+  "one build-up row per team per match": {dimension: uniqueness, plain: "one build-up row per team per match"}
+  "the three lanes add up to the final-third entries and their shares to 1": {dimension: consistency, plain: "the three lanes add up to the final-third entries and their shares to 1"}
+  "team tracked minutes are seconds of the match, not player-minutes": {dimension: validity, plain: "team tracked minutes are seconds of the match, not player-minutes"}
+  "progressive passes are passes, and the successful ones are fewer": {dimension: validity, plain: "progressive passes are passes, and the successful ones are fewer"}
+
+gold_player_fatigue:
+  "gold_player_fatigue follows the data contract": {dimension: validity, plain: "player fatigue has the columns and types of the data contract"}
+  "row_count > 0": {dimension: completeness, plain: "player fatigue is not empty"}
+  "one fatigue row per player per match": {dimension: uniqueness, plain: "one fatigue row per player per match"}
+  "an eligible player passes the thresholds of C6": {dimension: validity, plain: "an eligible player passes the thresholds of C6"}
+  "the windows hold at most 15 and 5 tracked minutes": {dimension: validity, plain: "the windows hold at most 15 and 5 tracked minutes"}
+  "an eligible player runs less than 250 m per minute in both windows": {dimension: validity, plain: "an eligible player runs less than 250 m per minute in both windows"}
+
+gold_space_control:
+  "gold_space_control follows the data contract": {dimension: validity, plain: "space control has the columns and types of the data contract"}
+  "row_count > 0": {dimension: completeness, plain: "space control is not empty"}
+  "one space row per team per 5-minute window": {dimension: uniqueness, plain: "one space row per team per 5-minute window"}
+  "space shares are between 0 and 1 and the phases add up to the seconds used": {dimension: consistency, plain: "space shares are between 0 and 1 and the phases add up to the seconds used"}
+  "the two teams share the pitch (HOME + AWAY = 1 in every window)": {dimension: consistency, plain: "the two teams share the pitch (HOME + AWAY = 1 in every window)"}
+  "space control uses every tracked second": {dimension: consistency, plain: "space control uses every tracked second"}
+
+gold_team_profile:
+  "gold_team_profile follows the data contract": {dimension: validity, plain: "team profile has the columns and types of the data contract"}
+  "row_count > 0": {dimension: completeness, plain: "team profile is not empty"}
+  "one profile per team per match": {dimension: uniqueness, plain: "one profile per team per match"}
+  "the two teams of a match have opposite gaps and complementary shares": {dimension: consistency, plain: "the two teams of a match have opposite gaps and complementary shares"}
+  "a gap lies between -2 and 2": {dimension: validity, plain: "a gap lies between -2 and 2"}
+  "the profile repeats the build-up and shot numbers of the other tables": {dimension: consistency, plain: "the profile repeats the build-up and shot numbers of the other tables"}
+
+gold_events:
+  "gold_events follows the data contract": {dimension: validity, plain: "events has the columns and types of the data contract"}
+  "row_count > 0": {dimension: completeness, plain: "events is not empty"}
+  "x_att and y_att are the Silver coordinates seen by the team of the event": {dimension: validity, plain: "each action's position is also seen from its team's side"}
+  "every action of the player table is in gold_events, and the runs on top": {dimension: consistency, plain: "every action of the player table is in gold_events, and the runs on top"}
+  "a goal has the second the ball was in the goal, within 10 s of its start; no other event has one": {dimension: validity, plain: "every goal has the second the ball went in"}
+  "one row per event": {dimension: uniqueness, plain: "one row per event"}
+  "missing_count(player_short_name) = 0": {dimension: completeness, plain: "every events row has a player short name"}
+  "third is own, middle or final": {dimension: validity, plain: "third is own, middle or final"}
+  "lane is left, centre or right": {dimension: validity, plain: "lane is left, centre or right"}
+
+gold_match_library:
+  "gold_match_library follows the data contract": {dimension: validity, plain: "match library has the columns and types of the data contract"}
+  "row_count > 0": {dimension: completeness, plain: "match library is not empty"}
+  "the tracked share is between 0 and 1": {dimension: validity, plain: "the tracked share is between 0 and 1"}
+  "the periods follow each other (p1 start <= p1 end < p2 start <= p2 end)": {dimension: validity, plain: "the periods follow each other (p1 start <= p1 end < p2 start <= p2 end)"}
+  "the library score is the score of the team table": {dimension: consistency, plain: "the library score is the score of the team table"}
+  "one library row per match": {dimension: uniqueness, plain: "one library row per match"}
+  "missing_count(match_date) = 0": {dimension: completeness, plain: "every match library row has a match date"}
+
+gold_replay_frames:
+  "gold_replay_frames follows the data contract": {dimension: validity, plain: "replay frames has the columns and types of the data contract"}
+  "row_count > 0": {dimension: completeness, plain: "replay frames is not empty"}
+  "one replay row per object per second": {dimension: uniqueness, plain: "one replay row per object per second"}
+  "players are inside the pitch with a team and a shirt number; the ball has neither": {dimension: validity, plain: "every replayed player is on the pitch with a team and a number"}
+  "every tracked second has its ball and 22 players": {dimension: completeness, plain: "every tracked second has its ball and 22 players"}
+  "the replay plays every tracked second of the match": {dimension: completeness, plain: "the replay plays every tracked second of the match"}
