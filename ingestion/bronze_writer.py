@@ -5,7 +5,8 @@
 
 Layout: s3://bronze/<table>/match_id=<id>/ingest_date=<YYYY-MM-DD>/part-<epoch_ms>-<n>.parquet
 Tables: tracking, events, ball, players, matches (one per Kafka topic).
-Rows are stored as received + kafka_partition, kafka_offset, kafka_ts, ingested_at, with the
+Rows are stored as received + kafka_partition, kafka_offset, kafka_ts, ingested_at, kafka_replay_id (the replay_id
+header, null for messages sent before it existed), with the
 fixed column types of schemas.py. A file is written every 10 s or 5,000 rows, per (table, match).
 Offsets are committed after the upload, so delivery is at-least-once: Silver must deduplicate.
 """
@@ -22,7 +23,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 from confluent_kafka import Consumer
 
-from ingestion.config import BRONZE_BUCKET, KAFKA_BOOTSTRAP, S3_ENDPOINT, TOPICS
+from ingestion.config import BRONZE_BUCKET, KAFKA_BOOTSTRAP, REPLAY_HEADER, S3_ENDPOINT, TOPICS
 from ingestion.schemas import bronze_schema
 
 TABLE_OF = {topic: table for table, topic in TOPICS.items()}
@@ -34,6 +35,14 @@ def to_parquet_bytes(table: str, rows: list[dict]) -> bytes:
     buf = io.BytesIO()
     pq.write_table(pa.Table.from_pylist(rows, schema=bronze_schema(table)), buf)
     return buf.getvalue()
+
+
+def replay_id_of(headers: list[tuple[str, bytes]] | None) -> str | None:
+    """The replay_id header of a message, None when it has none (sent before the header existed)."""
+    for name, value in headers or []:
+        if name == REPLAY_HEADER and value is not None:
+            return value.decode()
+    return None
 
 
 def main() -> None:
@@ -75,7 +84,8 @@ def main() -> None:
                 else:
                     row = json.loads(msg.value())
                     row.update(kafka_partition=msg.partition(), kafka_offset=msg.offset(),
-                               kafka_ts=msg.timestamp()[1], ingested_at=int(time.time() * 1000))
+                               kafka_ts=msg.timestamp()[1], ingested_at=int(time.time() * 1000),
+                               kafka_replay_id=replay_id_of(msg.headers()))
                     buf[(TABLE_OF[msg.topic()], row["match_id"])].append(row)
                     n_buf += 1
                     got_any, last_msg = True, time.time()

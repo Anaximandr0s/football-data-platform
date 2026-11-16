@@ -9,7 +9,7 @@ def test_every_table_has_a_topic_and_a_message_key_that_is_a_column():
         assert KEYS[table] in schema.names
 
 
-def test_bronze_adds_the_four_kafka_columns_last():
+def test_bronze_adds_the_five_kafka_columns_last():
     for table in SCHEMAS:
-        assert bronze_schema(table).names[-4:] == [
-            "kafka_partition", "kafka_offset", "kafka_ts", "ingested_at"]
+        assert bronze_schema(table).names[-5:] == [
+            "kafka_partition", "kafka_offset", "kafka_ts", "ingested_at", "kafka_replay_id"]

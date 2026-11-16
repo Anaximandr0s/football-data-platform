@@ -14,10 +14,13 @@ Reference tables (matches, players) are sent first, then the live stream.
   foot-events    match_id   one message per game action
   foot-ball      match_id   one message per second
 
-Replaying twice doubles the data (at-least-once delivery): Silver deduplicates.
+Every message of one run carries the Kafka header replay_id = "<match>-<UTC start>" (m001-20261116T101503Z): the
+streaming job and the live page keep two replays of the same match apart with it, and bronze stores it.
+Replaying twice doubles the bronze data (at-least-once delivery): Silver deduplicates.
 The process exits with an error if a message could not be delivered.
 """
 import argparse
+import datetime as dt
 import json
 import sys
 import time
@@ -26,7 +29,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from ingestion.config import KAFKA_BOOTSTRAP, KEYS, PREPARED_DIR, TOPICS
+from ingestion.config import KAFKA_BOOTSTRAP, KEYS, PREPARED_DIR, REPLAY_HEADER, TOPICS
 
 
 def read_records(path: Path) -> list[dict]:
@@ -40,6 +43,11 @@ def by_ts(records: list[dict]) -> dict:
     for r in records:
         out[r["ts"]].append(r)
     return out
+
+
+def make_replay_id(match_id: str, started: dt.datetime) -> str:
+    """"m001-20261116T101503Z": the match and the UTC start of the run, unique per run and sortable by time."""
+    return f"{match_id}-{started.astimezone(dt.UTC):%Y%m%dT%H%M%SZ}"
 
 
 def main() -> None:
@@ -60,6 +68,9 @@ def main() -> None:
     reference = {t: read_records(mdir / f"{t}.parquet") for t in ("matches", "players")}
     live = {t: by_ts(read_records(mdir / f"{t}.parquet")) for t in ("tracking", "events", "ball")}
 
+    replay_id = make_replay_id(a.match, dt.datetime.now(dt.UTC))
+    headers = [(REPLAY_HEADER, replay_id.encode())]
+    print(f"replay_id={replay_id}", flush=True)
     errors: list[str] = []
     counts: dict[str, int] = defaultdict(int)
     producer = None
@@ -80,7 +91,7 @@ def main() -> None:
         value = json.dumps(rec, allow_nan=False)
         while True:
             try:
-                producer.produce(TOPICS[table], key=str(rec[KEYS[table]]), value=value,
+                producer.produce(TOPICS[table], key=str(rec[KEYS[table]]), value=value, headers=headers,
                                  on_delivery=on_delivery)
                 break
             except BufferError:          # local queue full: let the client drain it
