@@ -265,3 +265,9 @@ def test_evaluate_blocks_events_in_the_wrong_frame_but_not_a_handful_of_shots():
     assert all(ok for _, ok, _ in few)                                 # 1 or 2 shots: not judged
     none = checks.evaluate(_metrics(shot_avg_x={}), None)
     assert all(ok for _, ok, _ in none)                                # a match without shots: nothing to judge
+
+
+def test_a_rejected_speed_replayed_twice_is_one_rejected_second(spark):
+    once = [("H01", 10, 1, 50.0, 30.0, 44.0), ("H01", 11, 1, 51.0, 30.0, 12.0), ("A01", 10, 1, 60.0, 30.0, 41.0)]
+    replayed = tracking(spark, once + once[:1])          # a second replay copies the 44 km/h second
+    assert transforms.speeds_over_max(replayed) == 2
