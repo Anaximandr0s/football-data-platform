@@ -55,7 +55,6 @@ COMING = {
     "replay": ("play a stored match at 0.25x to 8x with trails, Voronoi cells and a stats panel on click", 7),
     "pipeline_lineage": ("the Dagster asset graph and the dbt lineage of every Gold table", 8),
     "sources_limits": ("SkillCorner open data, 1 Hz tracking, estimated positions, no expected goals", 8),
-    "live_match": ("the 5-minute stats of Spark Streaming (possession, distance, top speed, pressing)", 6),
 }
 
 

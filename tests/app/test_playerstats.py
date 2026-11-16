@@ -73,7 +73,8 @@ def test_live_stats_at_full_time_equal_gold(gold_env):
 def test_a_new_replay_starts_the_stats_again(gold_env):
     fixture = _load_gold_fixture()
     tracking, matches_row = fixture._tracking(), fixture._matches().iloc[0].to_dict()
-    state = _state_from(tracking, matches_row)
-    state = live.apply(state, "matches", matches_row, 10_000)                 # a new replay of the same match
-    state = live.apply(state, "tracking", {**tracking.iloc[1].to_dict(), "speed_kmh": 10.0}, 10_001)
-    assert live.player_stats(state, "H01").tracked_seconds == 1
+    states = {"m1": _state_from(tracking, matches_row)}
+    states = live.route(states, "m1-20261116T110000Z", "matches", matches_row, 10_000)   # a new replay of the match
+    states = live.route(states, "m1-20261116T110000Z", "tracking",
+                        {**tracking.iloc[1].to_dict(), "speed_kmh": 10.0}, 10_001)
+    assert live.player_stats(states["m1"], "H01").tracked_seconds == 1

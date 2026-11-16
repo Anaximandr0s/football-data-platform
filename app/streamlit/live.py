@@ -2,9 +2,9 @@
 
 `apply(state, table, record, kafka_ms)` takes one message and returns a new state; the other functions read a state.
 
-A topic keeps every past replay, and messages of different topics do not arrive in a fixed order. So every stored item
-keeps the Kafka time of its message, and a replay starts at the Kafka time of its `matches` message: anything older
-belongs to a previous replay and is dropped. The result does not depend on the order of the topics.
+A topic keeps every past replay. Every message carries the Kafka header replay_id ("m001-20261116T101503Z", set by
+producer_foot), so one MatchState holds exactly one replay: `route` sends a message to its replay's state, ignores an
+older replay of a match and messages without the header. Inside a replay the order of the topics does not matter.
 Coordinates are those of the replayed tables: origin bottom-left, attack directions as in the source (teams switch
 ends at half-time).
 """
@@ -22,7 +22,8 @@ STALLED_AFTER_S = 300  # match seconds without any tracking: longer than any cam
 @dataclass(frozen=True)
 class MatchState:
     match_id: str
-    start_ms: int = -1                                   # Kafka time of the matches message of the latest replay
+    start_ms: int = -1                                   # Kafka time of the matches message of this replay
+    replay_id: str | None = None
     info: dict = field(default_factory=dict)             # the matches record
     players: dict = field(default_factory=dict)          # player_id -> players record
     frames: dict = field(default_factory=dict)           # ts -> (kafka_ms, {player_id: (x, y, is_detected)})
@@ -38,10 +39,8 @@ class MatchState:
 
 def apply(state: MatchState, table: str, rec: dict, kafka_ms: int) -> MatchState:
     """One Kafka message in, the new state out. `table` is the replayed table the topic carries."""
-    if table == "matches":
-        return _new_replay(state, rec, kafka_ms) if kafka_ms > state.start_ms else state
-    if kafka_ms < state.start_ms:
-        return state
+    if table == "matches":                                # a repeated matches message keeps the first start
+        return replace(state, info=rec, start_ms=kafka_ms if state.start_ms < 0 else state.start_ms)
     if table == "players":
         return replace(state, players={**state.players, rec["player_id"]: rec})
     if table == "tracking":
@@ -53,24 +52,18 @@ def apply(state: MatchState, table: str, rec: dict, kafka_ms: int) -> MatchState
     raise ValueError(f"unknown table {table}")
 
 
-def _new_replay(state: MatchState, rec: dict, start: int) -> MatchState:
-    """Keep only what was sent after the new replay started (its messages may have come before its matches row)."""
-    def recent(item_ms: int) -> bool:
-        return item_ms >= start
-
-    def keep(item):
-        return item if item is not None and recent(item[-1]) else None
-
-    return MatchState(
-        match_id=state.match_id, start_ms=start, info=rec, players=state.players,
-        frames={ts: f for ts, f in state.frames.items() if recent(f[0])},
-        ball=keep(state.ball),
-        possession={ts: p for ts, p in state.possession.items() if recent(p[1])},
-        goals={k: g for k, g in state.goals.items() if recent(g[-1])},
-        last_event=keep(state.last_event), first_tracking=keep(state.first_tracking),
-        last_tracking=keep(state.last_tracking), period=state.period if keep(state.last_tracking) else None,
-        seconds={pid: ((), kept) for pid, history in state.seconds.items()
-                 if (kept := tuple(v for v in _history(history) if recent(v[-1])))})
+def route(states: dict[str, MatchState], replay_id: str | None, table: str, rec: dict,
+          kafka_ms: int) -> dict[str, MatchState]:
+    """states: match_id -> the state of its latest replay. A message without replay_id (sent before the header
+    existed) or from an older replay of the match is ignored; a newer replay replaces the older state."""
+    if replay_id is None:
+        return states
+    current = states.get(rec["match_id"])
+    if current is not None and current.replay_id is not None and replay_id < current.replay_id:
+        return states                                     # same match prefix: the UTC start sorts the replays
+    if current is None or current.replay_id != replay_id:
+        current = MatchState(rec["match_id"], replay_id=replay_id)
+    return {**states, rec["match_id"]: apply(current, table, rec, kafka_ms)}
 
 
 def _tracking(state: MatchState, rec: dict, kafka_ms: int) -> MatchState:

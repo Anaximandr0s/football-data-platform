@@ -55,6 +55,39 @@ def player_panel(state: live.MatchState, player_id: str, colors: dict[str, str],
     st.button("Close", key="live_close", on_click=lambda: st.session_state.pop("live_player", None))
 
 
+def five_minutes(state: live.MatchState, stats: list[dict], names: dict | None) -> None:
+    """The 5-minute windows of this replay from the streaming job (foot-live-stats), newest first."""
+    st.markdown("**Every 5 minutes** (Spark streaming)")
+    teams = sorted((r for r in stats if r.get("kind") == "team"), key=lambda r: (-r["window_index"], r["team_id"]))
+    if not teams:
+        st.caption("No window yet. The streaming job must run before the replay starts: `make streaming`.")
+        return
+    home, away = live.team_name(state, "HOME", names), live.team_name(state, "AWAY", names)
+    windows = {}
+    for r in teams:
+        windows.setdefault(r["window_index"], {})[r["team_id"]] = r
+    table = []
+    for pair in list(windows.values())[:4]:
+        h, a = pair.get("HOME", {}), pair.get("AWAY", {})
+        poss = "-" if h.get("possession_greyed", True) else f"{h['possession_share']:.0%} - {a['possession_share']:.0%}"
+        press = " - ".join("-" if r.get("ppp_greyed", True) else f"{r['ppp']:.2f}" for r in (h, a))
+        table.append({"minutes": f"{h.get('window_label', a.get('window_label'))}'",
+                      "status": "complete" if h.get("complete") else "in progress",
+                      f"possession {home} - {away}": poss, "pressing per opp. pass": press})
+    st.dataframe(pd.DataFrame(table), hide_index=True, width="stretch")
+    latest = max(windows)
+    players = [r for r in stats if r.get("kind") == "player" and r["window_index"] == latest and r["tracked_seconds"]]
+    best = sorted(players, key=lambda r: -r["distance_m"] / (r["tracked_seconds"] / 60))[:3]
+    if best:
+        label = next(iter(windows[latest].values()))["window_label"]
+        st.caption(f"Most ground covered in {label}': " + ", ".join(
+            f"{state.players.get(r['player_id'], {}).get('short_name', r['player_id'])} "
+            f"{r['distance_m'] / (r['tracked_seconds'] / 60):.0f} m/min (top {r['max_speed_kmh'] or 0:.0f} km/h)"
+            for r in best))
+    st.caption("Complete: tracking has passed the end of the window by 10 s of match time. \"-\": under the thresholds "
+               "of Gold (60 seconds with a known owner, 10 opponent passes).")
+
+
 def possession_bar(state: live.MatchState, colors: dict[str, str], names: dict | None) -> None:
     share = live.possession_share(state)
     if share is None:
@@ -135,12 +168,9 @@ def live_view() -> None:
                          hide_index=True)
         else:
             st.caption("Shown while positions arrive.")
-        with st.container(border=True):
-            st.markdown("**Last 5 minutes**")
-            st.caption("Possession, distance per minute, top speed and pressing per 5 minutes: computed by the "
-                       "streaming job (FOO-08, topic foot-live-stats), not built yet.")
+    with st.container(border=True):
+        five_minutes(state, feed.stats(state.replay_id) if state.replay_id else [], names)
     st.caption(f"{feed.messages:,} Kafka messages read. {CREDIT}")
 
 
 live_view()
-sitemap.still_to_come("live_match")

@@ -20,11 +20,14 @@ class FakeFeed:
     def snapshot(self):
         return dict(self._states)
 
+    def stats(self, replay_id):
+        return [r for r in getattr(self, "rows", []) if r["replay_id"] == replay_id]
+
 
 def state_at(last_ms: int) -> live.MatchState:
     """A replay at x5 whose latest tracked second (ts 600) was sent at `last_ms`; HOME scored at ts 300."""
     start = last_ms - 600 * 200
-    s = live.apply(live.MatchState("m1"), "matches", MATCH, start)
+    s = live.apply(live.MatchState("m1", replay_id="m1-20261116T101503Z"), "matches", MATCH, start)
     for i in range(22):
         team = "HOME" if i < 11 else "AWAY"
         pid = f"{team[0]}{i % 11 + 1:02d}"
@@ -61,7 +64,7 @@ def test_live_page_shows_score_clock_event_possession_and_shape(monkeypatch):
     assert "Goal, 6', Home FC (P. H09)" in shown
     assert "Possession 100% - 0%" in shown
     assert len(at.dataframe) == 1                                         # team shape of the current second
-    assert "FOO-08" in shown and "camera off the pitch" not in shown
+    assert "make streaming" in shown and "camera off the pitch" not in shown        # no window yet
 
 
 def test_live_page_says_the_camera_is_off_during_a_gap(monkeypatch):
@@ -114,3 +117,25 @@ def test_live_page_shows_the_stats_so_far_of_the_clicked_player(monkeypatch):
     panel = texts(at)
     assert "<b>0.00 km</b>" in panel and "<span>Sprints</span><b>0</b>" in panel     # two seconds, no speed sent
     assert "<b>not yet</b>" in panel
+
+
+def test_live_page_shows_the_5_minute_windows_of_the_streaming_job(monkeypatch):
+    feed = FakeFeed({"m1": state_at(int(time.time() * 1000) + 60_000)})
+    win = {"replay_id": "m1-20261116T101503Z", "match_id": "m1", "window_size": 300, "kind": "team"}
+    feed.rows = [{**win, "window_index": 0, "window_label": "0-5", "team_id": "HOME", "possession_share": 0.6,
+                  "possession_greyed": False, "ppp": 1.2, "ppp_greyed": False, "complete": True},
+                 {**win, "window_index": 0, "window_label": "0-5", "team_id": "AWAY", "possession_share": 0.4,
+                  "possession_greyed": False, "ppp": 0.9, "ppp_greyed": True, "complete": True},
+                 {**win, "window_index": 1, "window_label": "5-10", "team_id": "HOME", "possession_share": 0.5,
+                  "possession_greyed": True, "ppp": None, "ppp_greyed": True, "complete": False},
+                 {**win, "window_index": 1, "window_label": "5-10", "team_id": "AWAY", "possession_share": 0.5,
+                  "possession_greyed": True, "ppp": None, "ppp_greyed": True, "complete": False},
+                 {**win, "kind": "player", "window_index": 1, "player_id": "H09", "team_id": "HOME",
+                  "tracked_seconds": 120, "distance_m": 300.0, "max_speed_kmh": 28.4},
+                 {**win, "replay_id": "m1-20261115T090000Z", "window_index": 5, "window_label": "25-30",
+                  "team_id": "HOME", "complete": True}]                          # an older replay: never shown
+    at = page(monkeypatch, feed)
+    table = at.dataframe[-1].value
+    assert list(table.minutes) == ["5-10'", "0-5'"] and list(table.status) == ["in progress", "complete"]
+    assert list(table.iloc[:, 2]) == ["-", "60% - 40%"] and list(table.iloc[:, 3]) == ["- - -", "1.20 - -"]
+    assert "P. H09 150 m/min (top 28 km/h)" in texts(at)
