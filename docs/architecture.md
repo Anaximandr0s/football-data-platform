@@ -14,7 +14,7 @@
 | Bronze | MinIO bucket `bronze` | `ingestion/bronze_writer.py` | raw rows + Kafka metadata, partitioned by match |
 | Silver | MinIO bucket `silver` | Spark (standalone cluster in `docker-compose.yml`: `spark-master`, `spark-worker`) + Iceberg | cleaned, deduplicated, player x second |
 | Gold | MinIO bucket `gold` | dbt + DuckDB, Soda checks | statistics per player and team, zones, passes, shots |
-| Orchestration | | Dagster | Gold and post-match report when a match ends |
+| Orchestration | `dagster/` | Dagster (webserver + daemon) | the chain of a match when its replay ends |
 | Presentation | `app/streamlit` | Streamlit + mplsoccer | live pitch, heatmaps, shot and pass maps |
 
 ## Topics
@@ -30,7 +30,7 @@ Every replay message carries the header `replay_id` (`m001-20261116T101503Z`): t
 ## Bronze layout
 
 `s3://bronze/<table>/match_id=<id>/ingest_date=<day>/part-<epoch_ms>-<n>.parquet`. Partitioned by match, as the brief asks.
-The writer buffers per (table, match) and writes a file every 10 s or 5,000 rows, so two matches replayed at the same time never mix.
+The writer is the always-on service `bronze-writer` (`make up`, restarted if it stops). It buffers per (table, match) and writes a file every 10 s or 5,000 rows, so two matches replayed at the same time never mix.
 `ingest_date` (UTC day of writing) is the time partition. Delivery is at-least-once; Silver deduplicates.
 
 ## Silver layout
@@ -66,6 +66,26 @@ x60, all 506 rows of each replay are complete and equal Gold value by value (`go
 rows), which Spark and DuckDB round apart. m003 at x60 (the match with 4 speeds above 40 km/h): 502 rows, all complete
 and equal Gold (40 + 446 + 16 windows; 12 distance ties on an exact .x5 sum). [Spark UI](img/spark_ui_streaming.png),
 [Live panel](img/live_5min_panel_m001.png).
+
+## Orchestration (Dagster)
+
+`make dagster` starts the webserver (http://localhost:3000) and the daemon; one image (`dagster/Dockerfile`) runs both and
+every run. When a replay's tracking reaches the last second of its match (`p2_end_ts` of its own `foot-matches` message,
+matched by `replay_id`), the sensor `replay_end` starts `match_pipeline` for that match:
+
+`bronze` (the writer has no lag, then `check_bronze`) -> `silver` (Spark job, driver in the daemon container) ->
+`soda_silver` (blocking check) -> dbt models (`dagster-dbt`, one `dbt build`) -> `soda_gold` (blocking, one result per Gold
+table) -> `match_report`.
+
+- **Partitions**: every asset by `match_id`. Gold holds every match in one DuckDB file, so it is rebuilt whole; its
+  partition says which match triggered it.
+- **One Gold build at a time**: the steps that open the DuckDB file share the pool `duckdb` (limit 1).
+- **Retries**: Silver and dbt, 2 retries 30 s apart. **Schedule**: Soda Silver + Gold at 03:00 UTC.
+- **Spark from a container**: the driver runs in `dagster-daemon` (`spark.driver.host=dagster-daemon`), the executors on
+  the worker; one core per Silver run (`spark.cores.max=1`), so the streaming job keeps its core.
+- After each run, `data/pipeline/runs.json` and `graph.json` feed the Pipeline & lineage page.
+
+Guide and limits: [`dagster/README.md`](../dagster/README.md).
 
 ## Design principles
 

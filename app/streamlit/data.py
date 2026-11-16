@@ -131,3 +131,28 @@ def soda_results() -> dict[str, dict]:
         if path.exists():
             out[layer] = json.loads(path.read_text(encoding="utf-8"))
     return out
+
+
+def pipeline_file(name: str):
+    """data/pipeline/<name>.json written by Dagster after each run (graph, runs); None before the first run."""
+    path = Path(os.getenv("PIPELINE_OUT_DIR", ROOT / "data" / "pipeline")) / f"{name}.json"
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+
+
+@st.cache_data(show_spinner=False)
+def _manifest(path: str, _mtime: float) -> dict:
+    return json.loads(Path(path).read_text(encoding="utf-8"))
+
+
+def dbt_manifest() -> dict | None:
+    """dbt/target/manifest.json (written by every dbt command: `make gold`, Dagster); None if dbt never ran."""
+    path = Path(os.getenv("DBT_MANIFEST", ROOT / "dbt" / "target" / "manifest.json"))
+    return _manifest(str(path), path.stat().st_mtime) if path.exists() else None
+
+
+def doc_section(doc: str, heading: str) -> str:
+    """The text of one `## heading` section of docs/<doc>, so a page and its document never disagree."""
+    text = (ROOT / "docs" / doc).read_text(encoding="utf-8")
+    start = text.index(f"## {heading}\n") + len(heading) + 4
+    end = text.find("\n## ", start)
+    return text[start:end if end >= 0 else None].strip()

@@ -37,7 +37,7 @@ Details: [`docs/architecture.md`](docs/architecture.md). The ingestion part: [`i
 | Gold | dbt + DuckDB: 6 tables, tests, export to `s3://gold` | code and tests done, to run on the stack ([`dbt/README.md`](dbt/README.md)) |
 | Checks | Soda Core on Silver and Gold, 73 + 130 checks, failure demo | code and tests done, to run on the stack ([`soda/README.md`](soda/README.md)) |
 | Streaming stats (optional) | Spark Structured Streaming: 5- and 15-minute windows to the topic `foot-live-stats`, shown on Live; equal to Gold after a full replay ([`spark/streaming/live_stats.py`](spark/streaming/live_stats.py)) | done |
-| Orchestration | Dagster | to do |
+| Orchestration | Dagster: the end of a replay runs bronze check -> Silver -> Soda -> Gold -> Soda -> report for its match; a failed check blocks what follows ([`dagster/README.md`](dagster/README.md)) | done |
 | Presentation | Streamlit + mplsoccer dashboard on Gold (live pitch page still to do) | code and tests done, to run on the stack ([`app/streamlit/README.md`](app/streamlit/README.md)) |
 
 Requirement by requirement: [`docs/requirements-coverage.md`](docs/requirements-coverage.md).
@@ -53,7 +53,7 @@ cp .env.example .env                      # then change MINIO_ROOT_PASSWORD
 python -m venv .venv && source .venv/bin/activate    # or: uv venv .venv
 pip install -r requirements.txt           # or: uv pip install -r requirements.txt
 
-make up                                   # MinIO + Kafka + Kafka UI + Spark cluster, buckets and topics created
+make up                                   # MinIO, Kafka, Kafka UI, Spark cluster, Bronze writer; buckets and topics created
 make ps
 make smoke                                # must end with ALL OK
 make lint
@@ -61,8 +61,7 @@ make test
 make data MATCH=m001 SC_ID=1874553        # download (~100 MB) + convert match 1
 make data MATCH=m002 SC_ID=1925299        # same for match 2
 
-make bronze                               # terminal 1: Kafka -> MinIO bronze (leave running)
-make replay MATCH=m001                    # terminal 2: replay at x60, about 100 seconds
+make replay MATCH=m001                    # replay at x60, about 100 seconds (the bronze-writer service stores it)
 make replay MATCH=m002
 make check MATCH=m001                     # bronze row counts must say OK
 make check MATCH=m002
@@ -72,6 +71,7 @@ make gold                                # Gold: dbt + DuckDB, tests, export to 
 make gold-sql Q="select * from gold_shots limit 5"
 make soda                                # Soda checks on Silver then Gold (make soda-demo shows a failure on purpose)
 make app                                 # dashboard on http://localhost:8501
+make dagster                             # Dagster on http://localhost:3000: the next replay's end runs the chain
 ```
 
 | Service | URL | Notes |
@@ -81,6 +81,7 @@ make app                                 # dashboard on http://localhost:8501
 | Kafka UI | http://localhost:8081 | topics, messages, consumer groups |
 | Spark master UI | http://localhost:8082 | cluster for Silver (`spark://spark-master:7077` inside Docker) |
 | Dashboard | http://localhost:8501 | after `make app` (needs `make gold`) |
+| Dagster | http://localhost:3000 | after `make dagster` |
 | Kafka from your machine | `localhost:29092` | Python scripts and Spark outside Docker |
 | Kafka from containers | `kafka:9092` | |
 
@@ -102,7 +103,7 @@ Troubleshooting:
 | `spark/` | Silver job (`spark/silver/`, [guide](spark/silver/README.md)); streaming job (`spark/streaming/`, `make streaming`) | done |
 | `dbt/` | Gold models, dbt tests, Dockerfile ([guide](dbt/README.md)) | Gold code done |
 | `soda/` | data-quality checks on Silver and Gold, runner, Dockerfile ([guide](soda/README.md)) | Soda code done |
-| `dagster/` | orchestration | to do |
+| `dagster/` | Dagster assets, sensor, schedule, image ([guide](dagster/README.md)) | done |
 | `app/` | Streamlit dashboard (`app/streamlit/`, [guide](app/streamlit/README.md)), optional 3D page (`app/web3d/`) and API | dashboard code done, live page and bonus to do |
 
 ## Documentation

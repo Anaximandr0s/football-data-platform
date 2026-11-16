@@ -45,16 +45,14 @@ PAGES = (
     PageSpec("data_quality", "Data quality", ":material/verified:", "BEHIND THE DATA", "Can I trust these numbers?",
              "jury", True),
     PageSpec("pipeline_lineage", "Pipeline & lineage", ":material/account_tree:", "BEHIND THE DATA",
-             "How does a number get from the camera to the screen?", "jury", False),
+             "How does a number get from the camera to the screen?", "jury", True),
     PageSpec("sources_limits", "Sources & limits", ":material/menu_book:", "BEHIND THE DATA",
-             "Where does the data come from, and what can it not tell?", "jury", False),
+             "Where does the data come from, and what can it not tell?", "jury", True),
 )
 
 # what is still missing on a page that exists, and the build step of docs/product.md section 12 that adds it
 COMING = {
     "replay": ("play a stored match at 0.25x to 8x with trails, Voronoi cells and a stats panel on click", 7),
-    "pipeline_lineage": ("the Dagster asset graph and the dbt lineage of every Gold table", 8),
-    "sources_limits": ("SkillCorner open data, 1 Hz tracking, estimated positions, no expected goals", 8),
 }
 
 

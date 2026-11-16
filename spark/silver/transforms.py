@@ -23,6 +23,12 @@ from spark.silver.config import (
 # ---------------------------------------------------------------- 1. deduplication
 
 
+def speeds_over_max(bronze_tracking: DataFrame) -> int:
+    """Player-seconds of bronze faster than MAX_SPEED_KMH, counted once per key: each replay of a match copies them."""
+    return (bronze_tracking.filter(F.col("speed_kmh") > MAX_SPEED_KMH)
+            .select(*KEYS["tracking"]).distinct().count())
+
+
 def dedup(df: DataFrame, keys: list[str]) -> DataFrame:
     """One row per key. Replays and consumer restarts only add copies, so which copy we keep does
     not change the values; we keep the latest written one (ingested_at, then kafka_offset) so the

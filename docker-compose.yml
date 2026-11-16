@@ -18,6 +18,7 @@ volumes:
   kafka-data:
   spark-ivy:   # Maven jars of the Silver job (S3A, Iceberg): downloaded once
   duckdb-ext:  # DuckDB extensions (httpfs, iceberg) of the Gold job: downloaded once
+  dagster-storage:  # Dagster runs, event logs, schedules and sensor cursors (SQLite), shared by webserver and daemon
 
 services:
   # --- MinIO: S3-compatible storage (buckets = bronze / silver / gold) ---------
@@ -136,6 +137,26 @@ services:
       DYNAMIC_CONFIG_ENABLED: "false"
     ports:
       - "127.0.0.1:${KAFKA_UI_PORT}:8080"
+    mem_limit: 512m
+
+  # --- Bronze writer: Kafka -> MinIO bronze, always on (started by `make up`, restarted if it stops) ---------
+  # Commits its Kafka offsets only after an upload, so its lag tells Dagster when a replay is fully in Bronze.
+  bronze-writer:
+    <<: *common
+    build: ./ingestion
+    image: football-bronze-writer:local
+    depends_on:
+      kafka:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      KAFKA_EXTERNAL_BOOTSTRAP: kafka:9092
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - ./:/app:ro
     mem_limit: 512m
 
   # --- Spark standalone cluster (Silver): 1 master + 1 worker ---------------------
@@ -319,6 +340,66 @@ services:
       - duckdb-ext:/root/.duckdb
     command: ["--layer", "all"]
     mem_limit: 1g
+
+  # --- Dagster (profile "dagster": `make dagster`, UI on http://localhost:${DAGSTER_PORT}) -----------------------
+  # One image for the webserver, the daemon and the runs. dagster-init writes dbt/target/manifest.json (dbt parse),
+  # which the code location reads to build the Gold assets. Runs are queued and executed by the daemon: the Silver
+  # Spark driver runs there, under the host name dagster-daemon that the workers use to reach it.
+  dagster-init:
+    profiles: ["dagster"]
+    build: ./dagster
+    image: football-dagster:local
+    working_dir: /app/dbt
+    environment: &dagster-env
+      DBT_TARGET: minio
+      GOLD_DUCKDB_PATH: /app/data/football.duckdb
+      GOLD_S3_ENDPOINT: minio:9000
+      SODA_OUT_DIR: /app/data/soda
+      PIPELINE_OUT_DIR: /app/data/pipeline
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      KAFKA_BOOTSTRAP: kafka:9092
+      KAFKA_EXTERNAL_BOOTSTRAP: kafka:9092
+      SPARK_MASTER: spark://spark-master:7077
+      SPARK_DRIVER_HOST: dagster-daemon
+    volumes: &dagster-volumes
+      - ./:/app
+      - dagster-storage:/opt/dagster/home/storage
+      - spark-ivy:/tmp/ivy
+      - duckdb-ext:/root/.duckdb
+    command: ["dbt", "parse"]
+
+  dagster-webserver:
+    <<: *common
+    profiles: ["dagster"]
+    image: football-dagster:local
+    depends_on:
+      dagster-init:
+        condition: service_completed_successfully
+    environment: *dagster-env
+    volumes: *dagster-volumes
+    command: ["dagster-webserver", "-h", "0.0.0.0", "-p", "3000", "-w", "/opt/dagster/home/workspace.yaml"]
+    ports:
+      - "127.0.0.1:${DAGSTER_PORT:-3000}:3000"
+    mem_limit: 1g
+
+  dagster-daemon:
+    <<: *common
+    profiles: ["dagster"]
+    image: football-dagster:local
+    hostname: dagster-daemon
+    depends_on:
+      dagster-init:
+        condition: service_completed_successfully
+      kafka:
+        condition: service_healthy
+      spark-master:
+        condition: service_healthy
+    environment: *dagster-env
+    volumes: *dagster-volumes
+    command: ["dagster-daemon", "run", "-w", "/opt/dagster/home/workspace.yaml"]
+    mem_limit: 4g
 
   # --- Streamlit dashboard (profile "app": `make app` starts it, `make app-stop` stops it) ---
   # Reads the Gold file data/football.duckdb and data/soda/*.json, mounted READ-ONLY. http://localhost:${APP_PORT}

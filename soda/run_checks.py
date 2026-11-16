@@ -4,6 +4,7 @@
     python soda/run_checks.py --layer gold              # checks/gold.yml on data/football.duckdb
     python soda/run_checks.py --layer all               # both (Silver first)
     python soda/run_checks.py --layer silver --demo-failure   # corrupt a copy ON PURPOSE, show the checks catch it
+    python soda/run_checks.py --layer silver --inject-damage  # the same damage, reported as a real failure (Dagster)
 
 Normally run through `make soda` / `make soda-silver` / `make soda-gold` / `make soda-demo` (service `soda`).
 
@@ -188,16 +189,20 @@ def main() -> None:
     ap.add_argument("--out", type=Path, default=Path(os.getenv("SODA_OUT_DIR", ROOT / "data" / "soda")))
     ap.add_argument("--demo-failure", action="store_true",
                     help="corrupt this run's view on purpose and succeed only if the checks catch it")
+    ap.add_argument("--inject-damage", action="store_true",
+                    help="the damage of --demo-failure, reported like a real run (exit 1, <layer>-damaged.json)")
     a = ap.parse_args()
-    if a.demo_failure and a.layer == "all":
-        ap.error("--demo-failure needs one layer: --layer silver or --layer gold")
+    if (a.demo_failure or a.inject_damage) and a.layer == "all":
+        ap.error("--demo-failure and --inject-damage need one layer: --layer silver or --layer gold")
+    if a.demo_failure and a.inject_damage:
+        ap.error("choose --demo-failure or --inject-damage")
 
     a.out.mkdir(parents=True, exist_ok=True)
     ok = True
     for layer in ("silver", "gold") if a.layer == "all" else (a.layer,):
         con = (silver_connection(a.silver_reader, a.silver_warehouse, a.silver_namespace, a.silver_parquet_root)
                if layer == "silver" else gold_connection(a.gold_db))
-        damage = corrupt(con, layer) if a.demo_failure else []
+        damage = corrupt(con, layer) if a.demo_failure or a.inject_damage else []
         for line in damage:
             print(f"DEMO: injected {line}")
         scan, summary = run_layer(layer, con, a.out)
@@ -211,7 +216,9 @@ def main() -> None:
                   + ("the checks work." if caught else "NOTHING WAS CAUGHT, the checks are too weak."))
             ok &= caught                      # the demo result is not stored: it must not replace a real run
             continue
-        (a.out / f"{layer}.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+        # a damaged run never replaces the result of a real run, which the dashboard shows
+        name = f"{layer}-damaged.json" if a.inject_damage else f"{layer}.json"
+        (a.out / name).write_text(json.dumps(summary, indent=2), encoding="utf-8")
         ok &= summary["failed"] == 0 and summary["errors"] == 0
         print(f"{layer}: {summary['passed']} passed, {summary['failed']} failed, {summary['warned']} warned, "
               f"{summary['errors']} errors")

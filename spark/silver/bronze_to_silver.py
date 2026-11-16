@@ -78,7 +78,7 @@ def process_match(spark: SparkSession, match_id: str, bronze_uri: str, manifest_
     }
 
     print(f"\nevents direction used for {match_id}: {events_direction}")
-    over_max = raw["tracking"].filter(F.col("speed_kmh") > config.MAX_SPEED_KMH).count()
+    over_max = transforms.speeds_over_max(raw["tracking"])
     metrics = checks.measure(raw_counts, silver["tracking"], silver["events"], silver["ball"],
                              players, matches, speed_over_max=over_max)
     manifest = checks.load_manifest(match_id, manifest_dir)

@@ -1,0 +1,4 @@
+load_from:
+  - python_module:
+      module_name: football_platform.definitions
+      working_directory: /app/dagster
