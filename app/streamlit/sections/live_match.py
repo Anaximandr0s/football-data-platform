@@ -70,10 +70,11 @@ def five_minutes(state: live.MatchState, stats: list[dict], names: dict | None) 
     for pair in list(windows.values())[:4]:
         h, a = pair.get("HOME", {}), pair.get("AWAY", {})
         poss = "-" if h.get("possession_greyed", True) else f"{h['possession_share']:.0%} - {a['possession_share']:.0%}"
-        press = " - ".join("-" if r.get("ppp_greyed", True) else f"{r['ppp']:.2f}" for r in (h, a))
+        press = ["-" if r.get("ppp_greyed", True) else f"{r['ppp']:.2f}" for r in (h, a)]
         table.append({"minutes": f"{h.get('window_label', a.get('window_label'))}'",
                       "status": "complete" if h.get("complete") else "in progress",
-                      f"possession {home} - {away}": poss, "pressing per opp. pass": press})
+                      f"possession {home} - {away}": poss, f"{home} pressing per opp. pass": press[0],
+                      f"{away} pressing per opp. pass": press[1]})
     st.dataframe(pd.DataFrame(table), hide_index=True, width="stretch")
     latest = max(windows)
     players = [r for r in stats if r.get("kind") == "player" and r["window_index"] == latest and r["tracked_seconds"]]
