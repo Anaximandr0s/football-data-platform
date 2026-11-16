@@ -96,11 +96,8 @@ def possession_bar(state: live.MatchState, colors: dict[str, str], names: dict |
         return
     home, away, seconds = share
     owner = live.current_owner(state)
-    st.markdown(
-        f"<div style='display:flex;height:22px;border-radius:4px;overflow:hidden'>"
-        f"<div style='width:{home:.0%};background:{colors['HOME']}'></div>"
-        f"<div style='width:{away:.0%};background:{colors['AWAY']}'></div></div>",
-        unsafe_allow_html=True)
+    st.markdown(viz.possession_bar(home, colors, {t: live.team_name(state, t, names) for t in ("HOME", "AWAY")}),
+                unsafe_allow_html=True)
     now = f" · now: {live.team_name(state, owner, names)}" if owner else " · now: ball dead or contested"
     st.caption(f"Possession {home:.0%} - {away:.0%} over {seconds // 60} min with a known owner{now}")
 
@@ -144,8 +141,10 @@ def live_view() -> None:
         selected = st.session_state.get("live_player", {}).get(match)
         clicked = pitch.show(
             key="live_pitch", colors=colors, selected=selected, message=message,
-            players={pid: [p.get("team_id"), p.get("shirt_number"), p.get("short_name")] for pid, p in state.players.items()},
-            frame=pitch.frame_list(*frame) if frame and status != "gap" else None, arrows={"home": "right"})
+            players={pid: [p.get("team_id"), p.get("shirt_number"), p.get("short_name"), p.get("position") == "GK"]
+                     for pid, p in state.players.items()},
+            frame=pitch.frame_list(*frame) if frame and status != "gap" else None,
+            arrows={"home": "right", "names": {t: live.team_name(state, t, names) for t in ("HOME", "AWAY")}})
         if clicked:
             st.session_state["live_player"] = {**st.session_state.get("live_player", {}), match: clicked}
             selected = clicked

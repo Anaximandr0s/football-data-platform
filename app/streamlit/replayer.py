@@ -12,20 +12,23 @@ import pandas as pd
 import clock
 import playerstats
 
+BALL = 3                    # x, y, z of the ball open each second of the payload; then x, y, detected per player
+KEY_EVENTS = {"goal": "Goal", "shot": "Shot", "tackle": "Tackle", "foul": "Foul"}     # as Live's event line
+
 
 def payload(frames: pd.DataFrame, key: str) -> dict:
-    """gold_replay_frames rows of one match -> {key, ids, t, xy}: one list per tracked second, [ball x, ball y, then
+    """gold_replay_frames rows of one match -> {key, ids, t, xy}: one list per tracked second, [ball x, y, z, then
     x, y, detected (1/0) of each player in `ids` order], positions in whole centimetres (Silver keeps 2 decimals, so
     nothing is lost), None when absent."""
     players = frames[frames.object_type == "player"]
     ids = sorted(players.object_id.unique())
     t = np.sort(frames.ts.unique())
     row = {ts: i for i, ts in enumerate(t)}
-    grid = np.full((len(t), 2 + 3 * len(ids)), np.nan)
+    grid = np.full((len(t), BALL + 3 * len(ids)), np.nan)
     balls = frames[frames.object_type == "ball"]
-    grid[balls.ts.map(row), 0] = balls.x * 100
-    grid[balls.ts.map(row), 1] = balls.y * 100
-    col = players.object_id.map({pid: 2 + 3 * j for j, pid in enumerate(ids)})
+    for k, c in enumerate(("x", "y", "z")):
+        grid[balls.ts.map(row), k] = balls[c].astype(float) * 100
+    col = players.object_id.map({pid: BALL + 3 * j for j, pid in enumerate(ids)})
     rows = players.ts.map(row)
     grid[rows, col] = players.x * 100
     grid[rows, col + 1] = players.y * 100
@@ -39,7 +42,7 @@ def position_at(data: dict, ts: int, object_id: str) -> tuple[float, float] | No
     if ts not in data["t"]:
         return None
     r = data["xy"][data["t"].index(ts)]
-    o = 0 if object_id == "ball" else 2 + 3 * data["ids"].index(object_id)
+    o = 0 if object_id == "ball" else BALL + 3 * data["ids"].index(object_id)
     return None if r[o] is None else (r[o] / 100, r[o + 1] / 100)
 
 
@@ -50,10 +53,28 @@ def clock_labels(first_ts: int, last_ts: int, p1_start_ts: int, p2_start_ts: int
 
 
 def goals(events: pd.DataFrame, p1_start_ts: int, p2_start_ts: int | None) -> list[list]:
-    """[ts, team, "62' Goodwin"] of every goal of one match (gold_events), in order."""
-    g = events[events.type == "goal"].sort_values("ts")
+    """[goal second, team, "62' A. Goodwin", scorer] of every goal of one match, in order. The goal second is when the
+    ball was in the goal (gold_events.goal_ts): the score changes then, not when the attack started (ts)."""
+    g = events[events.type == "goal"].sort_values("goal_ts")
+    return [[int(r.goal_ts), r.team_id, f"{clock.label(r.ts, r.period, p1_start_ts, p2_start_ts)} {r.player_short_name}",
+             r.player_short_name] for r in g.itertuples()]
+
+
+def shots(events: pd.DataFrame, p1_start_ts: int, p2_start_ts: int | None) -> list[list]:
+    """[ts, team, "51' S. Klein"] of every shot that was not a goal (timeline marks)."""
+    s = events[events.type == "shot"].sort_values("ts")
     return [[int(r.ts), r.team_id, f"{clock.label(r.ts, r.period, p1_start_ts, p2_start_ts)} {r.player_short_name}"]
-            for r in g.itertuples()]
+            for r in s.itertuples()]
+
+
+def key_events(events: pd.DataFrame, names: dict, p1_start_ts: int, p2_start_ts: int | None) -> list[list]:
+    """[ts, "Shot - S. Klein - 51'"] of every goal, shot, tackle and foul (the caption under the pitch, as Live's).
+    A goal is captioned at its goal second."""
+    k = events[events.type.isin(list(KEY_EVENTS))]
+    out = [[int(r.goal_ts if r.type == "goal" else r.ts),
+            f"{KEY_EVENTS[r.type]} - {r.player_short_name} ({names[r.team_id]}) - "
+            f"{clock.label(r.ts, r.period, p1_start_ts, p2_start_ts)}"] for r in k.itertuples()]
+    return sorted(out)
 
 
 def score_at(goal_list: list[list], ts: int) -> tuple[int, int]:

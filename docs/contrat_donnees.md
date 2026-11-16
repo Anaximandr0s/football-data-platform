@@ -553,7 +553,9 @@ Added 2026-11-16.
 | ts, period | INTEGER | |
 | team_id | VARCHAR | HOME or AWAY; null for the ball |
 | shirt_number | INTEGER | null for the ball |
+| position | VARCHAR | the player's position (`GK` for a goalkeeper), from `players`; null for the ball. Added 2026-11-17 |
 | x, y | DOUBLE | Silver frame (HOME attacks toward x = 105), as `silver.tracking` and `silver.ball`: players inside 105 x 68, the ball may be outside |
+| z | DOUBLE | height of the ball in metres (`silver.ball`); null for a player. Added 2026-11-17 |
 | speed_kmh | DOUBLE | the player's Silver speed (null above 40 km/h and after a gap); null for the ball |
 | is_detected | BOOLEAN | seen by the camera; null for the ball |
 | possession | VARCHAR | owner of the ball in this second (`silver.ball`): HOME, AWAY or null |

@@ -32,10 +32,12 @@ def show(*, key: str, players: dict, colors: dict, frame: list | None = None, he
     return result.player
 
 
-def replay(*, key: str, players: dict, colors: dict, frames: dict, replay: dict, selected: str | None = None):
+def replay(*, key: str, players: dict, colors: dict, frames: dict, replay: dict, names: dict,
+           selected: str | None = None):
     """A whole match played in the browser (pitch.js, Replay). `frames` is the full match the first time and {key}
-    afterwards. Returns the component result: .player (clicked), .time (replay second), .reload (frames key to resend)."""
+    afterwards. Returns the component result: .pick ({player, n}: the n-th click), .time (replay second), .reload
+    (frames key to resend)."""
     data = {"players": players, "colors": colors, "frames": frames, "replay": replay, "selected": selected,
-            "arrows": {"home": "right"}, "clickable": True}
-    return _component(data=data, key=key, on_player_change=lambda: None, on_time_change=lambda: None,
+            "arrows": {"home": "right", "names": names}, "clickable": True}
+    return _component(data=data, key=key, on_pick_change=lambda: None, on_time_change=lambda: None,
                       on_reload_change=lambda: None)

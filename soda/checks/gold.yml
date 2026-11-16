@@ -661,7 +661,7 @@ checks for gold_replay_frames:
   - schema:
       name: gold_replay_frames follows the data contract
       fail:
-        when required column missing: [match_id, ts, period, object_id, object_type, team_id, shirt_number, x, y, speed_kmh, is_detected, possession, home_space_share]
+        when required column missing: [match_id, ts, period, object_id, object_type, team_id, shirt_number, position, x, y, z, speed_kmh, is_detected, possession, home_space_share]
         when wrong column type:
           match_id: VARCHAR
           ts: INTEGER

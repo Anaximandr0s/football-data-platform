@@ -415,12 +415,14 @@ def matchlens_tables() -> dict:
                      "speeds_rejected": i64,
                      **{c: i32 for c in ("p1_start_ts", "p1_end_ts", "p2_start_ts", "p2_end_ts")}})
     frames = typed([dict(match_id="mx", ts=ts, period=1 if ts < 2 else 2, object_id=oid, object_type=kind,
-                         team_id=team, shirt_number=n, x=x, y=34.0, speed_kmh=None, is_detected=True if team else None,
+                         team_id=team, shirt_number=n, position=("GK" if n == 1 else "CM") if team else None,
+                         x=x, y=34.0, z=None if team else 0.2, speed_kmh=None, is_detected=True if team else None,
                          possession="HOME", home_space_share=0.55)
                     for ts in range(3)
                     for oid, kind, team, n, x in [*((f"{t[0]}{n:02d}", "player", t, n, 5.0 * n) for t in ("HOME", "AWAY")
                                                     for n in range(1, 12)), ("ball", "ball", None, None, 107.0)]],
-                   {"ts": i32, "period": i32, "shirt_number": "Int32", "speed_kmh": f64, "is_detected": "boolean"})
+                   {"ts": i32, "period": i32, "shirt_number": "Int32", "speed_kmh": f64, "is_detected": "boolean",
+                    "z": f64})
     return {"gold_match_library": library, "gold_match_timeline": timeline, "gold_player_card": card, "gold_team_shape": shape,
             "gold_pressing": pressing, "gold_team_build_up": build_up, "gold_player_fatigue": fatigue,
             "gold_space_control": space, "gold_team_profile": profile, "gold_events": events,
