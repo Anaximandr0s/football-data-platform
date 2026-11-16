@@ -481,3 +481,53 @@ fois par clé (joueur, seconde). Le premier lancement automatique l'a montré : 
   environ 16 secondes de match de retard pendant la lecture.
 - Une fenêtre de 5 minutes en cours n'apparaît qu'une fois terminée.
 - Le premier affichage d'un match prend environ 1 seconde (lecture et préparation des 100 000 lignes, ensuite en cache).
+
+## Corrections et finitions du Replay (2026-11-17)
+
+### Ce qui a changé
+
+| Fichier | Rôle |
+|---|---|
+| `gold_player_card.sql`, `playerstats.py` | vitesse max (F5) : la meilleure vitesse **tenue deux secondes de suite**, avec les trois positions vues par la caméra |
+| `gold_events.sql`, `goalmoment.py` | `goal_ts` : la seconde où le ballon est dans le but ; le score de Live et de Replay change à ce moment |
+| `gold_replay_frames.sql` | ajoute la hauteur du ballon `z` et le poste du joueur (pour repérer le gardien) |
+| `pitch.js` | « BUT ! » (filet qui clignote, bandeau, pause de 3 s), marques des tirs, ballon plus visible avec ombre selon sa hauteur, gardien en carré, noms des équipes près des flèches, légende, aide sur chaque bouton, dernier événement, clavier (espace, flèches) |
+| `viz.possession_bar` | la barre de possession avec le nom des équipes, la même sur Live et Replay |
+
+### Pourquoi c'est construit ainsi
+
+- **Une vitesse doit durer.** À 1 Hz, une vitesse relie deux positions à une seconde d'écart : une seule position
+  fausse donne une seconde trop rapide (39,5 km/h pour T. Okamoto). Une vitesse tenue deux secondes demande trois
+  bonnes positions de suite. Résultat : maximum 33,1 km/h sur les 4 matchs, plus personne au-dessus de 36 km/h. Le
+  prix : les vrais rapides perdent environ 1 km/h (A. Goodwin 32,8 → 31,9).
+- **Le but, c'est le ballon qui entre.** L'événement « but » est daté au début de l'action. On cherche dans les 10
+  secondes suivantes la première seconde où le ballon a passé la ligne entre les poteaux ; si on ne le voit jamais
+  (ballon extrapolé, caméra qui coupe pour le ralenti), la seconde où il est le plus près du but. 8 buts sur 15 sont
+  trouvés par la première règle, 7 par la seconde ; ils arrivent 0 à 7 s après le début de l'action.
+- **La même règle à deux endroits, vérifiée.** Gold (SQL) et Live (Python) appliquent la règle chacun de leur côté ; un
+  test vérifie qu'ils donnent la même seconde, et sur les 15 vrais buts aussi.
+- **Un clic ne doit pas se perdre.** À 8x, le navigateur envoie le temps à Python plusieurs fois par seconde ; un
+  « déclencheur » (trigger) pouvait se perdre entre deux exécutions. Le clic est maintenant une valeur d'état numérotée
+  `{joueur, n}` : Python l'applique une fois, même s'il la voit plusieurs fois.
+
+### Les idées à retenir
+
+1. **Une donnée bizarre cache souvent une règle trop naïve.** 39,5 km/h n'était pas une faute de calcul, mais une
+   règle qui faisait confiance à une seule seconde.
+2. **Dater un événement, c'est choisir quel instant compte.** Début de l'action, tir, ballon dans le but : trois
+   secondes différentes ; le score doit suivre le ballon.
+
+### Ce qu'on n'a pas choisi
+
+- **Ajouter la fin de l'action de SkillCorner (`frame_end`) au contrat** : il aurait fallu changer toutes les couches
+  et rejouer les 4 matchs, pour un instant (le tir) qui reste avant l'entrée du ballon. Tu as choisi le ballon le plus
+  proche du but.
+- **Recalculer `max_speed_kmh` aussi** : c'est la « vitesse max » brute du cahier des charges (FOO-04), avec son jumeau
+  en streaming ; elle reste, mais l'app ne l'affiche plus comme une vitesse max.
+
+### Limites connues
+
+- Pour 7 buts, la seconde est une estimation (ballon le plus près du but), pas une observation.
+- Sur Live, quand le ballon n'est jamais vu dans le but, le score change jusqu'à 10 s après le début de l'action
+  (il faut attendre la fin de la fenêtre).
+- À 8x, il faut viser vite : la zone de clic grandit avec la vitesse (+16 px à 8x).
