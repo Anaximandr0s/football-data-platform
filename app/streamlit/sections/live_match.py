@@ -140,20 +140,18 @@ def live_view() -> None:
 
     left, right = st.columns([3, 1])
     with left:
-        frame = live.current_frame(state)
-        ball = (state.ball[2], state.ball[3]) if state.ball else None
-        side = live.home_attacks_right(state)
+        frame = live.silver_frame(state)
         selected = st.session_state.get("live_player", {}).get(match)
         clicked = pitch.show(
             key="live_pitch", colors=colors, selected=selected, message=message,
             players={pid: [p.get("team_id"), p.get("shirt_number"), p.get("short_name")] for pid, p in state.players.items()},
-            frame=pitch.frame_list(frame[0], ball, frame[1]) if frame and status != "gap" else None,
-            arrows=None if side is None else {"home": "right" if side else "left"})
+            frame=pitch.frame_list(*frame) if frame and status != "gap" else None, arrows={"home": "right"})
         if clicked:
             st.session_state["live_player"] = {**st.session_state.get("live_player", {}), match: clicked}
             selected = clicked
-        st.caption("Click a player for his stats so far. As the camera sees it: teams switch ends at half-time (arrows: "
-                   "direction of attack). Lighter dots are positions estimated by SkillCorner, not seen by the camera.")
+        st.caption(f"Click a player for his stats so far. {live.team_name(state, 'HOME', names)} attacks to the right in "
+                   "both halves (arrows: direction of attack), as on every pitch of the site. Lighter dots are positions "
+                   "estimated by SkillCorner, not seen by the camera.")
     with right:
         if selected and selected in state.players:
             player_panel(state, selected, colors, names)
@@ -162,7 +160,8 @@ def live_view() -> None:
         st.markdown("**Last event**")
         st.write(live.event_line(state, names) or "Nothing yet")
         st.markdown("**Team shape now** (outfield players, C1)")
-        shape = live.team_shape(state, frame[1]) if frame and status == "live" else {}
+        shape = live.team_shape(state, {pid: (x, y) for pid, (x, y, _) in frame[2].items()}) \
+            if frame and status == "live" else {}
         if shape:
             st.dataframe(pd.DataFrame([{"team": live.team_name(state, t, names), "width (m)": w, "length (m)": ln}
                                        for t, (w, ln) in shape.items()]).rename(columns={"length (m)": "outfield block length (m)"}),

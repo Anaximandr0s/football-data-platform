@@ -1,4 +1,4 @@
-"""playerstats.py: the per-player formulas shared by the live page (and later the replay), written once.
+"""playerstats.py: the per-player formulas shared by the Live and Replay pages, written once.
 
 They are the formulas of Silver and Gold, so the live values at full time equal Gold (tests/app/test_playerstats.py):
   position   Silver frame: mirrored where HOME attacks toward x = 0 in that period, clipped to 105 x 68, 2 decimals
@@ -35,11 +35,16 @@ class PlayerStats:
     zones: dict          # zone_id -> seconds
 
 
-def silver_xy(x: float, y: float, period: int, home_side_p1: str | None, home_side_p2: str | None) -> tuple:
-    """The position as Silver stores it: HOME attacks toward x = 105 in both periods, inside the pitch."""
+def flip_xy(x: float, y: float, period: int, home_side_p1: str | None, home_side_p2: str | None) -> tuple:
+    """Silver's frame without clipping (the ball keeps a position off the pitch): mirrored in a period where HOME
+    attacks toward x = 0."""
     flip = (period == 1 and home_side_p1 == RIGHT_TO_LEFT) or (period == 2 and home_side_p2 == RIGHT_TO_LEFT)
-    if flip:
-        x, y = PITCH_L - x, PITCH_W - y
+    return (PITCH_L - x, PITCH_W - y) if flip else (x, y)
+
+
+def silver_xy(x: float, y: float, period: int, home_side_p1: str | None, home_side_p2: str | None) -> tuple:
+    """The position of a player as Silver stores it: HOME attacks toward x = 105 in both periods, inside the pitch."""
+    x, y = flip_xy(x, y, period, home_side_p1, home_side_p2)
     return round(min(max(x, 0.0), PITCH_L), 2), round(min(max(y, 0.0), PITCH_W), 2)
 
 
