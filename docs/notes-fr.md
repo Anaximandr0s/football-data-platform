@@ -577,3 +577,59 @@ fois par clé (joueur, seconde). Le premier lancement automatique l'a montré : 
   tous les matchs en rouge.
 - Le délai du live mesure Kafka jusqu'à l'application (0,32 s, 95 %) ; l'affichage ajoute jusqu'à 1 s (la page se
   redessine chaque seconde). Le délai jusqu'à l'écran n'est pas mesuré.
+
+## Un site lisible au projecteur et par tout le monde (2026-11-16)
+
+### Ce qui a été construit
+
+| Fichier | Rôle |
+|---|---|
+| `.streamlit/config.toml`, `theme.py` | thème clair par défaut, thème sombre au choix ; toutes les couleurs du site au même endroit, avec les formules de contraste |
+| `tests/app/test_theme.py` | mesure les contrastes (règle WCAG) : texte au moins 4,5:1, couleurs d'équipe et graphiques au moins 3:1 |
+| `assets/matchlens-logo.svg` | le logo, un seul fichier utilisé partout (barre latérale et accueil) : le remplacer suffit |
+| `glossary.py` | six mots expliqués au survol (xThreat, field tilt, space control, pressing, outfield block, tracked) ; un test vérifie que chacun est utilisé |
+| `charts.py` | `finish` met le texte des graphiques à 14 px ; `balance` dessine possession et territoire comme une ligne autour de 50 % ; `ranking` remplace l'ancien graphique matplotlib sombre |
+| `lineage.py` | le schéma simple du pipeline (chemin d'après-match et chemin live), et le sens de chaque colonne Gold lu dans le contrat de données |
+| `app/web3d/pitch.js` | points blancs autour des joueurs ; passes réussies en blanc plein, ratées en or pointillé ; panneau du Replay qui suit le thème |
+| `docs/img/readability/` | une capture de chaque page en clair, six en sombre, et le terrain vu par un daltonien |
+
+### Pourquoi c'est construit ainsi
+
+- **Un projecteur écrase les couleurs sombres.** Fond clair, texte foncé, texte des graphiques à 14 px au lieu de 11.
+  Les contrastes sont mesurés par un test, pas estimés à l'œil : texte 15,5:1 en clair, 16,1:1 en sombre.
+- **Une seule paire de couleurs pour les équipes.** Domicile toujours bleu `#0072B2`, extérieur toujours vermillon
+  `#D55E00`, dans tous les matchs. Ces deux couleurs de la palette Okabe-Ito restent différentes pour un daltonien
+  rouge-vert : la capture `pitch_deuteranopia.png` le montre (bleu contre jaune-olive). Avant, les couleurs de maillot
+  changeaient d'un match à l'autre et pouvaient se ressembler. Le nom de l'équipe est toujours écrit à côté de la couleur,
+  car une couleur seule ne suffit jamais.
+- **Le terrain reste vert dans les deux thèmes.** Un terrain clair rendrait les points blancs invisibles ; le contour
+  blanc des points se lit à 13,5:1 sur la pelouse.
+- **Le CSS hérite de la couleur du texte.** Streamlit annonce le thème choisi avec un temps de retard ; des couleurs
+  fixes seraient fausses pendant ce temps. Avec `color: inherit` et des gris translucides, la même règle marche partout.
+- **Trop de flèches, plus de lecture.** Au-delà de 100 événements, l'explorateur montre la carte de chaleur et propose
+  de filtrer ; la vue « Directions » donne une flèche moyenne par zone.
+- **Comparer d'un coup d'œil, puis en détail.** Le radar donne le profil ; ensuite chaque mesure a ses barres, sa valeur
+  écrite et une ligne « higher = ... ». Chaque axe du radar va du minimum au maximum de toutes les équipes de tous les
+  matchs stockés, pour que la forme ne dépende pas des matchs choisis.
+
+### Les idées à retenir
+
+1. **Contraste = rapport de luminance**, de 1:1 (même couleur) à 21:1 (noir sur blanc). 4,5:1 pour du texte, 3:1 pour
+   un trait ou une surface de graphique.
+2. **Ne jamais coder une information par la couleur seule** : nom à côté de la couleur, pointillés pour les passes
+   ratées, croix pour les exécutions du pipeline en échec.
+
+### Ce qu'on n'a pas choisi
+
+- **Garder les couleurs de maillot** : fidèles au club, mais deux maillots proches (ou rouge contre vert) deviennent
+  illisibles pour les daltoniens. Le petit carré couleur maillot à côté du nom était optionnel ; il n'a pas été ajouté.
+- **Un terrain clair en thème clair** : il fallait alors d'autres couleurs de points, et le daltonisme redevenait un
+  problème.
+- **Un radar seul pour comparer** : joli, mais on y lit mal une valeur exacte ; il est donc suivi des barres.
+
+### Limites connues
+
+- Le thème sombre suit le réglage du système ou le menu de Streamlit ; il n'a été vérifié que dans Chrome.
+- La simulation de daltonisme est un calcul (matrice de Machado, 2009), pas un test avec de vraies personnes.
+- Les figures matplotlib de `viz.py` (carte de chaleur, tirs, réseau de passes) ne sont plus utilisées par aucune page ;
+  elles sont encore là, avec leurs tests.

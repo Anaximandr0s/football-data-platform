@@ -58,16 +58,22 @@ second, 11 MB of JavaScript heap, flat over time. The whole match sent each refr
 browser at 30x): 60 frames per second and no restart of the animation across 160 refreshes, but about 150 ms of server
 time per refresh, so Replay sends the match once per session and afterwards only its key (the browser keeps its copy, and asks again after a remount).
 
-Look: a stadium at night (`.streamlit/config.toml`, colours checked for contrast: body text 16:1, white on the primary
-green 5.0:1); `sitemap.style()` holds the few shared classes, and the charts use the same background (`viz.BG`).
+Look: a light theme by default for the projector, a dark one in the settings menu or from the system setting
+(`.streamlit/config.toml`). `theme.py` holds every colour and `tests/app/test_theme.py` measures them (WCAG): text 15.5:1
+on light, 16.1:1 on dark, white on the green buttons 6.5:1, team colours 3.2 to 4.8:1, the white dot outline 13.5:1 on
+the turf. The pitch stays green in both themes. `sitemap.style()` and the page CSS inherit the theme's text colour and
+use translucent greys, so they work on both. Chart text is 14 px (`charts.finish`). The logo is one file,
+`assets/matchlens-logo.svg`, used by the sidebar and the home page.
 
 ## Reading the graphics
 
 - **Frame.** Every pitch and every Gold graphic uses the Silver frame (Live included: its camera positions are mirrored
   in a half where HOME attacks toward x = 0, with `playerstats.flip_xy`): the pitch is 105 x 68 m, **HOME always attacks to the right** and AWAY to
   the left, in both halves. An AWAY player's heatmap therefore looks mirrored compared with a TV picture.
-- **Colours.** Team colours are the kit colours of the source. A colour that is too dark for the dark pitch (m001's HOME is
-  `#363636`) or two similar colours are replaced by fixed ones (red and blue).
+- **Colours.** HOME is always blue `#0072B2` and AWAY vermillion `#D55E00`, in every match: a pair from the Okabe-Ito
+  palette that people with red-green colour blindness still tell apart (`docs/img/readability/pitch_deuteranopia.png`).
+  The team name is always written next to its colour. Comparisons of matches use other Okabe-Ito colours, never this
+  pair.
 - **Approximate numbers.** Distances, speeds and sprints cover tracked seconds only (about 3/4 of a match) and come from 1 Hz
   positions: they under-estimate real values. Compare players inside one match. Player ids are local to a match, so the
   compare page works on teams, not on players.
@@ -78,6 +84,7 @@ green 5.0:1); `sitemap.style()` holds the few shared classes, and the charts use
 | File | Role |
 |---|---|
 | `app.py` | the router: `st.navigation` menu for the chosen view, the sidebar (view switch, match picker), the move to a view's first page |
+| `lineage.py` | the Graphviz graphs of Pipeline & lineage (the simple overview, the Dagster assets, the dbt lineage) and the column meanings read from the data contract |
 | `sitemap.py` | every page with its section, question and persona; the menu per view; the page header and the "coming soon" box. Pure data, tested without Streamlit |
 | `sections/*.py` | the pages (not `pages/`, see Tests) |
 | `pitch.py`, `../web3d/pitch.js` | the pitch component: layers (players and ball, a whole match played in the browser, heatmap, shots, passes, attack arrows, a message), the selected player ringed, clicks sent back |
@@ -85,9 +92,11 @@ green 5.0:1); `sitemap.style()` holds the few shared classes, and the charts use
 | `cards.py` | the shirt and the badges of the player cards |
 | `clock.py` | the football clock fans see on TV, from the replay second and its period: 6', 45+2', 46' at the second kick-off, 90+1'. Every time shown in the app goes through it |
 | `story.py` | the sentences of the Match story: each one keeps the Gold numbers it was built from; differences, never causes |
-| `charts.py` | the Altair timelines of the Match story (goals, momentum, possession, territory), aligned on the same minutes |
+| `charts.py` | the Altair charts: Match story timelines (goals, momentum, possession and territory around 50 %), space control, player ranking; `finish` sets the 14 px text |
+| `theme.py` | every colour of the app (team pair, status colours, pitch) and the contrast formulas the tests use |
+| `glossary.py` | the words a visitor may not know (xThreat, field tilt, space control, pressing, outfield block, tracked), shown on hover |
 | `data.py` | reading Gold (cached for a minute), the current match, the match library, the Soda result reader, shared texts |
-| `viz.py` | the figures: zone heatmap, shot map, pass network, ranking bars, live pitch (pure functions, tested without Streamlit) |
+| `viz.py` | the team colours, the possession bar, and matplotlib figures (zone heatmap, shot map, pass network) no page uses any more |
 | `live.py` | the live state of a replayed match: `route` sends a message to the state of its replay (header `replay_id`; an older replay of the same match is ignored), `apply(state, table, record, kafka_ms)` returns a new state, plus the readers (score, possession, clock, status, team shape, event line). Pure, tested without Kafka |
 | `live_feed.py` | the single Kafka consumer of the app (a thread created once by `st.cache_resource`), holding the latest state per match, and the latest `foot-live-stats` row per key |
 | `Dockerfile`, `requirements.txt` | the image of `make app` (the repository is mounted read-only, nothing is copied in) |
