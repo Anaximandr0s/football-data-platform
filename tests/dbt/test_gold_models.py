@@ -98,7 +98,7 @@ def _write_silver(root: Path, home_score=1):
     for name, df in (("tracking", _tracking()), ("events", _events()), ("players", _players()),
                      ("matches", _matches(home_score)), ("ball", ball)):
         (root / name).mkdir(parents=True)
-        df.to_parquet(root / name / "part-0.parquet", index=False)
+        df.assign(replay_id="m1-20261117T120000Z").to_parquet(root / name / "part-0.parquet", index=False)
 
 
 def _dbt(tmp: Path, silver: Path, *args: str):

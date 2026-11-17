@@ -104,10 +104,14 @@ def silver_tables() -> dict:
     return frames
 
 
+REPLAY = "m001-20261117T120000Z"
+
+
 def write_silver(root: Path, frames: dict) -> None:
     for name, df in frames.items():
         (root / name).mkdir(parents=True)
-        df.to_parquet(root / name / "part-0.parquet", index=False)
+        out = df if "replay_id" in df else df.assign(replay_id=REPLAY)     # Silver says which replay it read
+        out.to_parquet(root / name / "part-0.parquet", index=False)
 
 
 def run(tmp: Path, *args: str):
@@ -191,6 +195,16 @@ def test_a_wrong_column_type_or_a_kafka_column_breaks_the_contract(tmp_path):
     assert "ts" in checks["tracking follows the data contract"]["detail"]          # which column, expected and actual type
     assert "expected(INTEGER)" in checks["tracking follows the data contract"]["detail"]
     assert "kafka_offset" in checks["players follow the data contract"]["detail"]
+
+
+@needs_soda
+def test_a_match_built_from_two_replays_is_caught(tmp_path):
+    frames = silver_tables()
+    t = frames["tracking"]
+    frames["tracking"] = t.assign(replay_id=[REPLAY if i % 2 else "m001-20261117T130000Z" for i in range(len(t))])
+    names = failed_names(run_silver(tmp_path, frames))
+    assert "tracking holds one replay per match" in names
+    assert "events holds one replay per match" not in names
 
 
 @needs_soda

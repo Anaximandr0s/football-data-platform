@@ -68,6 +68,13 @@ def bronze_lag() -> int:
         c.close()
 
 
+def replay_args(context) -> list[str]:
+    """The replay the run is about (tag replay_id, set by the sensor and the benchmark rebuild): Bronze is checked and
+    Silver built from that replay only. A run without it uses the newest (check) / latest complete (Silver) one."""
+    replay = context.run.tags.get("replay_id")
+    return ["--replay", replay] if replay else []
+
+
 @dg.asset(partitions_def=matches, group_name="bronze", kinds={"kafka", "s3"})
 def bronze(context: dg.AssetExecutionContext) -> dg.MaterializeResult:
     """Every message of the replay is in Bronze: the writer has caught up with Kafka, and the row counts of the match
@@ -78,7 +85,7 @@ def bronze(context: dg.AssetExecutionContext) -> dg.MaterializeResult:
             raise dg.Failure(f"the Bronze writer is {lag} messages behind after {BRONZE_WAIT_S} s: is it running?")
         context.log.info(f"waiting for the Bronze writer: {lag} messages to upload")
         time.sleep(5)
-    out = run(context, ["python", "-m", "ingestion.check_bronze", "--match", context.partition_key])
+    out = run(context, ["python", "-m", "ingestion.check_bronze", "--match", context.partition_key, *replay_args(context)])
     return dg.MaterializeResult(metadata={"check_bronze": dg.MetadataValue.md(f"```\n{out.strip()}\n```")})
 
 
@@ -93,7 +100,8 @@ def silver(context: dg.AssetExecutionContext) -> dg.MaterializeResult:
         "--conf", "spark.driver.bindAddress=0.0.0.0", "--driver-memory", "1g", "--executor-memory", "1g",
         # one core each: two matches build Silver side by side, and the streaming job keeps its core
         "--conf", "spark.cores.max=1",
-        str(ROOT / "spark" / "silver" / "bronze_to_silver.py"), "--packages", "", "--match", context.partition_key])
+        str(ROOT / "spark" / "silver" / "bronze_to_silver.py"), "--packages", "", "--match", context.partition_key,
+        *replay_args(context)])
     return dg.MaterializeResult(metadata={"silver report": dg.MetadataValue.text(out[-4000:])})
 
 

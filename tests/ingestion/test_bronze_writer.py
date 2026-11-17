@@ -43,3 +43,14 @@ def test_the_replay_id_header_becomes_a_column_and_is_null_without_it():
     old = {k: v for k, v in row.items() if k != "kafka_replay_id"}           # a message without the header
     table = pq.read_table(io.BytesIO(to_parquet_bytes("ball", [row, old])))
     assert table.column("kafka_replay_id").to_pylist() == ["m001-20261116T101503Z", None]
+
+
+# ---------------------------------------------------------------- the layout: one folder per replay
+
+from ingestion import bronze_writer as bw  # noqa: E402
+
+
+def test_each_replay_gets_its_own_folder():
+    assert bw.object_key("tracking", "m001", "m001-20261117T120000Z", "2026-11-17", 5, 2) == \
+        "tracking/match_id=m001/replay_id=m001-20261117T120000Z/ingest_date=2026-11-17/part-5-2.parquet"
+    assert "/replay_id=none/" in bw.object_key("ball", "m001", None, "2026-11-17", 5, 2)
