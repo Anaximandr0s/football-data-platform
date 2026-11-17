@@ -15,6 +15,7 @@ data/soda/
 data/pipeline/
 data/quality/
 data/streaming/
+data/benchmark/current.json
 *.parquet
 *.jsonl
 *.duckdb

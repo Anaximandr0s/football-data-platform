@@ -73,6 +73,7 @@ make soda                                # Soda checks on Silver then Gold (make
 make app                                 # dashboard on http://localhost:8501
 make dagster                             # Dagster on http://localhost:3000: the next replay's end runs the chain
 make monitoring                          # Prometheus, alert emails, Grafana on http://localhost:3001 (monitoring/README.md)
+make benchmark                           # ~1 h, laptop busy: throughput, latency, load, recovery -> docs/performance.md
 ```
 
 | Service | URL | Notes |
