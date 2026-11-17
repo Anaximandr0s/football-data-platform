@@ -6,6 +6,7 @@ import streamlit as st
 
 import charts
 import clock
+import glossary
 import sitemap
 import story
 import views
@@ -55,29 +56,32 @@ st.markdown(f"<div class='ml-scoreline'><span class='team'>{short['HOME']}</span
 if goals.empty:
     st.caption("No goal in this match.")
 else:
-    st.altair_chart(charts.goal_timeline(goals, colors, short, end_minute, ticks, kickoff2), width="stretch")
+    st.altair_chart(charts.finish(charts.goal_timeline(goals, colors, short, end_minute, ticks, kickoff2)),
+                    width="stretch")
 say(story.goals(shots, short, (int(home.score), int(away.score)), bounds))
 
 # ---------------------------------------------------------------- who was on top (E2, F2, F1)
 st.subheader("Who was on top")
 st.markdown("**Danger created with passes**, per 5 minutes")
-st.altair_chart(charts.momentum(timeline, goals, colors, names, end_minute, ticks, kickoff2), width="stretch")
-st.caption("SkillCorner xThreat of the successful passes: how threatening the targeted spot was. It is not xG (expected "
-           "goals). Above the line: " + short["HOME"] + " on top; below: " + short["AWAY"] + ". Dotted lines: goals; "
-           "solid line: second-half kick-off.")
+st.altair_chart(charts.finish(charts.momentum(timeline, goals, colors, short, end_minute, ticks, kickoff2)),
+                width="stretch")
+st.markdown(f"<div class='ml-meta'>The {glossary.term('xThreat')} of the successful passes: how threatening the targeted "
+            "spot was. It is not expected goals (xG).</div>", unsafe_allow_html=True)
 say(story.momentum(timeline, short))
 
-st.markdown("**Possession**, per 5 minutes")
-st.altair_chart(charts.shares(timeline, "possession_share", goals, colors, names, end_minute, ticks, kickoff2,
-                              greyed="possession_greyed"), width="stretch")
-st.caption(f"{short['HOME']} from the bottom, {short['AWAY']} from the top. Grey: fewer than 60 seconds with a known "
-           "owner in that spell, too few to trust.")
+st.markdown(f"**Possession**, per 5 minutes: {short['HOME']}'s share")
+st.altair_chart(charts.finish(charts.balance(timeline, "possession_share", goals, colors, short, end_minute, ticks,
+                                             kickoff2, greyed="possession_greyed")), width="stretch")
+st.caption(f"Above 50 %: {short['HOME']} had the ball more; below: {short['AWAY']}. A grey dot: fewer than 60 seconds "
+           "with a known owner in that spell, too few to say.")
 say(story.possession(timeline, profile, short))
 
-st.markdown("**Territory**: passes played from the final third, per 5 minutes")
-st.altair_chart(charts.shares(timeline, "field_tilt", goals, colors, names, end_minute, ticks, kickoff2),
-                width="stretch")
-st.caption("Field tilt: the share of the passes made near the opponent's goal. An empty spell had no such pass.")
+st.markdown(f"**Territory** ({glossary.term('field tilt')}), per 5 minutes: {short['HOME']}'s share of the passes "
+            "played near the opponent's goal", unsafe_allow_html=True)
+st.altair_chart(charts.finish(charts.balance(timeline, "field_tilt", goals, colors, short, end_minute, ticks,
+                                             kickoff2)), width="stretch")
+st.caption(f"Above 50 %: {short['HOME']} played more in the other half; below: {short['AWAY']}. A grey dot: no such "
+           "pass in that spell.")
 say(story.field_tilt(timeline, profile, short))
 
 # ---------------------------------------------------------------- 3 key differences (F7)
