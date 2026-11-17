@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 72" width="320" height="72" role="img" aria-label="MatchLens">
+  <!-- MatchLens logo, first version: one file used by the sidebar and Home (theme.LOGO). Dark green badge, white
+       mark and name: readable on the light and the dark theme. -->
+  <rect x="1" y="1" width="318" height="70" rx="16" fill="#146c34"/>
+  <g transform="translate(36 36)" fill="none" stroke="#ffffff" stroke-width="3">
+    <circle r="21"/>
+    <polygon points="0,-8 7.6,-2.5 4.7,6.5 -4.7,6.5 -7.6,-2.5" fill="#ffffff" stroke="none"/>
+    <path d="M0 -8 L0 -21 M7.6 -2.5 L19.5 -6.5 M4.7 6.5 L12 17 M-4.7 6.5 L-12 17 M-7.6 -2.5 L-19.5 -6.5"/>
+  </g>
+  <text x="70" y="47" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="34" font-weight="800"
+        fill="#ffffff" letter-spacing="-0.5">Match<tspan fill="#c9f2d8">Lens</tspan></text>
+</svg>

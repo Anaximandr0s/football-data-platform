@@ -1,12 +1,30 @@
-# MatchLens look: a stadium at night. Pitch green for actions, floodlight white for text; charts use the same
-# background (viz.BG). White on the primary green is 5.0:1, body text on the background 16:1.
+# MatchLens look: a light page for the projector and for reading (default), and the stadium-at-night dark theme as an
+# option in the settings menu. Contrast (WCAG, tests/app/test_theme.py): text 15.5:1 light, 16.1:1 dark; white on the
+# buttons 6.5:1. Team colours (theme.TEAM) are the same in both themes.
 [theme]
-base = "dark"
-primaryColor = "#15803d"
+base = "light"
+primaryColor = "#146c34"
+backgroundColor = "#f7f6f1"
+secondaryBackgroundColor = "#eaede4"
+textColor = "#16201a"
+borderColor = "#cfd6cc"
+chartCategoricalColors = ["#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00", "#56B4E9"]
+
+[theme.light]
+primaryColor = "#146c34"
+backgroundColor = "#f7f6f1"
+secondaryBackgroundColor = "#eaede4"
+textColor = "#16201a"
+borderColor = "#cfd6cc"
+chartCategoricalColors = ["#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00", "#56B4E9"]
+
+[theme.dark]
+primaryColor = "#146c34"
 backgroundColor = "#0b1410"
 secondaryBackgroundColor = "#12221a"
 textColor = "#e8f0ea"
 borderColor = "#23392d"
+chartCategoricalColors = ["#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00", "#56B4E9"]
 
 [client]
 toolbarMode = "viewer"   # a product, not a dev tool: no Deploy button

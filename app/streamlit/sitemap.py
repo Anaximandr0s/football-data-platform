@@ -4,6 +4,8 @@ from dataclasses import dataclass
 
 import streamlit as st
 
+import theme
+
 VIEWS = {"fan": "FAN VIEW", "coach": "COACH VIEW"}
 FIRST_PAGE = {"fan": "sections/match_story.py", "coach": "sections/team_analysis.py"}   # where a view opens
 SECTIONS = ("", "LIVE", "MATCHES", "FAN VIEW", "COACH VIEW", "BEHIND THE DATA")
@@ -91,44 +93,48 @@ def still_to_come(key: str) -> None:
 
 
 def style() -> None:
-    """One look for every page: the stadium-at-night theme of .streamlit/config.toml, plus a few classes."""
-    st.markdown("""<style>
-    .ml-kicker {font-size:.75rem; letter-spacing:.18em; color:var(--ml-accent, #3ddc84); font-weight:700;}
-    .ml-question {font-size:1.15rem; color:#b9c8bf; margin-top:-.6rem;}
-    .ml-soon {border:1px dashed #2f4a3c; border-radius:12px; padding:1.1rem 1.3rem; background:#0f1d16;}
-    .ml-soon p {margin:.4rem 0 0 0; color:#d5e2da;} .ml-step {color:#8fa69a !important; font-size:.85rem;}
-    .ml-badge {background:#f4c430; color:#0b1410; font-weight:700; font-size:.75rem; letter-spacing:.08em;
-               padding:.15rem .55rem; border-radius:999px; text-transform:uppercase;}
-    .ml-logo {font-weight:800; font-size:3.6rem; letter-spacing:-.03em; line-height:1.05; margin:.2rem 0 0 0;}
-    .ml-logo span {color:#3ddc84;}
-    .ml-tagline {color:#b9c8bf; font-size:1.15rem; margin:.5rem 0 1.6rem 0;}
-    .ml-side-logo {font-weight:800; font-size:1.5rem; letter-spacing:-.02em;} .ml-side-logo span {color:#3ddc84;}
-    .ml-card {border:1px solid #23392d; border-radius:14px; padding:1rem 1.1rem; background:#0f1d16; height:100%;}
-    .ml-card h3 {margin:.2rem 0 .3rem 0;} .ml-card p {color:#b9c8bf; margin:0;}
-    .ml-board {display:flex; align-items:center; gap:.8rem; margin:.5rem 0;}
-    .ml-board .team {flex:1; font-weight:600; font-size:1rem; line-height:1.25;} .ml-board .away {text-align:right;}
-    .ml-board .score {font-size:1.7rem; font-weight:800; letter-spacing:.06em; white-space:nowrap;}
-    .ml-meta {color:#8fa69a; font-size:.85rem;}
-    .ml-say {font-size:1.05rem; color:#e8f0ea; border-left:3px solid #3ddc84; padding:.2rem 0 .2rem .8rem;
-             margin:.2rem 0 1.4rem 0;}
-    .ml-scoreline {display:flex; align-items:center; justify-content:center; gap:1.6rem; margin:.4rem 0 .6rem 0;}
-    .ml-scoreline .team {font-size:1.5rem; font-weight:700; flex:1;} .ml-scoreline .team:first-child {text-align:right;}
-    .ml-scoreline .score {font-size:2.8rem; font-weight:800; letter-spacing:.06em;}
-    .ml-stats {display:grid; gap:.35rem; margin:.6rem 0;} .ml-stats div {display:flex; justify-content:space-between;
-               border-bottom:1px solid #1d3b2c; padding:.25rem 0;} .ml-stats span {color:#b9c8bf;}
-    .ml-stats b {font-size:1.15rem;}
-    .ml-chip {display:inline-block; font-size:.78rem; font-weight:700; padding:.15rem .6rem; border-radius:999px;
-              margin:.15rem .3rem .15rem 0; letter-spacing:.02em;}
-    .ml-chip-gold {background:#f4c430; color:#0b1410;} .ml-chip-info {background:#1d3b2c; color:#d5e2da;}
-    .ml-chip-muted {background:transparent; color:#8fa69a; border:1px dashed #2f4a3c;}
-    .ml-player {display:flex; gap:.9rem; align-items:center; margin:.4rem 0 1.4rem 0;}
-    .ml-player .name {font-weight:700; line-height:1.2;}
-    .ml-cardname {font-weight:700; margin-top:.2rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
-    .ml-oneline {white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
-    .ml-team {display:flex; align-items:center; gap:.6rem; margin:1rem 0 .4rem 0;}
-    .ml-team .bar {width:6px; height:1.6rem; border-radius:3px;}
-    .ml-score-row {display:grid; grid-template-columns:8.5rem 1fr 2.6rem; gap:.6rem; align-items:center; margin:.35rem 0;}
-    .ml-score-row .track {height:.6rem; background:#1d3b2c; border-radius:999px; overflow:hidden;}
-    .ml-score-row .fill {height:100%; background:#3ddc84; border-radius:999px;}
-    .ml-score-row .val {font-weight:800; text-align:right;} .ml-score-row.off {opacity:.45;}
+    """One look for every page, light or dark (.streamlit/config.toml): text keeps the theme's colour, lines and
+    backgrounds are grey tints, fills come from theme.py. Glossary terms (glossary.term) are underlined with dots."""
+    soft, line = "rgba(127,127,127,.08)", "rgba(127,127,127,.35)"
+    st.markdown(f"""<style>
+    .ml-kicker {{font-size:.8rem; letter-spacing:.16em; font-weight:800; opacity:{theme.MUTED_OPACITY};}}
+    .ml-question {{font-size:1.2rem; opacity:{theme.MUTED_OPACITY}; margin-top:-.6rem;}}
+    .ml-soon {{border:1px dashed {line}; border-radius:12px; padding:1.1rem 1.3rem; background:{soft};}}
+    .ml-soon p {{margin:.4rem 0 0 0;}} .ml-step {{opacity:{theme.MUTED_OPACITY}; font-size:.9rem;}}
+    .ml-badge {{background:{theme.GOLD}; color:{theme.ON_FILL}; font-weight:800; font-size:.8rem; letter-spacing:.08em;
+               padding:.15rem .55rem; border-radius:999px; text-transform:uppercase;}}
+    .ml-tagline {{opacity:{theme.MUTED_OPACITY}; font-size:1.2rem; margin:.5rem 0 1.6rem 0;}}
+    .ml-card {{border:1px solid {line}; border-radius:14px; padding:1rem 1.1rem; background:{soft}; height:100%;}}
+    .ml-card h3 {{margin:.2rem 0 .3rem 0;}} .ml-card p {{opacity:{theme.MUTED_OPACITY}; margin:0;}}
+    .ml-board {{display:flex; align-items:center; gap:.8rem; margin:.5rem 0;}}
+    .ml-board .team {{flex:1; font-weight:600; font-size:1rem; line-height:1.25;}} .ml-board .away {{text-align:right;}}
+    .ml-board .score {{font-size:1.7rem; font-weight:800; letter-spacing:.06em; white-space:nowrap;}}
+    .ml-meta {{opacity:{theme.MUTED_OPACITY}; font-size:.9rem;}}
+    .ml-say {{font-size:1.08rem; border-left:4px solid {theme.ACCENT}; padding:.2rem 0 .2rem .8rem;
+             margin:.2rem 0 1.4rem 0;}}
+    .ml-scoreline {{display:flex; align-items:center; justify-content:center; gap:1.6rem; margin:.4rem 0 .6rem 0;}}
+    .ml-scoreline .team {{font-size:1.5rem; font-weight:700; flex:1;}} .ml-scoreline .team:first-child {{text-align:right;}}
+    .ml-scoreline .score {{font-size:2.8rem; font-weight:800; letter-spacing:.06em;}}
+    .ml-stats {{display:grid; gap:.35rem; margin:.6rem 0;}} .ml-stats div {{display:flex; justify-content:space-between;
+               border-bottom:1px solid {line}; padding:.25rem 0;}} .ml-stats span {{opacity:{theme.MUTED_OPACITY};}}
+    .ml-stats b {{font-size:1.15rem;}}
+    .ml-chip {{display:inline-block; font-size:.85rem; font-weight:700; padding:.15rem .6rem; border-radius:999px;
+              margin:.15rem .3rem .15rem 0; letter-spacing:.02em;}}
+    .ml-chip-gold {{background:{theme.GOLD}; color:{theme.ON_FILL};}} .ml-chip-info {{background:rgba(127,127,127,.18);}}
+    .ml-chip-muted {{background:transparent; opacity:{theme.MUTED_OPACITY}; border:1px dashed {line};}}
+    .ml-player {{display:flex; gap:.9rem; align-items:center; margin:.4rem 0 1.4rem 0;}}
+    .ml-player .name {{font-weight:700; line-height:1.2;}}
+    .ml-cardname {{font-weight:700; margin-top:.2rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}}
+    .ml-oneline {{white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}}
+    .ml-team {{display:flex; align-items:center; gap:.6rem; margin:1rem 0 .4rem 0;}}
+    .ml-team .bar {{width:8px; height:1.6rem; border-radius:3px;}}
+    .ml-score-row {{display:grid; grid-template-columns:8.5rem 1fr 2.6rem; gap:.6rem; align-items:center; margin:.35rem 0;}}
+    .ml-score-row .track {{height:.6rem; background:rgba(127,127,127,.22); border-radius:999px; overflow:hidden;}}
+    .ml-score-row .fill {{height:100%; background:{theme.ACCENT}; border-radius:999px;}}
+    .ml-score-row .val {{font-weight:800; text-align:right;}} .ml-score-row.off {{opacity:.45;}}
+    .ml-key {{display:inline-flex; align-items:center; gap:.35rem; margin-right:1rem; font-weight:600;}}
+    .ml-key i {{width:.95rem; height:.95rem; border-radius:3px; display:inline-block;}}
+    .ml-term {{text-decoration:underline dotted; text-underline-offset:3px; cursor:help;}}
+    /* the chosen pill: the dark green of the buttons is too dark as text on the dark page, the page's text is not */
+    button[data-variant='segmented_control'][aria-checked='true'] {{color:inherit !important; font-weight:700;}}
     </style>""", unsafe_allow_html=True)

@@ -98,7 +98,7 @@ function draw(s, now) {
   ctx.clearRect(0, 0, s.cssW, s.cssH);
   field(s);
   if (d.heat) heat(s, d.heat);
-  if (d.passes) arrows(s, d.passes, "#e8f0ea");
+  if (d.passes) arrows(s, d.passes);
   if (d.network) network(s, d.network);
   if (d.shots) shots(s, d.shots);
   if (d.arrows) attack(s, d.arrows);
@@ -145,16 +145,21 @@ function heat(s, h) {
   ctx.globalAlpha = 1;
 }
 
-function arrows(s, list, color) {
+// successful (or received): solid white; not successful: dashed gold. Two colours and two line styles, readable on the
+// turf and for colour-blind visitors
+function arrows(s, list) {
   const ctx = s.ctx;
   for (const [x, y, xe, ye, ok] of list) {
     if (xe == null || ye == null) continue;
-    ctx.strokeStyle = color; ctx.globalAlpha = ok ? 0.85 : 0.35; ctx.lineWidth = Math.max(1, s.k * 0.25);
+    const color = ok ? "#ffffff" : "#f4c430";
+    ctx.strokeStyle = color; ctx.globalAlpha = 0.9; ctx.lineWidth = Math.max(1.2, s.k * (ok ? 0.28 : 0.22));
+    ctx.setLineDash(ok ? [] : [s.k * 0.9, s.k * 0.6]);
     const a = Math.atan2(py(s, ye) - py(s, y), px(s, xe) - px(s, x)), hd = s.k * 1.4;
     ctx.beginPath(); ctx.moveTo(px(s, x), py(s, y)); ctx.lineTo(px(s, xe), py(s, ye)); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(px(s, xe), py(s, ye));
     ctx.lineTo(px(s, xe) - hd * Math.cos(a - 0.45), py(s, ye) - hd * Math.sin(a - 0.45));
     ctx.lineTo(px(s, xe) - hd * Math.cos(a + 0.45), py(s, ye) - hd * Math.sin(a + 0.45));
+    ctx.setLineDash([]);
     ctx.closePath(); ctx.fillStyle = color; ctx.fill();
   }
   ctx.globalAlpha = 1;
@@ -227,7 +232,8 @@ function players(s, frame, opt = {}) {
     if (keeper) ctx.roundRect(cx - r, cy - r, 2 * r, 2 * r, r * 0.35);   // goalkeeper: a square, as in the legend
     else ctx.arc(cx, cy, r, 0, 2 * Math.PI);
     ctx.fillStyle = grey ? "#5b6b62" : colors[team] || "#888"; ctx.fill();
-    ctx.lineWidth = 1.5; ctx.strokeStyle = "rgba(11,20,16,0.9)"; ctx.stroke();
+    // a white outline finds the dot on the turf whatever the team colour (theme.OUTLINE, 13.5:1 on the grass)
+    ctx.lineWidth = 2; ctx.strokeStyle = "#ffffff"; ctx.stroke();
     ctx.fillStyle = ink(colors[team] || "#888"); ctx.font = `800 ${Math.round(r * 1.05)}px system-ui, sans-serif`;
     ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(String(shirt), cx, cy + 0.5);
     if (opt.names && name) {
@@ -295,29 +301,30 @@ const TOGGLES = [
   ["voronoi", "Voronoi", "Each cell holds the part of the pitch nearer to its player than to any other (space control)."],
 ];
 
+// the panel sits on the page, light or dark: text inherits the page colour, fills are translucent grey
 const CSS = `
-.rp{font:13px system-ui,sans-serif;color:#e8f0ea;margin-top:8px;display:flex;flex-direction:column;gap:8px}
+.rp{font:15px system-ui,sans-serif;color:inherit;margin-top:8px;display:flex;flex-direction:column;gap:8px}
 .rp-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.rp button,.rp select{background:#12221a;color:#e8f0ea;border:1px solid #23392d;border-radius:6px;padding:4px 10px;
-  font:600 13px system-ui,sans-serif;cursor:pointer}
-.rp button.on{background:#15803d;border-color:#15803d}
-.rp .play{width:44px;font-size:15px}
-.rp .clock{font:700 18px system-ui,sans-serif;min-width:118px;font-variant-numeric:tabular-nums}
-.rp .score{font:700 15px system-ui,sans-serif}
-.rp .event{color:#b9c8bf;min-height:18px}
+.rp button,.rp select{background:rgba(127,127,127,.12);color:inherit;border:1px solid rgba(127,127,127,.45);
+  border-radius:6px;padding:5px 12px;font:600 15px system-ui,sans-serif;cursor:pointer}
+.rp button.on{background:#146c34;border-color:#146c34;color:#fff}
+.rp .play{width:48px;font-size:16px}
+.rp .clock{font:700 20px system-ui,sans-serif;min-width:128px;font-variant-numeric:tabular-nums}
+.rp .score{font:700 17px system-ui,sans-serif}
+.rp .event{opacity:.78;min-height:20px}
 .rp .track{position:relative;flex:1;min-width:220px;height:26px}
-.rp .track input{position:absolute;inset:0;width:100%;margin:0;accent-color:#15803d}
-.rp .mark{position:absolute;top:-3px;width:12px;height:12px;border-radius:50%;border:2px solid #0b1410;
-  transform:translateX(-50%);cursor:pointer;z-index:2}
-.rp .shot{position:absolute;top:0;width:7px;height:7px;border-radius:50%;background:#0b1410;border:2px solid;
+.rp .track input{position:absolute;inset:0;width:100%;margin:0;accent-color:#146c34}
+.rp .mark{position:absolute;top:-3px;width:12px;height:12px;border-radius:50%;border:2px solid #fff;
+  box-shadow:0 0 0 1px #8a948f;transform:translateX(-50%);cursor:pointer;z-index:2}
+.rp .shot{position:absolute;top:0;width:7px;height:7px;border-radius:50%;background:transparent;border:2px solid;
   transform:translateX(-50%);cursor:pointer;z-index:1}
-.rp .goal{font-size:12px;padding:2px 8px}
-.rp .legend{display:flex;flex-wrap:wrap;gap:6px 16px;padding:8px 10px;border:1px solid #23392d;border-radius:8px;
-  background:#12221a;color:#b9c8bf;font-size:12px}
+.rp .goal{font-size:14px;padding:3px 9px}
+.rp .legend{display:flex;flex-wrap:wrap;gap:6px 16px;padding:8px 10px;border:1px solid rgba(127,127,127,.35);
+  border-radius:8px;background:rgba(127,127,127,.06);font-size:14px}
 .rp .legend span{display:inline-flex;align-items:center;gap:6px}
-.rp .dot{width:12px;height:12px;border-radius:50%;display:inline-block;border:1.5px solid #0b1410}
+.rp .dot{width:12px;height:12px;border-radius:50%;display:inline-block;border:1.5px solid #fff;box-shadow:0 0 0 1px #8a948f}
 .rp .sq{border-radius:3px}
-.rp .keys{color:#7f9488;font-size:12px}`;
+.rp .keys{opacity:.78;font-size:14px}`;
 
 function controls(s) {
   const d = s.data, rp0 = d.replay, f = s.frames;
@@ -343,8 +350,8 @@ function controls(s) {
       <span><i class="dot" style="background:${colors.HOME}"></i>${home}</span>
       <span><i class="dot" style="background:${colors.AWAY}"></i>${away}</span>
       <span><i class="dot" style="background:${colors.HOME};opacity:.5"></i>faded: position estimated by SkillCorner</span>
-      <span><i class="dot sq" style="background:#b9c8bf"></i>goalkeeper (GK)</span>
-      <span><i class="dot" style="background:#fff;border-width:2.5px"></i>ball: bigger and higher when in the air</span>
+      <span><i class="dot sq" style="background:#9aa5a0"></i>goalkeeper (GK)</span>
+      <span><i class="dot" style="background:#fff;border-width:2.5px;border-color:#111"></i>ball: bigger and higher when in the air</span>
       <span>→ direction of attack, both halves</span>
       <span>● goal · ○ shot on the timeline</span>
     </div>
@@ -362,7 +369,7 @@ function controls(s) {
   const span = Math.max(1, rp0.end - f.t[0]), at = (ts) => `${100 * (ts - f.t[0]) / span}%`;
   for (const [ts, team, text] of rp0.shots || []) {
     const m = document.createElement("span");
-    m.className = "shot"; m.title = `Shot ${text}`; m.style.left = at(ts); m.style.borderColor = colors[team] || "#e8f0ea";
+    m.className = "shot"; m.title = `Shot ${text}`; m.style.left = at(ts); m.style.borderColor = colors[team] || "#8a948f";
     m.onclick = () => seek(s, Math.max(f.t[0], ts - 5), true);
     $(".track").appendChild(m);
   }
@@ -374,7 +381,7 @@ function controls(s) {
     $(".track").appendChild(mark);
     const chip = document.createElement("button");
     chip.className = "goal"; chip.textContent = `⚽ ${text}`; chip.title = "Jump 10 s before the ball goes in";
-    chip.onclick = jump; chip.style.borderColor = colors[team] || "#23392d";
+    chip.onclick = jump; chip.style.borderColor = colors[team] || "#8a948f";
     $(".goals").appendChild(chip);
   }
   for (const [key, text, help] of TOGGLES) {

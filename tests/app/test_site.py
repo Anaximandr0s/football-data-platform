@@ -47,7 +47,8 @@ def test_home_offers_a_match_and_both_views(app_env):
     at = router().run()
     assert not at.exception
     page = " ".join(m.value for m in at.markdown)
-    assert "Match<span>Lens</span>" in page and "<div class='score'>1 - 0</div>" in page
+    assert "<div class='score'>1 - 0</div>" in page
+    assert at.get("image"), "the MatchLens logo (assets/matchlens-logo.svg) is shown"
     labels = [b.label for b in at.button]
     assert "Open the fan view" in labels and "Open the coach view" in labels
     assert at.session_state["match_id"] == "m1"                # the first match until one is chosen
