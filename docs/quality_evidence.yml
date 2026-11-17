@@ -1,8 +1,8 @@
 # Written by `make evidence` (scripts/quality_evidence.py): do not edit by hand.
-generated_at: 2026-11-16 19:21 UTC
-commit: ae7fca6
+generated_at: 2026-11-17 23:41 UTC
+commit: 83a20b8+uncommitted changes
 live_equals_gold:
-  date: 2026-11-16 19:21 UTC
+  date: 2026-11-17 23:41 UTC
   ok: true
   players: 123
   positions: 704
@@ -11,33 +11,33 @@ live_equals_gold:
   largest_position_gap_m: 0.0
   summary: 123 players' distance, sprints and top speed, and 704 positions, equal
 streaming_equals_gold:
-  date: 2026-11-16 19:21 UTC
+  date: 2026-11-17 23:41 UTC
   ok: true
   matches:
     m001:
-      replay: m001-20261116T150115Z
+      replay: m001-20261117T232424Z
       windows: 506
     m002:
-      replay: m002-20261116T152636Z
+      replay: m002-20261117T232424Z
       windows: 505
     m003:
-      replay: m003-20261116T150105Z
+      replay: m003-20261117T232424Z
       windows: 502
     m004:
-      replay: m004-20261116T152820Z
+      replay: m004-20261117T232424Z
       windows: 504
   values: 10021
   different: []
-  distance_ties: 21
-  summary: 10,021 values of 2017 windows in 4 matches equal (21 distances 0.1 m apart on an exact .x5)
+  distance_ties: 20
+  summary: 10,021 values of 2017 windows in 4 matches equal (20 distances 0.1 m apart on an exact .x5)
 live_delay:
-  date: 2026-11-16 19:21 UTC
-  messages: 858
-  p50_ms: 199
-  p95_ms: 523
-  max_ms: 1005
+  date: 2026-11-17 23:41 UTC
+  messages: 440
+  p50_ms: 360
+  p95_ms: 850
+  max_ms: 850
   page_refresh_s: 1.0
-  summary: a message reaches the app in 0.52 s (95 %), and the page redraws every 1 s
+  summary: a message reaches the app in 0.85 s (95 %), and the page redraws every 1 s
 caught:
 - run_id: a4ef3d8a-5ed0-4fd9-9245-ec6bb6554e43
   match_id: m001
@@ -63,3 +63,17 @@ caught:
     of 4). Silver was not written, so Gold kept the previous data.'
   fix: count the rejected speeds once per key
   fix_commit: a654aea
+- run_id: abda928e-6a87-4aa6-8795-6c027c192c1b
+  match_id: m001
+  started: 2026-11-17 10:43 UTC
+  step: silver_soda_silver
+  what: not explained yet
+  fix: null
+  fix_commit: null
+- run_id: 4679ce47-3f99-472f-8c92-88201dbf083e
+  match_id: m001
+  started: 2026-11-17 15:06 UTC
+  step: bronze
+  what: not explained yet
+  fix: null
+  fix_commit: null

@@ -499,13 +499,17 @@
    "service": "bronze-writer",
    "baseline": 2328,
    "peak": 9400,
-   "back_to_normal_s": 47.372034549713135
+   "back_to_normal_s": 47.372034549713135,
+   "restart_s": 11.0,
+   "restart_s_source": "benchmark log of the same run (whole seconds)"
   },
   {
    "service": "spark-streaming",
    "baseline": 4070,
    "peak": 12144,
-   "back_to_normal_s": 20.17625379562378
+   "back_to_normal_s": 20.17625379562378,
+   "restart_s": 2.0,
+   "restart_s_source": "benchmark log of the same run (whole seconds)"
   }
  ],
  "final_check": {
