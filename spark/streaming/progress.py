@@ -13,15 +13,23 @@ PROGRESS_FILE = Path(os.getenv("STREAMING_PROGRESS_FILE", "data/streaming/progre
 
 
 def summary(progress: dict) -> dict:
-    """The few numbers worth watching in one StreamingQueryProgress (its JSON form)."""
+    """The few numbers worth watching in one StreamingQueryProgress (its JSON form). end_offsets: what the batch read up
+    to, per topic and partition; Kafka's latest offsets minus these are the messages still waiting for Spark (the
+    source's own offsets-behind metric is measured when a batch is planned, before it reads: it stays near 0)."""
     behind = [float(s["metrics"]["maxOffsetsBehindLatest"]) for s in progress.get("sources", [])
               if "maxOffsetsBehindLatest" in (s.get("metrics") or {})]
+    ends: dict[str, dict[str, int]] = {}
+    for s in progress.get("sources", []):
+        end = s.get("endOffset")
+        for topic, parts in (json.loads(end) if isinstance(end, str) else end or {}).items():
+            ends.setdefault(topic, {}).update({str(p): int(o) for p, o in parts.items()})
     return {"batch_id": progress["batchId"],
             "input_rows": progress.get("numInputRows", 0),
             "input_rows_per_second": progress.get("inputRowsPerSecond") or 0.0,
             "processed_rows_per_second": progress.get("processedRowsPerSecond") or 0.0,
             "batch_duration_ms": (progress.get("durationMs") or {}).get("triggerExecution", 0),
-            "offsets_behind_latest": sum(behind) if behind else None}
+            "offsets_behind_latest": sum(behind) if behind else None,
+            "end_offsets": ends}
 
 
 class ProgressFile(StreamingQueryListener):

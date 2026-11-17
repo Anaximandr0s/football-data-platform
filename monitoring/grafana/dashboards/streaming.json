@@ -751,6 +751,28 @@
    }
   }
  ],
+ "annotations": {
+  "list": [
+   {
+    "name": "Benchmark scenario",
+    "datasource": {
+     "type": "prometheus",
+     "uid": "prometheus"
+    },
+    "enable": true,
+    "iconColor": "purple",
+    "expr": "football_benchmark_scenario == 1",
+    "target": {
+     "expr": "football_benchmark_scenario == 1",
+     "refId": "Anno",
+     "interval": "15s"
+    },
+    "titleFormat": "benchmark: {{scenario}}",
+    "step": "15s",
+    "useValueForTime": false
+   }
+  ]
+ },
  "links": [
   {
    "type": "dashboards",

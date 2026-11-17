@@ -734,3 +734,81 @@ fois par clé (joueur, seconde). Le premier lancement automatique l'a montré : 
 - 7 jours d'historique, puis plus rien ; juste après le premier démarrage, les SLO « sur 7 jours » couvrent bien moins.
 - Les liens des e-mails pointent vers `localhost` : ils ne s'ouvrent que sur la machine qui fait tourner la plateforme.
 - Un redémarrage volontaire (`docker compose restart`) compte comme un redémarrage dans l'alerte ContainerRestarting.
+
+## Mesurer les performances : `make benchmark` (2026-11-17)
+
+### Ce qui a été construit
+
+| Fichier | Rôle |
+|---|---|
+| `scripts/benchmark.py` (`make benchmark`) | joue les scénarios (vitesses x1, x10, x60 ; charge de 1 à 4 matchs ; redémarrages) et enregistre les mesures brutes dans `data/benchmark/<date>.json` |
+| `scripts/benchmark_report.py` (`make benchmark-report`) | fonctions pures : percentiles, temps de vidage, limite de charge, verdicts des SLO, goulots d'étranglement ; écrit `docs/performance.md` et 4 graphiques |
+| `monitoring/exporter/pipeline_exporter.py` | le scénario en cours devient une annotation dans Grafana ; les runs lancés exprès pour un test (tag `purpose`) sont comptés à part |
+
+### Les mots à connaître
+
+- **Le débit** (throughput) : combien de messages par seconde traversent un composant. On le compare à la **cible** :
+  les lignes que le match contient par seconde de jeu, fois la vitesse du replay.
+- **La latence** : le temps entre deux moments d'un même message, ici l'envoi par le producteur et l'état mis à jour
+  dans la page Live. Kafka garde l'heure d'envoi de chaque message, ce qui permet de la mesurer exactement.
+- **Les percentiles** : p50 est la valeur du milieu, p95 la valeur sous laquelle se trouvent 95 % des mesures, p99
+  99 %. La moyenne cache les cas lents ; p95 et p99 les montrent. Un objectif (SLO) s'écrit donc sur p95.
+- **Le retard** (lag) d'un lecteur : les messages écrits dans Kafka qu'il n'a pas encore lus. S'il oscille, le lecteur
+  suit ; s'il ne fait que monter, il décroche.
+- **Le temps de vidage** (drain) : après l'arrêt des producteurs, combien de secondes il faut à un lecteur pour tout
+  lire. Au-delà de 30 s, on considère qu'il a atteint sa limite.
+- **Le test de charge** cherche la **capacité** : on monte la charge par paliers (1, 2, 3, 4 matchs en même temps) et on
+  note le premier palier où un lecteur décroche.
+- **Le temps de rétablissement** : après le redémarrage d'un service en plein replay, combien de temps avant que son
+  retard revienne à la normale.
+
+### Pourquoi c'est construit ainsi
+
+- **Mesures et rapport séparés.** Le benchmark dure environ 50 minutes ; le rapport se régénère en quelques secondes
+  depuis le fichier de résultats, qui est versionné. Personne n'écrit les chiffres à la main.
+- **La latence mesurée avec le code de la page.** Une sonde lit Kafka comme la page Live (`live.route`, même taille de
+  lot) et mesure chaque message ; l'histogramme de l'application sert de contre-vérification.
+- **Un garde-fou.** Toutes les 1 s, le script lit la mémoire, le CPU et le disque de la machine ; il arrête les
+  producteurs si la machine est en danger (moins de 1,5 Gio libres, CPU > 95 % pendant 30 s, disque < 10 %).
+- **Le capteur Dagster mis en pause pendant la charge**, dans un `try/finally` : sinon dix runs du pipeline
+  s'empileraient et fausseraient les paliers suivants. À la fin, Gold est reconstruit une fois et la fraîcheur vérifiée.
+- **Les runs de test à part.** Un run lancé exprès (démo de données abîmées, reconstruction du benchmark) porte le tag
+  `purpose` ; l'objectif « 95 % de runs réussis » ne compte que les runs normaux, et le taux brut est affiché à côté.
+
+### Ce qui a été mesuré (2026-11-17, détail dans `docs/performance.md`)
+
+- **Débit** : le producteur tient la cible à chaque vitesse (x60 : environ 1 000 messages/s pour un match, 4 100 pour
+  quatre matchs en même temps, 96 % de la cible).
+- **Latence du direct** : p95 0,49 s à x1, 0,51 s à x10, 0,53 s à x60. Objectif (< 2 s) tenu.
+- **Fenêtre de 5 minutes complète** : 13 à 15 s après la fin de la fenêtre (p50), dont 10 s d'attente voulue.
+- **Coup de sifflet final → Gold** : 14,7 min pour m001, objectif (10 min) manqué : `silver` a duré 787 s.
+- **Charge** : jusqu'à 4 matchs en même temps à x60, aucun lecteur ne décroche ; Spark est le plus lent (22,7 s pour
+  rattraper son retard, 115 346 messages au plus fort), loin devant bronze-writer (8,6 s) et la page Live (0,6 s).
+- **Rétablissement** : bronze-writer redémarré revient à la normale en 47 s, le pilote Spark en 20 s.
+
+### Ce que le benchmark a trouvé (rien n'est corrigé dans cette branche)
+
+- **Les lots de Spark durent 11,2 s (p50) pour un déclencheur de 5 s** : Spark suit, mais en retard sur son propre
+  rythme, et c'est le premier lecteur à souffrir quand la charge monte.
+- **Silver relit toutes les copies gardées dans Bronze.** Chaque replay ajoute une copie complète d'un match ; m001 en
+  avait 27 (2 millions de lignes lues pour en garder 97 416) et Silver a mis 13 minutes au lieu de 3,6 le matin. Le
+  benchmark lui-même rejoue m001 six fois : chaque mesure rend la suivante plus lente.
+- **Le consommateur de l'application est plus lent que la sonde qui exécute le même code** (p95 2,9 s contre 0,49 s
+  à x1) : depuis la branche monitoring, il mesure son retard dans sa boucle de lecture et bloque la lecture pendant ce
+  temps. Une régression à corriger dans une branche à part.
+- **bronze-writer ignore le signal d'arrêt** : Docker attend 10 s puis le tue ; chaque redémarrage coûte 10 s de plus.
+- **Le capteur Dagster reprend là où il s'était arrêté** : le mettre en pause ne suffit pas, il faut avancer son
+  curseur, sinon chaque replay joué pendant la pause lance son run à la reprise (dix runs la première fois).
+
+### Les idées à retenir
+
+1. **On mesure avec des percentiles, pas des moyennes** : p95 dit ce que vit l'utilisateur dans 95 % des cas.
+2. **Un test de charge cherche le premier composant qui décroche** : ici Spark, avant Kafka et la page Live.
+3. **Mesurer change ce qu'on mesure** : un benchmark qui écrit dans le système (copies dans Bronze) doit le dire.
+
+### Ce qu'on n'a pas choisi
+
+- **Un outil de charge générique** (k6, Locust) : il mesure des requêtes HTTP, pas un flux Kafka ni un pipeline ; le
+  vrai producteur et le code de la page mesurent ce que vivent nos utilisateurs.
+- **Corriger pendant qu'on mesure** : une mesure sert de référence ; les corrections viendront dans leurs branches et
+  `make benchmark` dira si elles aident.
