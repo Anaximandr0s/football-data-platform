@@ -22,6 +22,7 @@ protobuf>=6,<7     # dbt needs < 7; without it pip takes a grpcio-health-checkin
 # --- Dashboard: Streamlit + mplsoccer (the Docker image of `make app` pins its own copy, see app/streamlit/requirements.txt) ---
 streamlit>=1.67,<2   # the pitch component (st.components.v2) was tested on 1.67
 mplsoccer>=1.4,<2
+prometheus-client>=0.26,<1   # live feed metrics and monitoring/exporter
 
 # --- Dev tools: lint, tests, hooks ---
 ruff>=0.17

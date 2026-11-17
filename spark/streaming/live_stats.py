@@ -25,7 +25,7 @@ from pyspark.sql import functions as F
 from pyspark.sql.types import IntegerType
 
 import clock
-from spark.streaming import rows
+from spark.streaming import progress, rows
 
 BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "kafka:9092")
 TOPIC = {t: os.getenv(f"KAFKA_TOPIC_{t.upper()}", f"foot-{t}") for t in ("tracking", "events", "ball", "players",
@@ -153,6 +153,7 @@ def main() -> None:
              .config("spark.sql.shuffle.partitions", "4")
              .getOrCreate())
     spark.sparkContext.setLogLevel("WARN")
+    spark.streams.addListener(progress.ProgressFile())
     matches = static(spark, "matches")
     queries = [
         ("players-5min", player_counts(spark, matches), lambda a: [rows.player_5min(a)], {"player"}),

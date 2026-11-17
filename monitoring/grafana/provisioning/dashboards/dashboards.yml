@@ -1,0 +1,9 @@
+apiVersion: 1
+providers:
+  - name: matchlens
+    folder: MatchLens
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false      # a change is made in the files, then reviewed in git
+    options:
+      path: /var/lib/grafana/dashboards

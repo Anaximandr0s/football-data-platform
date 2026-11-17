@@ -1,0 +1,182 @@
+# Alerts. Every alert has: severity (critical: the data or the site is wrong or down; warning: it will be soon),
+# area (the inhibit rule and the email grouping use it), and the annotations the email shows:
+#   title       a few words for the subject line      summary  one line: what happened, where
+#   check       what to look at first                  dashboard the Grafana dashboard to open (its uid)
+groups:
+  - name: infrastructure
+    rules:
+      - alert: ContainerDown
+        expr: |
+          absent(container_last_seen{name="football-platform-kafka-1"})
+          or absent(container_last_seen{name="football-platform-minio-1"})
+          or absent(container_last_seen{name="football-platform-bronze-writer-1"})
+          or absent(container_last_seen{name="football-platform-spark-master-1"})
+          or absent(container_last_seen{name="football-platform-spark-worker-1"})
+          or absent(container_last_seen{name="football-platform-kafka-ui-1"})
+        for: 1m
+        labels: {severity: critical, area: infrastructure}
+        annotations:
+          title: Container down
+          summary: "The container {{ $labels.name }} is not running."
+          description: "It has not been seen by cAdvisor for more than a minute: it stopped or crashed."
+          check: "docker ps -a --filter name={{ $labels.name }} and its logs: make logs s={{ reReplaceAll \"football-platform-(.+)-1\" \"$1\" $labels.name }}. Start it again with make up."
+          dashboard: infrastructure
+
+      - alert: ServiceDown
+        expr: up{job=~"node|cadvisor|kafka|minio|spark_master|spark_worker|pipeline|alertmanager"} == 0
+        for: 1m
+        labels: {severity: critical, area: infrastructure}
+        annotations:
+          title: Service not answering Prometheus
+          summary: "{{ $labels.service }} does not answer Prometheus ({{ $labels.instance }})."
+          description: "Its metrics cannot be read for more than a minute, so what it reports is unknown."
+          check: "docker ps for {{ $labels.service }}, then its logs. With the monitoring profile stopped, run make monitoring."
+          dashboard: infrastructure
+
+      - alert: ContainerRestarting
+        expr: changes(container_start_time_seconds{name=~"football-platform-.+"}[15m]) >= 2
+        labels: {severity: warning, area: infrastructure}
+        annotations:
+          title: Container restarting
+          summary: "{{ $labels.name }} restarted {{ $value }} times in 15 minutes."
+          description: "Docker keeps starting it again: it probably crashes at start or runs out of memory."
+          check: "Its logs (docker logs {{ $labels.name }}) and its memory on the Infrastructure dashboard."
+          dashboard: infrastructure
+
+      - alert: ContainerMemoryHigh
+        expr: |
+          container_memory_working_set_bytes{name=~"football-platform-.+"}
+            / (container_spec_memory_limit_bytes{name=~"football-platform-.+"} > 0) > 0.9
+        for: 2m
+        labels: {severity: warning, area: infrastructure}
+        annotations:
+          title: Container memory above 90 %
+          summary: "{{ $labels.name }} uses {{ $value | humanizePercentage }} of its memory limit."
+          description: "At 100 % Docker kills it (out of memory)."
+          check: "What it is doing now (a replay, a Spark job?). Raise mem_limit in docker-compose.yml only if it is normal load."
+          dashboard: infrastructure
+
+      - alert: DiskSpaceLow
+        expr: node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"} < 0.15
+        for: 5m
+        labels: {severity: warning, area: infrastructure}
+        annotations:
+          title: Disk space below 15 %
+          summary: "Only {{ $value | humanizePercentage }} of the disk is free."
+          description: "Kafka, MinIO and Prometheus stop writing when the disk is full."
+          check: "docker system df; old Kafka segments (7 days), Spark ivy cache, data/raw."
+          dashboard: infrastructure
+
+      - alert: HostCpuHigh
+        expr: 1 - avg(rate(node_cpu_seconds_total{mode="idle"}[2m])) > 0.85
+        for: 5m
+        labels: {severity: warning, area: infrastructure}
+        annotations:
+          title: Host CPU above 85 %
+          summary: "The machine has used {{ $value | humanizePercentage }} of its CPU for 5 minutes."
+          description: "Replays, Spark and the app slow down; the live delay grows."
+          check: "Which container uses it (Infrastructure dashboard, CPU per container)."
+          dashboard: infrastructure
+
+  - name: streaming
+    rules:
+      - alert: KafkaDown
+        expr: probe_success{service="kafka"} == 0
+        for: 1m
+        labels: {severity: critical, area: infrastructure}
+        annotations:
+          title: Kafka down
+          summary: "Kafka does not accept connections on kafka:9092."
+          description: "Nothing can be replayed, written to Bronze or shown live. The lag and streaming alerts are muted meanwhile."
+          check: "make logs s=kafka, then make up."
+          dashboard: streaming
+
+      - alert: ConsumerLagGrowing
+        # the smallest lag of the last minute is above the largest of the minute before: it grew for 2 minutes
+        expr: |
+          min_over_time(football:consumer_lag[1m]) > max_over_time(football:consumer_lag[1m] offset 1m)
+          and on() football:replay_running == 1
+        labels: {severity: warning, area: streaming}
+        annotations:
+          title: Kafka reader falling behind
+          summary: "{{ $labels.consumer }} is falling behind: {{ $value }} messages not read yet, growing for 2 minutes."
+          description: "A replay is running and this reader does not keep up."
+          check: "The Streaming dashboard (lag per reader), the container's CPU and logs. A replay faster than SPEED=60 can cause it."
+          dashboard: streaming
+
+      - alert: SparkStreamingStalled
+        expr: |
+          (time() - max(football_spark_query_reported_timestamp_seconds) > 120
+            or on() absent(football_spark_query_reported_timestamp_seconds))
+          and on() football:replay_running == 1
+        labels: {severity: warning, area: streaming}
+        annotations:
+          title: Spark streaming not progressing
+          summary: "A replay is running but Spark Structured Streaming has not reported for more than 2 minutes."
+          description: "The 5-minute live statistics (topic foot-live-stats) are not updated."
+          check: "Is the job running? docker ps --filter name=streaming-5min, else make streaming. Then its logs."
+          dashboard: streaming
+
+      - alert: WebServiceDown
+        expr: probe_success{service=~"app|dagster|minio"} == 0
+        for: 1m
+        labels: {severity: critical, area: infrastructure}
+        annotations:
+          title: Web service not answering
+          summary: "{{ $labels.service }} does not answer {{ $labels.target }}."
+          description: "Visitors (app) or the pipeline (Dagster, MinIO) cannot use it."
+          check: "make app, make dagster or make up to start it; its logs if it is running (make logs s=app, s=dagster-webserver or s=minio)."
+          dashboard: slo
+
+  - name: pipeline
+    rules:
+      - alert: DagsterRunFailed
+        expr: football_dagster_latest_run_failed == 1
+        labels: {severity: critical, area: pipeline}
+        annotations:
+          title: Dagster run failed
+          summary: "The latest {{ $labels.dagster_job }} run of {{ with $labels.match_id }}match {{ . }}{{ else }}all matches{{ end }} failed."
+          description: "Everything after the failed step was not built: Gold keeps its previous version."
+          check: "The failed step and its logs in Dagster (link below); a failed Soda check has its own alert."
+          dashboard: pipeline
+
+      - alert: SodaCheckFailed
+        expr: football_soda_check_failed == 1
+        labels: {severity: critical, area: quality}
+        annotations:
+          title: Soda check failed
+          summary: "{{ $labels.layer | title }} check failed ({{ $labels.dimension }}): {{ $labels.check }}, table {{ $labels.table }}."
+          description: "The numbers this check covers should not be trusted until it passes again."
+          check: "The Data quality page (all checks) and data/soda/{{ $labels.layer }}*.json for the detail."
+          dashboard: pipeline
+
+      - alert: DbtTestFailed
+        expr: football_dbt_test_failed == 1
+        labels: {severity: critical, area: quality}
+        annotations:
+          title: dbt test failed
+          summary: "The dbt test {{ $labels.test }} failed in the last dbt build."
+          description: "A Gold table does not respect its contract."
+          check: "dbt/target/run_results.json, or make gold to see the failing rows."
+          dashboard: pipeline
+
+      - alert: ExporterSourceFailing
+        expr: football_exporter_source_up == 0
+        for: 1m
+        labels: {severity: critical, area: pipeline}
+        annotations:
+          title: Pipeline exporter cannot read a source
+          summary: "The pipeline exporter cannot read {{ $labels.source }}."
+          description: "Its metrics are missing: an alert about {{ $labels.source }} may look resolved while it is not."
+          check: "docker logs football-platform-pipeline-exporter-1 (the traceback names the file or the value)."
+          dashboard: pipeline
+
+      - alert: GoldStale
+        expr: football_gold_waiting_seconds > 900
+        labels: {severity: critical, area: pipeline}
+        annotations:
+          title: Gold is stale
+          summary: "Match {{ $labels.match_id }}: the replay ended {{ $value | humanizeDuration }} ago and Gold is still not rebuilt."
+          description: "The site shows the match as it was before this replay (rule: Gold within 15 minutes of the final whistle)."
+          check: "Its Dagster run (did the sensor start it? did a step fail?) on the Pipeline dashboard."
+          dashboard: pipeline

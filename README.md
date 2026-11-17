@@ -72,6 +72,7 @@ make gold-sql Q="select * from gold_shots limit 5"
 make soda                                # Soda checks on Silver then Gold (make soda-demo shows a failure on purpose)
 make app                                 # dashboard on http://localhost:8501
 make dagster                             # Dagster on http://localhost:3000: the next replay's end runs the chain
+make monitoring                          # Prometheus, alert emails, Grafana on http://localhost:3001 (monitoring/README.md)
 ```
 
 | Service | URL | Notes |
@@ -82,6 +83,7 @@ make dagster                             # Dagster on http://localhost:3000: the
 | Spark master UI | http://localhost:8082 | cluster for Silver (`spark://spark-master:7077` inside Docker) |
 | Dashboard | http://localhost:8501 | after `make app` (needs `make gold`) |
 | Dagster | http://localhost:3000 | after `make dagster` |
+| Grafana | http://localhost:3001 | after `make monitoring`; login from `.env`; Prometheus :9090, Alertmanager :9093 |
 | Kafka from your machine | `localhost:29092` | Python scripts and Spark outside Docker |
 | Kafka from containers | `kafka:9092` | |
 

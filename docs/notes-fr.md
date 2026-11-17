@@ -633,3 +633,104 @@ fois par clé (joueur, seconde). Le premier lancement automatique l'a montré : 
 - La simulation de daltonisme est un calcul (matrice de Machado, 2009), pas un test avec de vraies personnes.
 - Les figures matplotlib de `viz.py` (carte de chaleur, tirs, réseau de passes) ne sont plus utilisées par aucune page ;
   elles sont encore là, avec leurs tests.
+
+## La surveillance : Prometheus, Alertmanager, Grafana (2026-11-17)
+
+### Ce qui a été construit
+
+| Fichier | Rôle |
+|---|---|
+| `docker-compose.yml` (profil `monitoring`) | 8 services : Prometheus, Alertmanager, Grafana et 5 « exporters » ; `make monitoring` les lance, `make monitoring-stop` les arrête |
+| `monitoring/prometheus/` | quoi lire toutes les 15 s (`prometheus.yml`), les 14 alertes (`rules/alerts.yml`), les objectifs de service (`rules/recording.yml`) |
+| `monitoring/alertmanager/` | à qui envoyer quoi, et le modèle de l'e-mail (couleurs, boutons vers Grafana, Dagster et la page Data quality) |
+| `monitoring/grafana/` | la source de données et les 4 tableaux de bord, écrits par `build_dashboards.py` |
+| `monitoring/exporter/pipeline_exporter.py` | notre exporter : les runs Dagster (GraphQL), les tests dbt, les contrôles Soda par dimension, la progression de Spark, la fraîcheur de Gold par match |
+| `spark/streaming/progress.py` | Spark écrit après chaque lot où il en est (lignes par seconde, retard sur Kafka) |
+| `app/streamlit/live_feed.py` | le consommateur Kafka de la page Live publie son retard et le délai du direct |
+
+### Les mots à connaître
+
+- **Prometheus** est une base de données de nombres dans le temps (des « séries temporelles »). Il ne reçoit rien : toutes
+  les 15 secondes, il va lire une page `/metrics` sur chaque service (on dit qu'il « scrape »). Il garde 7 jours, puis
+  efface.
+- **Un exporter** est un petit programme qui traduit l'état d'un système en page `/metrics`. node-exporter pour la
+  machine, cAdvisor pour les conteneurs, kafka-exporter pour Kafka, blackbox pour savoir si un site répond. Le nôtre
+  traduit Dagster, dbt et Soda.
+- **Une règle d'alerte** est une requête PromQL avec un seuil et une durée : « la mémoire dépasse 90 % de la limite
+  depuis 2 minutes ». Quand elle est vraie, Prometheus prévient Alertmanager.
+- **Alertmanager** décide quoi envoyer : il regroupe (6 contrôles Soda en échec = un seul e-mail), répète toutes les
+  4 heures si le problème dure, envoie un e-mail « RESOLVED » quand il est réglé, et se tait sur les conséquences quand
+  la cause est connue (Kafka arrêté : pas d'alerte de retard en plus).
+- **Grafana** dessine les séries de Prometheus. Ses tableaux de bord sont des fichiers JSON chargés au démarrage, pas
+  des clics : ils sont dans git comme le reste.
+- **Un SLO** (objectif de niveau de service) est une promesse chiffrée, mesurée sur une période : « 95 % des messages du
+  direct arrivent en moins de 2 s, sur 7 jours ». Le tableau « Service levels » en montre cinq, en vert si la promesse
+  est tenue, en rouge sinon.
+
+### Pourquoi c'est construit ainsi
+
+- **Tout est un fichier.** Une alerte, un tableau de bord ou un seuil se change dans le code, se relit dans une
+  pull request et revient après un `docker compose down`. Grafana refuse même les modifications à la souris.
+- **Deux lecteurs de Kafka ne laissent pas de trace dans Kafka.** Spark garde sa position dans son checkpoint et la page
+  Live ne valide rien : un exporter Kafka ne peut pas voir leur retard. Chacun le publie donc lui-même, et les trois
+  retards apparaissent sous un seul nom, `football:consumer_lag`.
+- **Une seule règle de fraîcheur.** L'exporter appelle la fonction de la page Data quality (`quality.freshness`) au lieu
+  de la recopier : la page et l'alerte ne peuvent pas se contredire.
+- **Un e-mail doit dire quoi faire.** Chaque alerte a un titre, ce qui s'est passé, où (match, service, dimension), quoi
+  vérifier, et des boutons qui ouvrent le bon tableau de bord ou le run Dagster.
+- **Les secrets restent dans `.env`.** Alertmanager ne lit pas les variables d'environnement : un petit script remplit
+  sa configuration au démarrage et met le mot de passe dans un fichier à l'intérieur du conteneur.
+
+### Ce qui a été mesuré (2026-11-17)
+
+- **Run endommagé** (`inject_damage`) sur m001 : échec à 10:46:53 UTC, alerte reçue par Alertmanager à 10:47:24, deux
+  e-mails envoyés à 10:47:35 (42 s ; l'objectif était 2 minutes) : « Dagster run failed » et « Soda check failed (6) »,
+  chaque contrôle avec sa dimension. 0 échec d'envoi.
+- **E-mail « RESOLVED »** : après le replay complet de m001, le run normal a réussi à 11:03:32, les alertes se sont
+  éteintes à 11:03:56, les e-mails « RESOLVED » sont partis à 11:05:20 (Alertmanager attend 2 minutes entre deux
+  e-mails d'un même groupe).
+- **bronze-writer arrêté** : alerte à +85 s, e-mail « Container down » à +113 s après l'arrêt.
+- **Pendant un replay de m001 à 10x** : 173 messages Kafka par seconde, délai du direct p95 0,72 s, retard 0 pour Spark.
+  Les lots Spark durent environ 9 s pour un déclencheur de 5 s : Spark suit (lignes traitées = lignes reçues), mais
+  sans marge.
+- **Mémoire de la surveillance** : 655 Mio pendant le replay (avant les corrections ci-dessous), 538 Mio au repos
+  après, sur 4 792 Mio pour les 18 conteneurs. Grafana 227, cAdvisor 111, Prometheus 82, notre exporter 50,
+  Alertmanager 24, les trois autres exporters 43.
+
+### Ce que les preuves ont trouvé (et qui est corrigé)
+
+- **De faux e-mails « RESOLVED ».** Un run encore en file d'attente n'a pas d'heure de début ; la fonction de
+  fraîcheur a planté, toute la page `/metrics` de l'exporter est tombée, et Prometheus a cru que toutes les alertes
+  du pipeline étaient finies : deux faux « RESOLVED » à 10:58:35, puis de nouveau « PROBLEM ». Correction : un run pas
+  encore commencé est ignoré (comme dans `runs.json`), chaque source est lue à part, et une source illisible déclenche
+  sa propre alerte (`ExporterSourceFailing`) au lieu d'effacer les autres. Deux tests reproduisent le bug.
+- **Un conteneur arrêté vu 6 minutes plus tard.** cAdvisor date lui-même ses mesures ; Prometheus garde alors une
+  série disparue pendant 5 minutes. `honor_timestamps: false` : 85 s au lieu de 6 minutes.
+- **Grafana près de sa limite mémoire.** Grafana 13 lance un processus par source de données livrée (CloudWatch, Loki,
+  Tempo... 17 à 31 Mio chacun) ; seules celles de Prometheus servent : les autres sont désactivées, et la limite est
+  fixée d'après la mesure (340 Mio au repos, limite 512 Mio).
+
+### Les idées à retenir
+
+1. **Mesurer, alerter, montrer sont trois métiers** : Prometheus mesure, Alertmanager prévient, Grafana montre. On peut
+   perdre Grafana sans perdre une seule alerte.
+2. **Une alerte utile est rare et actionnable** : un seuil, une durée (pas d'alerte pour un pic d'une seconde), et une
+   phrase qui dit quoi faire.
+
+### Ce qu'on n'a pas choisi
+
+- **Les alertes de Grafana** au lieu d'Alertmanager : tout serait dans Grafana, mais les alertes dépendraient de
+  l'outil d'affichage ; Alertmanager sait aussi regrouper et faire taire les conséquences.
+- **Un Pushgateway** (les jobs poussent leurs chiffres) : utile pour des jobs courts, mais Dagster garde déjà
+  l'historique ; il suffit de le lire.
+- **L'exporter JMX de Kafka** : plus de détails sur le broker, mais un agent Java à ajouter dans le conteneur Kafka ;
+  kafka-exporter a suffi (il fonctionne avec Kafka 4.3).
+- **Un jeton pour les métriques MinIO** : c'est le bon choix en production (voir `monitoring/README.md`) ; ici le port
+  n'est ouvert qu'à la machine elle-même.
+
+### Limites connues
+
+- Personne ne surveille le surveillant : si Prometheus ou Alertmanager s'arrête, aucune alerte ne part.
+- 7 jours d'historique, puis plus rien ; juste après le premier démarrage, les SLO « sur 7 jours » couvrent bien moins.
+- Les liens des e-mails pointent vers `localhost` : ils ne s'ouvrent que sur la machine qui fait tourner la plateforme.
+- Un redémarrage volontaire (`docker compose restart`) compte comme un redémarrage dans l'alerte ContainerRestarting.
