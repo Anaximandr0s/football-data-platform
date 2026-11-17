@@ -1,0 +1,82 @@
+# Prometheus: what to scrape, every 15 s. Retention (7 days) is a command-line flag, in docker-compose.yml.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs: [{targets: ["localhost:9090"], labels: {service: prometheus}}]
+
+  - job_name: alertmanager
+    static_configs: [{targets: ["alertmanager:9093"], labels: {service: alertmanager}}]
+
+  - job_name: node                       # the host: CPU, memory, disk
+    static_configs: [{targets: ["node-exporter:9100"], labels: {service: node-exporter}}]
+
+  - job_name: cadvisor                   # every container: CPU, memory against its limit, restarts
+    static_configs: [{targets: ["cadvisor:8080"], labels: {service: cadvisor}}]
+    # cAdvisor stamps its samples; with its stamps, a stopped container's series would linger 5 minutes (no staleness)
+    honor_timestamps: false
+    metric_relabel_configs:              # keep the Docker containers only, not every cgroup of the host
+      - source_labels: [name]
+        regex: ""
+        action: drop
+
+  - job_name: kafka                      # topic offsets and consumer group lag
+    static_configs: [{targets: ["kafka-exporter:9308"], labels: {service: kafka-exporter}}]
+
+  - job_name: minio
+    metrics_path: /minio/v2/metrics/cluster
+    static_configs: [{targets: ["minio:9000"], labels: {service: minio}}]
+
+  - job_name: spark_master
+    metrics_path: /metrics/master/prometheus
+    static_configs: [{targets: ["spark-master:8080"], labels: {service: spark-master}}]
+
+  - job_name: spark_worker
+    metrics_path: /metrics/prometheus
+    static_configs: [{targets: ["spark-worker:8081"], labels: {service: spark-worker}}]
+
+  - job_name: spark_streaming            # the driver of `make streaming`: only up while the job runs
+    metrics_path: /metrics/prometheus
+    static_configs: [{targets: ["streaming-5min:4040"], labels: {service: spark-streaming}}]
+
+  - job_name: pipeline                   # our exporter: Dagster, dbt, Soda, Spark progress, freshness
+    static_configs: [{targets: ["pipeline-exporter:9110"], labels: {service: pipeline-exporter}}]
+
+  - job_name: live_app                   # the live page's own Kafka consumer: lag and delay
+    static_configs: [{targets: ["app:9108"], labels: {service: app}}]
+
+  - job_name: blackbox_http              # do the web services answer?
+    metrics_path: /probe
+    params: {module: [http_2xx]}
+    static_configs:
+      - targets: ["http://app:8501/_stcore/health"]
+        labels: {service: app}
+      - targets: ["http://dagster-webserver:3000/server_info"]
+        labels: {service: dagster}
+      - targets: ["http://minio:9000/minio/health/live"]
+        labels: {service: minio}
+    relabel_configs: &probe
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: target
+      - target_label: __address__
+        replacement: blackbox:9115
+
+  - job_name: blackbox_tcp               # Kafka speaks its own protocol: an open port is the test
+    metrics_path: /probe
+    params: {module: [tcp_connect]}
+    static_configs:
+      - targets: ["kafka:9092"]
+        labels: {service: kafka}
+    relabel_configs: *probe

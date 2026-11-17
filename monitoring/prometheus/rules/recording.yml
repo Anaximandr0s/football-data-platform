@@ -1,0 +1,37 @@
+# Recording rules: names for the few expressions the alerts and the dashboards share.
+groups:
+  - name: football-recording
+    rules:
+      # 1 while a replay is sending positions to Kafka, 0 otherwise
+      - record: football:replay_running
+        expr: (sum(delta(kafka_topic_partition_current_offset{topic="foot-tracking"}[1m])) > bool 0) or on() vector(0)
+
+      # messages each reader of the replay topics still has to read, one name for the three of them
+      - record: football:consumer_lag
+        expr: label_replace(sum by (consumergroup) (kafka_consumergroup_lag{consumergroup="bronze-writer"}),
+                            "consumer", "$1", "consumergroup", "(.*)")
+        labels: {source: kafka}
+      - record: football:consumer_lag
+        expr: label_replace(football_spark_offsets_behind_latest and on(query) football_spark_query_running == 1,
+                            "consumer", "spark-$1", "query", "(.*)")
+        labels: {source: spark}
+      - record: football:consumer_lag
+        expr: label_replace(sum(football_live_consumer_lag_messages), "consumer", "live-page", "", "")
+        labels: {source: app}
+
+      - record: football:live_delay_seconds:p95_5m
+        expr: histogram_quantile(0.95, sum by (le) (rate(football_live_delay_seconds_bucket[5m])))
+
+  # the five service level objectives (SLO); the window is the retention: 7 days
+  - name: football-slo
+    rules:
+      - record: slo:live_delay_p95_seconds:7d
+        expr: histogram_quantile(0.95, sum by (le) (increase(football_live_delay_seconds_bucket[7d])))
+      - record: slo:gold_freshness_seconds:max
+        expr: max(football_gold_freshness_seconds)
+      - record: slo:run_success_ratio:7d
+        expr: sum(football_dagster_runs{status="SUCCESS"}) / sum(football_dagster_runs{status=~"SUCCESS|FAILURE"})
+      - record: slo:blocking_checks_pass_ratio
+        expr: 1 - (sum(football_soda_checks{result!~"pass|warn"}) or vector(0)) / sum(football_soda_checks)
+      - record: slo:app_up_ratio:7d
+        expr: avg_over_time(probe_success{service="app"}[7d])

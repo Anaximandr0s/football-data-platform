@@ -1,7 +1,7 @@
 # Shortcuts (Linux/macOS/WSL). Without make, run the plain commands from README.md.
 # Docker needs sudo on your machine?  make up DOCKER="sudo docker"
 .DEFAULT_GOAL := help
-.PHONY: help up down reset ps logs topics counts smoke lint test data bronze replay check silver gold gold-sql soda soda-silver soda-gold soda-demo app app-stop dagster dagster-stop evidence
+.PHONY: help up down reset ps logs topics counts smoke lint test data bronze replay check silver gold gold-sql soda soda-silver soda-gold soda-demo app app-stop dagster dagster-stop evidence monitoring monitoring-stop
 
 DOCKER ?= docker
 COMPOSE = $(DOCKER) compose
@@ -18,8 +18,8 @@ up: ## Start MinIO, Kafka, Kafka UI, Spark and the Bronze writer (creates .env i
 	@test -f .env || cp .env.example .env
 	$(COMPOSE) up -d
 
-down: ## Stop (data kept), dashboard and Dagster included
-	$(COMPOSE) --profile app --profile dagster down
+down: ## Stop (data kept), dashboard, Dagster and monitoring included
+	$(COMPOSE) --profile app --profile dagster --profile monitoring down
 
 reset: ## Stop and DELETE all data (topics, buckets, Dagster history)
 	$(COMPOSE) --profile app --profile dagster down -v
@@ -101,3 +101,9 @@ dagster: ## Dagster webserver + daemon on http://localhost:3000 (a replay's end 
 
 dagster-stop: ## Stop Dagster (its history stays in the volume dagster-storage)
 	$(COMPOSE) --profile dagster stop dagster-webserver dagster-daemon
+
+monitoring: ## Prometheus, Alertmanager (emails), Grafana on http://localhost:3001 and the exporters (monitoring/README.md)
+	$(COMPOSE) --profile monitoring up -d --build
+
+monitoring-stop: ## Stop the monitoring (7 days of metrics stay in the volume prometheus-data)
+	$(COMPOSE) --profile monitoring stop

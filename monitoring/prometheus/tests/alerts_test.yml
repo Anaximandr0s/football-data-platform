@@ -1,0 +1,27 @@
+# promtool test rules: an alert fires with the texts the email shows (run by CI, see .github/workflows/ci.yml)
+rule_files: [../rules/alerts.yml]
+evaluation_interval: 15s
+tests:
+  - interval: 15s
+    input_series:
+      - series: 'container_last_seen{name="football-platform-kafka-1"}'
+        values: '1+0x20'
+      - series: 'container_last_seen{name="football-platform-minio-1"}'
+        values: '1+0x20'
+      - series: 'container_last_seen{name="football-platform-spark-master-1"}'
+        values: '1+0x20'
+      - series: 'container_last_seen{name="football-platform-spark-worker-1"}'
+        values: '1+0x20'
+      - series: 'container_last_seen{name="football-platform-kafka-ui-1"}'
+        values: '1+0x20'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: ContainerDown
+        exp_alerts:
+          - exp_labels: {severity: critical, area: infrastructure, name: football-platform-bronze-writer-1}
+            exp_annotations:
+              title: Container down
+              summary: "The container football-platform-bronze-writer-1 is not running."
+              description: "It has not been seen by cAdvisor for more than a minute: it stopped or crashed."
+              check: "docker ps -a --filter name=football-platform-bronze-writer-1 and its logs: make logs s=bronze-writer. Start it again with make up."
+              dashboard: infrastructure

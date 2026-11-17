@@ -35,6 +35,20 @@ jobs:
       - name: Unit tests
         run: python -m pytest -q
 
+      # the same Prometheus and Alertmanager images as docker-compose.yml check their own configs
+      - name: Monitoring configs (promtool, amtool)
+        run: |
+          docker run --rm --entrypoint /bin/promtool -v $PWD/monitoring/prometheus:/etc/prometheus:ro \
+            prom/prometheus:v3.15.1 check config /etc/prometheus/prometheus.yml
+          docker run --rm --entrypoint /bin/promtool -v $PWD/monitoring/prometheus:/etc/prometheus:ro -w /etc/prometheus/tests \
+            prom/prometheus:v3.15.1 test rules alerts_test.yml
+          mkdir -p /tmp/am
+          sed -e 's|__SMTP_PORT__|587|; s|__[A-Z_]*__|x|g; s|/tmp/alertmanager/|/tmp/am/|g' \
+            monitoring/alertmanager/alertmanager.yml.tmpl > /tmp/am/alertmanager.yml
+          cp monitoring/alertmanager/email.tmpl /tmp/am/ && touch /tmp/am/smtp_password
+          docker run --rm --entrypoint /bin/amtool -v /tmp/am:/tmp/am:ro prom/alertmanager:v0.34.2 \
+            check-config /tmp/am/alertmanager.yml
+
   # Soda Core 3.5 pins duckdb==1.0.0, which cannot open the Gold file (DuckDB 2.0): it gets its own job and the same
   # install as soda/Dockerfile (connector WITHOUT its dependencies). The main job skips tests/soda: Soda is not installed there.
   soda:
