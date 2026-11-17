@@ -1,7 +1,7 @@
 # Shortcuts (Linux/macOS/WSL). Without make, run the plain commands from README.md.
 # Docker needs sudo on your machine?  make up DOCKER="sudo docker"
 .DEFAULT_GOAL := help
-.PHONY: help up down reset ps logs topics counts smoke lint test data bronze replay check silver gold gold-sql soda soda-silver soda-gold soda-demo app app-stop dagster dagster-stop evidence monitoring monitoring-stop benchmark benchmark-report
+.PHONY: help up down reset ps logs topics counts smoke lint test data bronze replay check silver gold gold-sql soda soda-silver soda-gold soda-demo app app-stop dagster dagster-stop evidence monitoring monitoring-stop benchmark benchmark-report bronze-prune
 
 DOCKER ?= docker
 COMPOSE = $(DOCKER) compose
@@ -114,3 +114,6 @@ benchmark: ## Measure throughput, latency, load and recovery (~50 min, laptop bu
 
 benchmark-report: ## Rebuild docs/performance.md and its charts from the last make benchmark results
 	python scripts/benchmark_report.py
+
+bronze-prune: ## Keep the last KEEP complete replays per match in Bronze (default 3); shows first, DELETE=yes deletes
+	python scripts/bronze_prune.py --keep $(or $(KEEP),3) $(if $(filter yes,$(DELETE)),--delete,)
