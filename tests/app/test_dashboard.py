@@ -27,7 +27,7 @@ def test_match_story_tells_the_match_in_sentences(app_env):
     assert "H. One and H. Two shared the hub role of Home" in page
     assert "won because" not in page and page.count("class='ml-say'") >= 6
     assert "about 27 km/h" in page and "about 30" not in page                    # held over two detected seconds
-    assert "It is not xG" in " ".join(c.value for c in at.caption)
+    assert "It is not expected goals (xG)" in page and "class='ml-term'" in page      # xThreat explained on hover
 
 
 def test_player_page_fan_mode_shows_card_badges_scores_pitch_and_f8(app_env):
@@ -81,7 +81,8 @@ def test_team_analysis_tells_shape_pressing_build_up_and_space(app_env):
     at = run("sections/team_analysis.py")
     assert not at.exception
     page = texts(at)
-    assert "Outfield block length" in page and "Defensive line from own goal" in page
+    assert "Outfield block</span> length" in page and "Defensive line from own goal" in page
+    assert "Based on" in page and "minutes</b>" in page and "too few opponent passes" in page
     assert "Home spread 10 m wide with the ball." in page                # only ts 0 has a known owner: HOME
     assert "nan" not in page
     assert "Away made no pass: pressing per opponent pass cannot be measured." in page
@@ -122,18 +123,22 @@ def test_physical_page_shows_the_team_grid_fatigue_and_one_player(app_env):
     at = run("sections/physical_fatigue.py")
     assert not at.exception
     fatigue, one = at.dataframe[0].value, at.dataframe[1].value
-    assert set(fatigue.player) == {"#8 H. One", "#4 H. Two"} and not fatigue["enough data"].any()
+    assert set(fatigue.player) == {"#8 H. One", "#4 H. Two"} and set(fatigue["enough data"]) == {"–"}   # not a checkbox
     assert list(one.minutes) == ["0-5'"]                     # H01: the 101-second first-half window of the fixture
+    assert "metres per minute" in one.columns and not any("_" in c for c in one.columns)   # plain names
+    assert "max_speed_kmh" not in one.columns
     assert "faded most" not in texts(at)                       # nobody passes the C6 thresholds in the fixture
 
 
 def test_match_library_lists_the_stored_matches_with_their_score_and_date(app_env):
     at = run("sections/match_library.py")
     assert not at.exception
-    lib = at.dataframe[0].value
-    assert list(lib.home_team) == ["Home FC"] and list(lib.score) == ["1 - 0"]
-    assert lib.match_date.iloc[0].strftime("%Y-%m-%d") == "2026-01-01"
+    page = " ".join(m.value for m in at.markdown)
+    assert "<div class='score'>1 - 0</div>" in page and "01 Jan 2026" in page
     assert {m.label: m.value for m in at.metric}["Matches"] == "1"
+    choose = next(b for b in at.button if b.label == "Choose")          # a button, not a table checkbox
+    choose.click().run()
+    assert at.session_state["match_id"] == "m1" and any(b.label == "Chosen" for b in at.button)
 
 
 def test_event_explorer_filters_summarises_and_compares(app_env):

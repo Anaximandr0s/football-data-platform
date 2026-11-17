@@ -2,8 +2,6 @@
 
 Frame of every Gold table: origin bottom-left, HOME attacks toward x = 105 and AWAY toward x = 0, in both halves.
 """
-import re
-
 import matplotlib
 
 matplotlib.use("Agg")
@@ -13,25 +11,18 @@ import pandas as pd  # noqa: E402
 from matplotlib.patches import Rectangle  # noqa: E402
 from mplsoccer import Pitch  # noqa: E402
 
+import theme  # noqa: E402
+
 PITCH_L, PITCH_W = 105.0, 68.0
 ZONES_X, ZONES_Y = 6, 4
-DEFAULT_COLORS = {"HOME": "#e63946", "AWAY": "#1d8fe1"}
+DEFAULT_COLORS = dict(theme.TEAM)
 BG = "#0b1410"   # the app background (.streamlit/config.toml)
-_HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
 
 
-def team_colors(teams: pd.DataFrame, match_id: str) -> dict[str, str]:
-    """Kit colours of the match. The source sometimes gives none or two similar ones: fall back to fixed colours."""
-    rows = teams[teams.match_id == match_id].set_index("team_id")
-    colors = dict(DEFAULT_COLORS)
-    for side in ("HOME", "AWAY"):
-        value = rows["team_color"].get(side) if "team_color" in rows else None
-        # a kit colour that is too dark disappears on the dark pitch (m001 HOME is #363636): keep the default then
-        if isinstance(value, str) and _HEX.match(value) and _luminance(value) >= 0.25:
-            colors[side] = value
-    if _distance(colors["HOME"], colors["AWAY"]) < 90:
-        colors = dict(DEFAULT_COLORS)
-    return colors
+def team_colors(teams: pd.DataFrame, match_id: str) -> dict[str, str]:  # noqa: ARG001 - one palette for all
+    """The team colours of every match: Okabe-Ito blue (HOME) and vermillion (AWAY), readable by colour-blind
+    visitors and on both themes. Kit colours are not used: a white kit vanishes on a light page."""
+    return dict(theme.TEAM)
 
 
 def possession_bar(home_share: float, colors: dict[str, str], names: dict[str, str]) -> str:
@@ -49,11 +40,6 @@ def _luminance(color: str) -> float:
     """Relative brightness 0 (black) to 1 (white)."""
     r, g, b = (int(color[i:i + 2], 16) / 255 for i in (1, 3, 5))
     return 0.2126 * r + 0.7152 * g + 0.0722 * b
-
-
-def _distance(a: str, b: str) -> float:
-    ra, rb = (np.array([int(c[i:i + 2], 16) for i in (1, 3, 5)]) for c in (a, b))
-    return float(np.linalg.norm(ra - rb))
 
 
 def draw_pitch(figsize=(9, 6)):
@@ -122,21 +108,4 @@ def pass_network(network: pd.DataFrame, players: pd.DataFrame, color: str, min_p
         pitch.scatter(p.avg_x, p.avg_y, ax=ax, s=size, facecolor=color, edgecolor=rim, lw=1.4, zorder=4)
         ax.text(p.avg_x, p.avg_y, str(int(p.shirt_number)), ha="center", va="center", color=label,
                 fontsize=9, fontweight="bold", zorder=5)
-    return fig
-
-
-def ranking_bars(df: pd.DataFrame, metric: str, colors: dict[str, str], top: int = 10) -> plt.Figure:
-    best = df.nlargest(top, metric).iloc[::-1]
-    fig, ax = plt.subplots(figsize=(7, 0.42 * len(best) + 1.2))
-    fig.patch.set_facecolor(BG)
-    ax.set_facecolor(BG)
-    ax.barh(best.short_name, best[metric], color=[colors[t] for t in best.team_id])
-    ax.tick_params(colors="#c9d3cd")
-    for spine in ax.spines.values():
-        spine.set_visible(False)
-    ax.xaxis.label.set_color("#c9d3cd")
-    ax.set_xlabel(metric)
-    for y, v in enumerate(best[metric]):
-        ax.text(v, y, f" {v:g}", va="center", color="#c9d3cd", fontsize=9)
-    fig.tight_layout()
     return fig

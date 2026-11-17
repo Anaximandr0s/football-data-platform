@@ -8,10 +8,12 @@ import duckdb
 import streamlit as st
 
 import sitemap
+import theme
 from data import CREDIT, library, match_label, table
 
 st.set_page_config(page_title="MatchLens", page_icon=":material/sports_soccer:", layout="wide")
 sitemap.style()
+st.logo(theme.LOGO, size="large", link=None)       # one file (assets/matchlens-logo.svg), at the top of the sidebar
 
 
 def match_choices() -> tuple[list[str], dict[str, str]]:
@@ -28,7 +30,6 @@ def match_choices() -> tuple[list[str], dict[str, str]]:
 def sidebar() -> None:
     # "view" and "match_id" are plain session keys, never widget keys: Streamlit may drop a widget's key when the page
     # changes, and both must follow the visitor. The widgets only read them and write the new choice back.
-    st.sidebar.markdown("<div class='ml-side-logo'>Match<span>Lens</span></div>", unsafe_allow_html=True)
     view = st.session_state.get("view")
     if view:
         picked = st.sidebar.segmented_control("View", list(sitemap.VIEWS), default=view,

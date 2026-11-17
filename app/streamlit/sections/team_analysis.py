@@ -5,12 +5,13 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
+import charts
 import clock
 import coach
+import glossary
 import sitemap
 import views
 import viz
-from charts import TEXT
 from data import CAVEAT, clock_bounds, current_match, require_gold, table
 
 PHASES = {"in_possession": "With the ball", "out_of_possession": "Without the ball", "unknown": "Ball dead or contested"}
@@ -48,32 +49,38 @@ for col, (phase, title) in zip(cols, PHASES.items(), strict=True):
     r = s.loc[phase]
     col.markdown(f"<div class='ml-card'><div class='ml-kicker'>{title.upper()}</div>"
                  f"<div class='ml-stats'><div><span>Width</span><b>{r.width:.0f} m</b></div>"
-                 f"<div><span>Outfield block length</span><b>{r.length:.0f} m</b></div>"
+                 f"<div><span>{glossary.term('outfield block', 'Outfield block')} length</span><b>{r.length:.0f} m</b></div>"
                  f"<div><span>Defensive line from own goal</span><b>{r.defensive_line_height:.0f} m</b></div>"
-                 f"<div><span>Seconds used</span><b>{int(r.seconds_used)}</b></div></div>"
+                 f"<div><span>Based on</span><b>{r.seconds_used / 60:.0f} minutes</b></div></div>"
                  f"<div class='ml-meta'>{r.detected_share:.0%} of the positions seen by the camera</div></div>",
                  unsafe_allow_html=True)
-st.caption("Outfield players only, mean over the tracked seconds of each phase. Outfield block length leaves the "
+st.caption("Outfield players only, mean over the tracked minutes of each phase. The outfield block leaves the "
            "goalkeeper out (SkillCorner's own length includes him). The defensive line is the 4 deepest outfield players.")
 say(coach.shape(shape_rows, team, short))
 
 # ---------------------------------------------------------------- pressing (C3)
 st.subheader("Pressing")
-p = press.assign(team_name=press.team_id.map(short), label=press.window_label + "'")
+p = press.assign(team_name=press.team_id.map(short), label=press.window_label + "'",
+                 note=press.ppp_greyed.map({True: "too few passes", False: ""}))
 order = list(p.sort_values("window_index").label.unique())
-chart = alt.Chart(p).mark_bar(cornerRadius=2).encode(
-    x=alt.X("label:N", sort=order, title=None, axis=alt.Axis(labelColor=TEXT, labelAngle=0)),
-    xOffset=alt.XOffset("team_name:N", sort=[short["HOME"], short["AWAY"]]),
-    y=alt.Y("ppp:Q", title="per opponent pass", axis=alt.Axis(labelColor=TEXT, titleColor=TEXT)),
-    color=alt.Color("team_id:N", scale=alt.Scale(domain=list(colors), range=list(colors.values())), legend=None),
-    opacity=alt.condition("datum.ppp_greyed", alt.value(0.3), alt.value(1)),
-    tooltip=[alt.Tooltip("team_name:N", title="team"), alt.Tooltip("label:N", title="minutes"),
-             alt.Tooltip("ppp:Q", format=".2f"), alt.Tooltip("defensive_actions:Q", title="defensive actions"),
-             alt.Tooltip("opponent_passes:Q", title="opponent passes")]).properties(height=220)
-st.altair_chart(chart, width="stretch")
-st.caption("Pressures, tackles and fouls per pass of the opponent, per 15 minutes of the football clock (45+ and 90+: "
-           "stoppage time). Higher = more intense. Faded: the opponent made fewer than 10 passes in that window, too "
-           "few to trust the ratio.")
+st.markdown(views.team_key(colors, short) + "<span class='ml-key'><i style='border:2px solid currentColor'></i>"
+            "empty outline: too few opponent passes to trust</span>", unsafe_allow_html=True)
+x = alt.X("label:N", sort=order, title=None, axis=alt.Axis(labelAngle=0))
+offset = alt.XOffset("team_name:N", sort=[short["HOME"], short["AWAY"]])
+team_color = alt.Color("team_id:N", scale=alt.Scale(domain=list(colors), range=list(colors.values())), legend=None)
+tips = [alt.Tooltip("team_name:N", title="team"), alt.Tooltip("label:N", title="minutes"),
+        alt.Tooltip("ppp:Q", format=".2f"), alt.Tooltip("defensive_actions:Q", title="defensive actions"),
+        alt.Tooltip("opponent_passes:Q", title="opponent passes")]
+base = alt.Chart(p).encode(x=x, xOffset=offset, y=alt.Y("ppp:Q", title="actions per opponent pass"), tooltip=tips)
+full = base.transform_filter("!datum.ppp_greyed").mark_bar(cornerRadius=2).encode(color=team_color)
+empty = base.transform_filter("datum.ppp_greyed").mark_bar(cornerRadius=2, fillOpacity=0, strokeWidth=2,
+                                                          strokeDash=[4, 3]).encode(stroke=team_color)
+note = base.transform_filter("datum.ppp_greyed").mark_text(dy=-10, fontSize=13, fontStyle="italic").encode(
+    text="note:N")
+st.altair_chart(charts.finish(alt.layer(full, empty, note).properties(height=240)), width="stretch")
+st.markdown(f"<div class='ml-meta'>{glossary.term('pressing', 'Pressing')}: pressures, tackles and fouls per pass of the "
+            "opponent, per 15 minutes of the football clock (45+ and 90+: stoppage time). Higher = more intense.</div>",
+            unsafe_allow_html=True)
 say(coach.pressing(press, profile, team, short))
 
 # ---------------------------------------------------------------- build-up and attack side (C4, C5)
@@ -83,16 +90,20 @@ with left:
     b = build.set_index("team_id").loc[team]
     lanes = pd.DataFrame({"lane": ["Left", "Centre", "Right"],
                           "share": [b.share_left, b.share_centre, b.share_right]}).fillna(0)
-    st.altair_chart(alt.Chart(lanes).mark_bar(color=colors[team], cornerRadius=3).encode(
-        y=alt.Y("lane:N", sort=["Left", "Centre", "Right"], title=None, axis=alt.Axis(labelColor=TEXT)),
-        x=alt.X("share:Q", title=None, axis=alt.Axis(format="%", labelColor=TEXT)),
-        tooltip=[alt.Tooltip("share:Q", format=".0%")]).properties(height=150), width="stretch")
+    lane_base = alt.Chart(lanes).encode(y=alt.Y("lane:N", sort=["Left", "Centre", "Right"], title=None),
+                                        x=alt.X("share:Q", title=None, axis=alt.Axis(format="%")))
+    st.altair_chart(charts.finish((lane_base.mark_bar(color=colors[team], cornerRadius=3)
+                                   + lane_base.mark_text(align="left", dx=4, fontSize=charts.FONT).encode(
+                                       text=alt.Text("share:Q", format=".0%"))).properties(height=160)),
+                    width="stretch")
     st.caption("Successful passes ending in the final third, by lane, seen by the attacking team (left = its left).")
     say(coach.build_up(build, team, short))
 with right:
     st.subheader("Space control")
     say(coach.space(space, team, short))
-    st.caption("Each 1 m cell of the pitch belongs to the nearest player; the share is averaged over the tracked seconds.")
+    st.markdown(f"<div class='ml-meta'>{glossary.term('space control', 'Space control')}: each 1 m cell of the pitch "
+                f"belongs to the nearest player; the share is averaged over the {glossary.term('tracked')} seconds."
+                "</div>", unsafe_allow_html=True)
 
 # ---------------------------------------------------------------- shots and passes (F6)
 shots_col, net_col = st.columns(2)

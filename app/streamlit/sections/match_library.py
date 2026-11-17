@@ -1,6 +1,8 @@
-"""Match library (MATCHES): every stored match, newest first. Selecting a row makes it the match of every page."""
+"""Match library (MATCHES): every stored match, newest first, with a Choose button: the chosen match follows the visitor
+on every page. Team names are the ones fans use (gold_match_library.home_team_short, from the dbt seed team_names)."""
 import streamlit as st
 
+import glossary
 import sitemap
 from data import CREDIT, library, require_gold
 
@@ -12,35 +14,35 @@ if lib is None:
     st.stop()
 
 
-def select_match() -> None:
-    rows = st.session_state["library_table"].selection.rows
-    if rows:
-        st.session_state["match_id"] = shown.iloc[rows[0]].match_id
+def choose(match_id: str) -> None:
+    st.session_state["match_id"] = match_id
 
 
-shown = lib.assign(score=lib.home_score.astype(str) + " - " + lib.away_score.astype(str),
-                   tracked_pct=(lib.tracked_share * 100).round()).reset_index(drop=True)
 current = st.session_state.get("match_id")
 c = st.columns(3)
 c[0].metric("Matches", len(lib))
-c[1].metric("Teams", len(set(lib.home_team) | set(lib.away_team)))
-c[2].metric("Tracked, on average", f"{lib.tracked_share.mean():.0%}")
+c[1].metric("Teams", len(set(lib.home_team_short) | set(lib.away_team_short)))
+c[2].metric("Tracked, on average", f"{lib.tracked_share.mean():.0%}", help=glossary.help("tracked"))
 
-st.dataframe(
-    shown[["match_date", "competition", "round", "home_team", "score", "away_team", "stadium", "tracked_pct"]],
-    key="library_table", on_select=select_match, selection_mode="single-row", hide_index=True, width="stretch",
-    column_config={
-        "match_date": st.column_config.DateColumn("Date", format="D MMM YYYY"),
-        "competition": "Competition", "round": "Round", "home_team": "Home", "score": "Score", "away_team": "Away",
-        "stadium": "Stadium",
-        "tracked_pct": st.column_config.ProgressColumn("Tracked", help="Share of the match the camera tracked",
-                                                       format="%d%%", min_value=0, max_value=100),
-    })
+for row in lib.itertuples():
+    chosen = row.match_id == current
+    with st.container(border=True):
+        date, match, where, button = st.columns([1.3, 3.2, 2.2, 1.3], vertical_alignment="center")
+        date.markdown(f"**{row.match_date:%d %b %Y}**<div class='ml-meta'>{row.competition} · {row.round}</div>",
+                      unsafe_allow_html=True)
+        match.markdown(f"<div class='ml-board'><div class='team'>{row.home_team_short}</div>"
+                       f"<div class='score'>{row.home_score} - {row.away_score}</div>"
+                       f"<div class='team away'>{row.away_team_short}</div></div>", unsafe_allow_html=True)
+        where.markdown(f"<div class='ml-meta'>{row.stadium}<br>{glossary.term('tracked', 'Tracked')}: "
+                       f"{row.tracked_share:.0%} of the match</div>", unsafe_allow_html=True)
+        button.button("Chosen" if chosen else "Choose", key=f"lib_{row.match_id}", on_click=choose,
+                      args=(row.match_id,), type="primary" if chosen else "secondary", disabled=chosen,
+                      icon=":material/check:" if chosen else None, width="stretch")
 if current in set(lib.match_id):
     row = lib[lib.match_id == current].iloc[0]
-    st.success(f"Current match: {row.home_team} {row.home_score} - {row.away_score} {row.away_team} "
-               f"({row.match_date:%d %B %Y}). Select a row to change it; every page follows.")
+    st.success(f"Current match: {row.home_team_short} {row.home_score} - {row.away_score} {row.away_team_short} "
+               f"({row.match_date:%d %B %Y}). Every page shows this match.")
     st.page_link("sections/replay.py", label=f"Replay {row.home_team_short} - {row.away_team_short}",
                  icon=":material/replay:")
-st.caption("Tracked = share of the two periods with player positions: the camera loses the play mostly when the ball is "
+st.caption("Tracked = share of the two halves with player positions: the camera loses the play mostly when the ball is "
            "dead. " + CREDIT)

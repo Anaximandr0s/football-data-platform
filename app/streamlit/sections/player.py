@@ -2,11 +2,11 @@
 5 scores (F3), badges, top speed from detected positions (F5), heatmap, shots and passes on the pitch, the same player in
 other matches (F8). Coach mode adds the raw values and rates, the thresholds, fatigue (C6), the 5-minute intensity and
 the player's events (E1)."""
-import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
 
 import cards
+import charts
 import clock
 import pitch
 import sitemap
@@ -120,7 +120,9 @@ else:
         match=lambda d: d.match_id.map(lambda m: f"{dates[m]:%d %b %Y}" if m in dates else m) + " v " + d.opponent_name)
     st.dataframe(view.set_index("match")[[c for c, _, _ in SCORES] + ["tracked_minutes", "top_speed_kmh"]]
                  .rename(columns={**{c: t for c, t, _ in SCORES}, "tracked_minutes": "Tracked min",
-                                  "top_speed_kmh": "Top speed (km/h)"}).T, width="stretch")
+                                  "top_speed_kmh": "Top speed (km/h)"}).T
+                 .map(lambda v: "–" if pd.isna(v) else f"{v:g}"), width="stretch")
+    st.caption("–: not ranked in that match (under 20 tracked minutes).")
     st.caption("Each score ranks the player inside its own match, so the opponent differs from column to column.")
 
 # ---------------------------------------------------------------- coach mode
@@ -176,8 +178,7 @@ if coach:
     metrics = {"distance_km": "Distance (km)", "sprint_count": "Sprints", "passes": "Passes",
                "passes_received": "Passes received", "pressures": "Pressures", "tackles": "Tackles", "shots": "Shots"}
     metric = st.selectbox("Metric", list(metrics), format_func=metrics.get)
-    fig = viz.ranking_bars(stats.dropna(subset=[metric]), metric, colors)
-    st.pyplot(fig, width="content")
-    plt.close(fig)
+    st.altair_chart(charts.finish(charts.ranking(stats.dropna(subset=[metric]), metric, metrics[metric], colors,
+                                                 short)), width="stretch")
 
 st.caption(CAVEAT)

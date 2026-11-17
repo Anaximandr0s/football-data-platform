@@ -1,8 +1,13 @@
 """Home: the MatchLens door. Choose a match from the library, then say who you are; the menu then shows that view."""
+import time
+
 import streamlit as st
 
+import live
+import live_feed
 import sitemap
-from data import CREDIT, library, require_gold
+import theme
+from data import CREDIT, fan_names, library, require_gold
 
 PERSONAS = {
     "fan": ("I am a Fan", ":material/stadium:",
@@ -21,9 +26,22 @@ def choose_view(view: str) -> None:
     st.session_state["go_to"] = sitemap.FIRST_PAGE[view]
 
 
-st.markdown("<div class='ml-logo'>Match<span>Lens</span></div>"
-            "<div class='ml-tagline'>Tracking data, explained: for the fan in the stands and the coach on the bench.</div>",
+st.image(theme.LOGO, width=380)
+st.markdown("<div class='ml-tagline'>Tracking data, explained: for the fan in the stands and the coach on the bench.</div>",
             unsafe_allow_html=True)
+
+feed = live_feed.start_feed()                     # None without Kafka: then there is nothing live to announce
+if feed is not None:
+    states = feed.snapshot()
+    playing = live.now_playing(states, int(time.time() * 1000))
+    if playing:
+        m = playing[0]
+        teams = " v ".join(live.team_name(states[m], t, fan_names(m)) for t in ("HOME", "AWAY"))
+        with st.container(border=True):
+            left, right = st.columns([4, 1], vertical_alignment="center")
+            left.markdown(f"<span class='ml-badge'>Live now</span> &nbsp;**{teams}** is being played right now.",
+                          unsafe_allow_html=True)
+            right.page_link("sections/live_match.py", label="Watch", icon=":material/play_circle:")
 
 require_gold()
 lib = library()

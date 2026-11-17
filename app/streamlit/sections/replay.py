@@ -135,9 +135,9 @@ def replay_view() -> None:
     with right:
         panel(ts)
     st.markdown("**Space control** (S1, mean per 5 minutes; the gold line is now)")
-    st.altair_chart(charts.space_control(space, colors["HOME"], names["HOME"], last / 60,
-                                         clock.axis_ticks(*bounds, end_ts=last), bounds[1] / 60, ts / 60),
-                    width="stretch")
+    st.altair_chart(charts.finish(charts.space_control(space, colors["HOME"], names["HOME"], last / 60,
+                                                       clock.axis_ticks(*bounds, end_ts=last), bounds[1] / 60,
+                                                       ts / 60)), width="stretch")
 
 
 replay_view()
