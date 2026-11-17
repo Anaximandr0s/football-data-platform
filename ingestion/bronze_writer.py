@@ -11,11 +11,13 @@ Rows are stored as received + kafka_partition, kafka_offset, kafka_ts, ingested_
 header, null for messages sent before it existed), with the
 fixed column types of schemas.py. A file is written every 10 s or 5,000 rows, per (table, match).
 Offsets are committed after the upload, so delivery is at-least-once: Silver must deduplicate.
+On SIGTERM (docker stop) or Ctrl+C it writes what it holds, commits and exits, instead of being killed 10 s later.
 """
 import argparse
 import io
 import json
 import os
+import signal
 import sys
 import time
 from collections import defaultdict
@@ -51,20 +53,19 @@ def object_key(table: str, match_id: str, replay_id: str | None, day: str, ms: i
     return f"{table}/match_id={match_id}/replay_id={replay_id or 'none'}/ingest_date={day}/part-{ms}-{part}.parquet"
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
-    ap.add_argument("--exit-when-idle", type=float, default=0, metavar="SECONDS",
-                    help="stop after this many seconds without message (0 = never)")
-    a = ap.parse_args()
+class Stop:
+    """Set by SIGTERM: the loop ends after its current poll, then writes and commits what it holds."""
+    def __init__(self):
+        self.requested = False
 
-    s3 = boto3.client("s3", endpoint_url=S3_ENDPOINT, region_name="us-east-1",
-                      aws_access_key_id=os.environ["MINIO_ROOT_USER"],
-                      aws_secret_access_key=os.environ["MINIO_ROOT_PASSWORD"])
-    c = Consumer({"bootstrap.servers": KAFKA_BOOTSTRAP,
-                  "group.id": os.getenv("BRONZE_GROUP", "bronze-writer"),
-                  "auto.offset.reset": "earliest", "enable.auto.commit": False})
-    c.subscribe(list(TOPICS.values()))
+    def __call__(self, _signum, _frame) -> None:
+        self.requested = True
 
+
+def run(c, s3, exit_when_idle: float = 0, stop: Stop | None = None) -> None:
+    """Consumes until `stop` is requested (or idle for `exit_when_idle` s), writing a file per (table, match, replay)
+    every BATCH_SECONDS or BATCH_MSGS. Whatever ends the loop, the buffer is written and committed before closing."""
+    stop = stop or Stop()
     buf: dict[tuple[str, str, str | None], list[dict]] = defaultdict(list)
     n_buf, part, got_any = 0, 0, False
     last_flush = last_msg = time.time()
@@ -82,7 +83,7 @@ def main() -> None:
         buf, n_buf, last_flush = defaultdict(list), 0, time.time()
 
     try:
-        while True:
+        while not stop.requested:
             msg = c.poll(1.0)
             if msg is not None:
                 if msg.error():
@@ -97,13 +98,32 @@ def main() -> None:
                     got_any, last_msg = True, time.time()
             if n_buf and (n_buf >= BATCH_MSGS or time.time() - last_flush >= BATCH_SECONDS):
                 flush()
-            if a.exit_when_idle and got_any and time.time() - last_msg > a.exit_when_idle:
-                flush()
+            if exit_when_idle and got_any and time.time() - last_msg > exit_when_idle:
                 break
     except KeyboardInterrupt:
-        flush()
+        pass
     finally:
+        flush()
         c.close()
+    print("stopped: buffer written and committed", flush=True)
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
+    ap.add_argument("--exit-when-idle", type=float, default=0, metavar="SECONDS",
+                    help="stop after this many seconds without message (0 = never)")
+    a = ap.parse_args()
+
+    s3 = boto3.client("s3", endpoint_url=S3_ENDPOINT, region_name="us-east-1",
+                      aws_access_key_id=os.environ["MINIO_ROOT_USER"],
+                      aws_secret_access_key=os.environ["MINIO_ROOT_PASSWORD"])
+    c = Consumer({"bootstrap.servers": KAFKA_BOOTSTRAP,
+                  "group.id": os.getenv("BRONZE_GROUP", "bronze-writer"),
+                  "auto.offset.reset": "earliest", "enable.auto.commit": False})
+    c.subscribe(list(TOPICS.values()))
+    stop = Stop()
+    signal.signal(signal.SIGTERM, stop)
+    run(c, s3, a.exit_when_idle, stop)
 
 
 if __name__ == "__main__":
