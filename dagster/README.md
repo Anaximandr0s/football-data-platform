@@ -32,8 +32,9 @@ partition only says which match triggered it.
 - **One Gold build at a time**: dbt, `soda_gold` and `match_report` open the DuckDB file; they share the pool `duckdb`
   (limit 1, `dagster.yaml`). A second match ending meanwhile waits for the slot instead of colliding on the file.
 - **Damaged-data demo**: launch `match_pipeline` from the UI with the config
-  `ops: {silver_soda_silver: {config: {inject_damage: true}}}`. The Silver checks run on a damaged view (the data is not
-  touched), fail, and Gold is not built.
+  `ops: {silver_soda_silver: {config: {inject_damage: true}}}` and the tag `purpose=demo`. The Silver checks run on a
+  damaged view (the data is not touched), fail, and Gold is not built. The tag keeps this failure, wanted, out of the
+  run-success service level (monitoring); any run started for a test gets a `purpose` tag.
 
 Runs are queued (at most 2 at once) and executed by the daemon. History lives in the volume `dagster-storage`.
 

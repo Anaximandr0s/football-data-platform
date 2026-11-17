@@ -5,8 +5,10 @@ pytest.importorskip("prometheus_client")
 import pipeline_exporter as pe  # noqa: E402
 
 
-def gql_run(run_id, job, status, start, end, partition=None, run_key=None, steps=()):
+def gql_run(run_id, job, status, start, end, partition=None, run_key=None, steps=(), purpose=None):
     tags = [{"key": "dagster/partition", "value": partition}] if partition else []
+    if purpose:
+        tags.append({"key": "purpose", "value": purpose})
     if run_key:
         tags += [{"key": "dagster/run_key", "value": run_key}, {"key": "dagster/sensor_name", "value": "replay_end"}]
     return {"runId": run_id, "jobName": job, "status": status, "startTime": start, "endTime": end, "tags": tags,
@@ -21,7 +23,7 @@ RUNS = pe.runs_from_graphql([
     gql_run("r1", "match_pipeline", "SUCCESS", 1000, 1300, "m001", "m001-20261116T100000Z",
             [("bronze", "SUCCESS", 1001, 1010), ("gold", "SUCCESS", 1100, 1240)]),
     gql_run("r2", "match_pipeline", "FAILURE", 2000, 2050, "m001", None,
-            [("bronze", "SUCCESS", 2001, 2010), ("silver_soda_silver", "FAILURE", 2020, 2050)]),
+            [("bronze", "SUCCESS", 2001, 2010), ("silver_soda_silver", "FAILURE", 2020, 2050)], purpose="demo"),
     gql_run("r3", "match_pipeline", "SUCCESS", 3000, 3100, "m002", "m002-20261116T110000Z",
             [("bronze", "SUCCESS", 3001, 3020)]),
 ])
@@ -36,7 +38,8 @@ def test_graphql_runs_take_the_shape_dagster_writes_to_runs_json():
 
 def test_runs_are_counted_and_the_latest_run_of_each_match_says_if_it_failed():
     s = pe.dagster_samples(RUNS, now=4000)
-    assert values(s, "football_dagster_runs") == {("match_pipeline", "FAILURE"): 1, ("match_pipeline", "SUCCESS"): 2}
+    assert values(s, "football_dagster_runs") == {("match_pipeline", "FAILURE", "true"): 1,      # the demo
+                                                  ("match_pipeline", "SUCCESS", "false"): 2}
     assert values(s, "football_dagster_latest_run_failed") == {("match_pipeline", "m001", "r2"): 1.0,
                                                                 ("match_pipeline", "m002", "r3"): 0.0}
     assert values(s, "football_dagster_step_duration_seconds")[("match_pipeline", "bronze")] == 19   # the latest

@@ -29,7 +29,12 @@ groups:
         expr: histogram_quantile(0.95, sum by (le) (increase(football_live_delay_seconds_bucket[7d])))
       - record: slo:gold_freshness_seconds:max
         expr: max(football_gold_freshness_seconds)
+      # runs started on purpose for a test (damaged-data demo, benchmark) are left out; the raw rate is kept beside it
       - record: slo:run_success_ratio:7d
+        expr: |
+          sum(football_dagster_runs{status="SUCCESS", on_purpose="false"})
+            / sum(football_dagster_runs{status=~"SUCCESS|FAILURE", on_purpose="false"})
+      - record: slo:run_success_ratio_raw:7d
         expr: sum(football_dagster_runs{status="SUCCESS"}) / sum(football_dagster_runs{status=~"SUCCESS|FAILURE"})
       - record: slo:blocking_checks_pass_ratio
         expr: 1 - (sum(football_soda_checks{result!~"pass|warn"}) or vector(0)) / sum(football_soda_checks)

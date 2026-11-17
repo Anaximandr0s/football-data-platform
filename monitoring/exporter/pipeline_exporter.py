@@ -31,7 +31,9 @@ FINISHED = {"SUCCESS", "FAILURE", "CANCELED"}
 HELP = {
     "football_exporter_source_up": "1 when the exporter could read this source at the last scrape",
     "football_dagster_up": "1 when Dagster answered the last GraphQL query",
-    "football_dagster_runs": "Dagster runs started in the last 7 days, by job and status",
+    "football_dagster_runs": "Dagster runs started in the last 7 days, by job, status and whether they were started "
+                             "on purpose for a test (tag purpose: damaged-data demo, benchmark)",
+    "football_benchmark_scenario": "1 while this scenario of make benchmark runs (Grafana annotations)",
     "football_dagster_latest_run_failed": "1 when the latest finished run of this job and match failed",
     "football_dagster_step_duration_seconds": "Duration of each step in the latest run that finished it",
     "football_dagster_last_success_timestamp_seconds": "End of the latest successful match_pipeline run, per match",
@@ -73,7 +75,8 @@ def runs_from_graphql(results: list[dict]) -> list[dict]:
                     "match_id": tags.get("dagster/partition"),
                     "replay_id": tags.get("replay_id") or (tags.get("dagster/run_key")
                                                            if tags.get("dagster/sensor_name") else None),
-                    "started": min(starts, default=r["startTime"]), "ended": r["endTime"], "steps": steps})
+                    "started": min(starts, default=r["startTime"]), "ended": r["endTime"], "steps": steps,
+                    "purpose": tags.get("purpose", "")})
     return out
 
 
@@ -81,8 +84,10 @@ def dagster_samples(runs: list[dict], now: float) -> list[Sample]:
     out = []
     counts: dict[tuple, int] = {}
     for r in runs:
-        counts[(r["job"], r["status"])] = counts.get((r["job"], r["status"]), 0) + 1
-    out += [Sample("football_dagster_runs", {"dagster_job": j, "status": s}, n) for (j, s), n in sorted(counts.items())]
+        key = (r["job"], r["status"], "true" if r.get("purpose") else "false")
+        counts[key] = counts.get(key, 0) + 1
+    out += [Sample("football_dagster_runs", {"dagster_job": j, "status": s, "on_purpose": p}, n)
+            for (j, s, p), n in sorted(counts.items())]
 
     done = sorted((r for r in runs if r["status"] in FINISHED and r["ended"]), key=lambda r: r["ended"])
     latest = {(r["job"], r["match_id"] or ""): r for r in done}          # the last one wins
@@ -226,7 +231,13 @@ def spark_source(now: float) -> list[Sample]:
     return spark_samples(read_json(ROOT / "data" / "streaming" / "progress.json"))
 
 
-SOURCES = {"dagster": dagster_source, "dbt": dbt_source, "soda": soda_source, "spark": spark_source}
+def benchmark_source(now: float) -> list[Sample]:
+    current = read_json(ROOT / "data" / "benchmark" / "current.json")       # written by scripts/benchmark.py
+    return [Sample("football_benchmark_scenario", {"scenario": current["scenario"]}, 1.0)] if current else []
+
+
+SOURCES = {"dagster": dagster_source, "dbt": dbt_source, "soda": soda_source, "spark": spark_source,
+           "benchmark": benchmark_source}
 
 
 def collect_samples(now: float) -> list[Sample]:

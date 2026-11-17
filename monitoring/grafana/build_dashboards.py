@@ -106,6 +106,12 @@ def dashboard(uid: str, title: str, description: str, panels: list, refresh="15s
     return {"uid": uid, "title": title, "description": description, "tags": ["matchlens"], "editable": False,
             "schemaVersion": 39, "version": 1, "refresh": refresh, "time": {"from": time_from, "to": "now"},
             "timezone": "browser", "graphTooltip": 1, "panels": out,
+            "annotations": {"list": [{"name": "Benchmark scenario", "datasource": DS, "enable": True,
+                                      "iconColor": "purple", "expr": "football_benchmark_scenario == 1",
+                                      "target": {"expr": "football_benchmark_scenario == 1", "refId": "Anno",
+                                                 "interval": "15s"},
+                                      "titleFormat": "benchmark: {{scenario}}", "step": "15s",
+                                      "useValueForTime": False}]},
             "links": [{"type": "dashboards", "tags": ["matchlens"], "asDropdown": False, "title": "MatchLens"}]}
 
 
@@ -216,7 +222,8 @@ def slo() -> dict:
         ("Gold freshness · goal < 10 min", "slo:gold_freshness_seconds:max", "s", below(600),
          "The slowest match: from the final whistle of its latest replay to Gold ready."),
         ("Run success · goal ≥ 95 %", "slo:run_success_ratio:7d", "percentunit", above(0.95),
-         "Dagster runs that succeeded, over 7 days. The damaged-data demo counts as a failure."),
+         "Dagster runs that succeeded, over 7 days, without the runs started on purpose for a test (tag purpose: "
+         "the damaged-data demo, the benchmark rebuild). The next tile counts every run."),
         ("Blocking checks · goal 100 %", "slo:blocking_checks_pass_ratio", "percentunit", above(1),
          "Soda checks that passed in the last run of each layer. All of them block the pipeline."),
         ("App up · goal ≥ 99 %", "slo:app_up_ratio:7d", "percentunit", above(0.99),
@@ -226,12 +233,18 @@ def slo() -> dict:
                    "Five promises the platform makes, measured over the last 7 days (the retention of Prometheus). "
                    "**Green**: the promise is kept. **Red**: it is not. The graphs below show how each one moved.",
                    h=3)]
-    for i, (title, expr, unit, steps, description) in enumerate(goals):
-        panels.append(stat(title, expr, unit, steps, w=5 if i < 4 else 4, h=6, description=description,
+    for title, expr, unit, steps, description in goals[:3]:
+        panels.append(stat(title, expr, unit, steps, w=4, h=6, description=description,
                            decimals=2 if unit == "s" else 1))
+    panels.append(stat("Run success, all runs", "slo:run_success_ratio_raw:7d", "percentunit", w=4, h=6,
+                       steps=[{"color": GREY, "value": None}], decimals=1,
+                       description="Every run, the ones started on purpose for tests included: for reference."))
+    for title, expr, unit, steps, description in goals[3:]:
+        panels.append(stat(title, expr, unit, steps, w=4, h=6, description=description, decimals=1))
     for title, expr, unit, steps, _ in goals:
-        panels.append(series(title.split(" · ")[0], [(expr, "measured")], unit, w=8, h=7, steps=steps, min_=0,
-                             max_=1 if unit == "percentunit" else None))
+        extra = [("slo:run_success_ratio_raw:7d", "all runs")] if expr == "slo:run_success_ratio:7d" else []
+        panels.append(series(title.split(" · ")[0], [(expr, "measured"), *extra], unit, w=8, h=7, steps=steps,
+                             min_=0, max_=1 if unit == "percentunit" else None))
     return dashboard("slo", "MatchLens · Service levels", "Five objectives with green or red status.", panels,
                      refresh="1m", time_from="now-7d")
 
