@@ -168,6 +168,11 @@ def dbt_manifest() -> dict | None:
     return _manifest(str(path), path.stat().st_mtime) if path.exists() else None
 
 
+def doc_text(doc: str) -> str:
+    """The whole text of docs/<doc>."""
+    return (ROOT / "docs" / doc).read_text(encoding="utf-8")
+
+
 def doc_section(doc: str, heading: str) -> str:
     """The text of one `## heading` section of docs/<doc>, so a page and its document never disagree."""
     text = (ROOT / "docs" / doc).read_text(encoding="utf-8")

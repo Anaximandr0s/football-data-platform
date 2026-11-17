@@ -68,16 +68,21 @@ def test_pipeline_page_draws_the_graph_the_runs_and_a_gold_lineage(app_env, monk
     monkeypatch.setenv("DBT_MANIFEST", str(Path(app_env["GOLD_DUCKDB_PATH"]).parent / "target" / "manifest.json"))
     at = AppTest.from_file(str(APP / "sections/pipeline_lineage.py"), default_timeout=90).run()
     assert not at.exception
+    assert [s.value for s in at.subheader] == ["Where a Gold table comes from"]      # the simple graph first
+    at.toggle[0].set_value(True).run()                                              # "Show details"
     assert [s.value for s in at.subheader] == ["The asset graph", "Latest runs", "Where a Gold table comes from"]
     assert list(at.dataframe[0].value["result"]) == ["failed", "success"]
     assert at.selectbox[1].value == "gold_player_match_stats"
+    meanings = at.dataframe[1].value
+    assert len(meanings) > 10 and "–" not in set(meanings.meaning)                  # every column explained
 
 
 def test_pipeline_page_before_any_run_says_what_to_start(app_env, monkeypatch, tmp_path):
     monkeypatch.setenv("PIPELINE_OUT_DIR", str(tmp_path))
     monkeypatch.setenv("DBT_MANIFEST", str(tmp_path / "none.json"))
     at = AppTest.from_file(str(APP / "sections/pipeline_lineage.py"), default_timeout=90).run()
-    assert not at.exception
+    assert not at.exception and "make gold" in at.info[0].value
+    at.toggle[0].set_value(True).run()
     assert "make dagster" in at.info[0].value and "make gold" in at.info[1].value
 
 
@@ -85,6 +90,23 @@ def test_sources_page_shows_the_source_the_limits_and_the_external_checks(app_en
     at = AppTest.from_file(str(APP / "sections/sources_limits.py"), default_timeout=90).run()
     assert not at.exception
     text = " ".join(m.value for m in at.markdown)
-    assert "MIT licence" in text and "**Gaps.**" in text
+    assert "MIT licence" in text and "The camera does not see everything" in text
+    words = text.lower()
+    assert "bronze" not in words and "normalis" not in words and " ts " not in words      # no technical words
     assert any("FBref match report" in c.value for c in at.caption)          # the sources of docs/external_checks.yml
     assert at.metric[0].value == "SkillCorner"
+
+
+def test_the_overview_shows_the_batch_and_the_live_paths():
+    dot = lineage.overview_dot()
+    for edge in ("kafka -> bronze", "bronze -> silver", "silver -> gold", "gold -> report", "kafka -> stream",
+                 "stream -> stats", "stats -> live"):
+        assert edge in dot
+
+
+def test_column_meanings_come_from_the_contract_then_the_shared_words():
+    contract = ("**gold_x** (S1): one row.\n\n| Column | Type | Meaning |\n|---|---|---|\n"
+                "| match_id, team_id | VARCHAR | |\n| a, b | DOUBLE | the a and b share |\n\n**gold_y**: other\n")
+    m = lineage.contract_meanings(contract, "gold_x")
+    assert m["a"] == m["b"] == "the a and b share" and m["team_id"] == "HOME or AWAY"       # empty -> shared word
+    assert lineage.contract_meanings(contract, "gold_z") == {}
