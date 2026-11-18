@@ -73,6 +73,7 @@ make soda                                # Soda checks on Silver then Gold (make
 make app                                 # dashboard on http://localhost:8501
 make dagster                             # Dagster on http://localhost:3000: the next replay's end runs the chain
 make monitoring                          # Prometheus, alert emails, Grafana on http://localhost:3001 (monitoring/README.md)
+make demo                                # everything for the demo, then the Control Center on http://localhost:8000
 make benchmark                           # ~1 h, laptop busy: throughput, latency, load, recovery -> docs/performance.md
 ```
 
@@ -84,6 +85,7 @@ make benchmark                           # ~1 h, laptop busy: throughput, latenc
 | Spark master UI | http://localhost:8082 | cluster for Silver (`spark://spark-master:7077` inside Docker) |
 | Dashboard | http://localhost:8501 | after `make app` (needs `make gold`) |
 | Dagster | http://localhost:3000 | after `make dagster` |
+| Control Center | http://localhost:8000 | after `make demo`: the architecture with live status, play a match, performance |
 | Grafana | http://localhost:3001 | after `make monitoring`; login from `.env`; Prometheus :9090, Alertmanager :9093 |
 | Kafka from your machine | `localhost:29092` | Python scripts and Spark outside Docker |
 | Kafka from containers | `kafka:9092` | |

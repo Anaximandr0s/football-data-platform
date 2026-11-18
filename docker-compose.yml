@@ -565,3 +565,33 @@ services:
     volumes:
       - ./:/app:ro
     mem_limit: 256m
+
+  # --- Control Center (profile "demo": `make demo`) -------------------------------------------------------------------
+  # One page to run the demo: the architecture with live status, start and stop a replay, performance and quality.
+  # Reads Prometheus, Dagster and the Gold file; runs the project's producer. http://localhost:${CONTROL_PORT:-8000}
+  control-center:
+    <<: *common
+    profiles: ["demo"]
+    build: ./app/api
+    image: football-control-center:local
+    environment:
+      KAFKA_BOOTSTRAP: kafka:9092
+      PROMETHEUS_URL: http://prometheus:9090
+      DAGSTER_GRAPHQL: http://dagster-webserver:3000/graphql
+      GOLD_DUCKDB_PATH: /app/data/football.duckdb
+      # the addresses a browser on this machine uses for the buttons
+      APP_PORT: ${APP_PORT:-8501}
+      GRAFANA_PORT: ${GRAFANA_PORT:-3001}
+      KAFKA_UI_PORT: ${KAFKA_UI_PORT:-8081}
+      SPARK_MASTER_UI_PORT: ${SPARK_MASTER_UI_PORT:-8082}
+      SPARK_DRIVER_UI_PORT: "4040"
+      MINIO_CONSOLE_PORT: ${MINIO_CONSOLE_PORT:-9001}
+      DAGSTER_PORT: ${DAGSTER_PORT:-3000}
+      PROMETHEUS_PORT: ${PROMETHEUS_PORT:-9090}
+      ALERTMANAGER_PORT: ${ALERTMANAGER_PORT:-9093}
+    volumes:
+      - ./:/app:ro
+    ports:
+      - "127.0.0.1:${CONTROL_PORT:-8000}:8000"
+    mem_limit: 768m   # two producers at once load their match in memory
+
