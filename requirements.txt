@@ -13,6 +13,7 @@ pyspark>=4.0,<4.4
 # --- Gold: dbt + DuckDB (the Docker image of `make gold` pins its own copy, see dbt/Dockerfile) ---
 dbt-duckdb>=1.11,<1.12
 duckdb>=2.0,<2.1   # same DuckDB as dbt/Dockerfile and soda/Dockerfile (one file format)
+pyyaml>=6,<7       # soda/dimensions.yml, docs/*.yml, the Control Center
 
 # --- Orchestration: Dagster (the Docker image of `make dagster` pins its own copy, see dagster/Dockerfile) ---
 dagster>=1.13,<1.14
