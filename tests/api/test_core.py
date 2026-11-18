@@ -227,11 +227,37 @@ def test_the_panel_says_one_number_per_idea_each_with_its_source():
     assert (
         fail["value"] == "FAIL"
         and "below the 95 % goal (3 failed)" in fail["line"]
-        and "96.2% of 26 runs" in fail["line"]
+        and "96% of 26 runs" in fail["line"]
     )
+    delay = next(d for d in panel["details"] if d["title"].startswith("Live delay"))
+    assert delay["line"] == "Measured: 0.5 s." and delay["period"] == "make benchmark, 2026-11-17 23:41 UTC, x1"
+    assert all(d["period"] for d in panel["details"])
 
 
 def test_without_a_benchmark_the_panel_keeps_the_quality_numbers():
     panel = core.performance(None, [], (210, 215), (14, 15), None)
     assert [h["title"] for h in panel["hero"]] == ["Quality checks", "Goal minutes exact"]
     assert panel["journey"] == [] and panel["details"] == []
+
+
+def play(**kw):
+    return {
+        "running": False,
+        "stopped": False,
+        "partial": False,
+        "finished": False,
+        "ended_at": 100.0,
+        "pipeline": None,
+        **kw,
+    }
+
+
+def test_a_card_counts_its_age_once_its_story_has_ended():
+    assert core.card_age(play(running=True, ended_at=None), 200) is None
+    assert core.card_age(play(stopped=True), 130) == 30  # stopped
+    assert core.card_age(play(partial=True, finished=True), 110) == 10  # partial, at its final whistle
+    whole = play(finished=True)
+    assert core.card_age(whole, 500) is None  # waiting for Dagster
+    assert core.card_age({**whole, "pipeline": {"status": "STARTED", "ended_at": None}}, 500) is None
+    assert core.card_age({**whole, "pipeline": {"status": "FAILURE", "ended_at": 300}}, 500) is None  # stays
+    assert core.card_age({**whole, "pipeline": {"status": "SUCCESS", "ended_at": 480}}, 500) == 20

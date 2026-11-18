@@ -254,6 +254,8 @@ class Replays:
             out = {}
             for m, r in self.items.items():
                 code = r["proc"].poll()
+                if code is not None:
+                    r.setdefault("ended_at", time.time())  # first time this refresh sees it over
                 out[m] = {
                     "replay_id": r["replay_id"],
                     "speed": r["speed"],
@@ -262,5 +264,14 @@ class Replays:
                     "running": code is None,
                     "finished": code == 0 and not r["stopped"],
                     "stopped": r["stopped"],
+                    "ended_at": r.get("ended_at"),
                 }
             return out
+
+    def clear(self) -> int:
+        """Forgets the replays that are over; the ones playing stay."""
+        with self.lock:
+            over = [m for m, r in self.items.items() if r["proc"].poll() is not None]
+            for m in over:
+                del self.items[m]
+            return len(over)

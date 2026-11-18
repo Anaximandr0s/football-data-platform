@@ -30,6 +30,12 @@ make demo-reset    # replays the 4 matches once at x60, one after the other (Dag
   alone for slides.
 - **Port 127.0.0.1:8000 only** (`CONTROL_PORT`). No login: anyone on this machine can start a replay, nothing else.
 
+## The diagram's screenshots
+
+`app/api/static/thumbs/*.png` are real screenshots, retaken by `python scripts/control_center_thumbnails.py` while
+`make demo` runs. Dev dependencies only (not in `requirements.txt`): `pip install playwright pillow` and
+`playwright install chromium`. The script starts a partial replay for the live pitch and stops it.
+
 ## Tests
 
 `python -m pytest tests/api`: the whitelist (unknown match, bad speed, bad start, a second replay of a match, a third
@@ -40,3 +46,5 @@ replay, any other route), the start presets, the clock, the lights, the links an
 - The containers popup cannot tell a crashed container from a stopped one (cAdvisor sees only running containers).
 - The links open on the machine running the platform (`localhost`).
 - A replay started here stops when the Control Center restarts (its producer is a child process).
+- A replay card leaves 30 s after its replay ends (stopped, partial, or stored in Gold); a failed Dagster run stays
+  until "Clear".

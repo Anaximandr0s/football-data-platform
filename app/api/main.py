@@ -133,6 +133,10 @@ def status() -> dict:
                 "live_url": f"{BASE['app']}/live_match?match={match_id}",
             }
         )
+    now = time.time()
+    for p in plays:
+        p["age"] = core.card_age(p, now)
+    plays = [p for p in plays if p["age"] is None or p["age"] < core.CARD_STAYS_S]
     runs = services.running_pipeline_runs()
     return {
         "lights": core.box_status(v),
@@ -141,7 +145,8 @@ def status() -> dict:
         "pipeline_runs": runs,
         "live_moving": any(p["running"] for p in plays),
         "stored_moving": bool(runs),
-        "at": time.time(),
+        "at": now,
+        "card_stays_s": core.CARD_STAYS_S,
     }
 
 
@@ -193,13 +198,13 @@ def performance() -> dict:
         last_check(soda),
     )
     panel["now"] = [
-        {"title": t, "value": core.fmt(prom.value(e), k)}
-        for t, e, k in (
-            ("Live delay p95", "slo:live_delay_p95_seconds:7d", "s"),
-            ("Slowest Gold after the whistle", "slo:gold_freshness_seconds:max", "s"),
-            ("Run success (normal runs)", "slo:run_success_ratio:7d", "pct"),
-            ("Blocking checks passed", "slo:blocking_checks_pass_ratio", "pct"),
-            ("App up", "slo:app_up_ratio:7d", "pct"),
+        {"title": t, "value": core.fmt(prom.value(e), k), "period": f"Prometheus, {period}"}
+        for t, e, k, period in (
+            ("Live delay p95", "slo:live_delay_p95_seconds:7d", "s", "last 7 days"),
+            ("Slowest Gold after the whistle", "slo:gold_freshness_seconds:max", "min", "now"),
+            ("Run success (normal runs)", "slo:run_success_ratio:7d", "pct", "last 7 days"),
+            ("Blocking checks passed", "slo:blocking_checks_pass_ratio", "pct", "now"),
+            ("App up", "slo:app_up_ratio:7d", "pct", "last 7 days"),
         )
     ]
     return panel
@@ -253,6 +258,12 @@ def replay_start(body: Start) -> dict:
     except core.Refused as why:
         raise HTTPException(409, str(why)) from None
     return {"match": body.match, "replay_id": replay}
+
+
+@app.post("/api/replay/clear")
+def replay_clear() -> dict:
+    """Removes the cards of the replays that are over. It changes nothing in the platform."""
+    return {"cleared": replays.clear()}
 
 
 @app.post("/api/replay/stop")
