@@ -239,11 +239,14 @@ services:
     command: ["--match", "m001"]
     mem_limit: 1536m
 
-  # --- Streaming: Spark Structured Streaming (profile "jobs": `make streaming`, runs until stopped) ---
+  # --- Streaming: Spark Structured Streaming (profile "streaming": `make streaming`, runs until stopped) ---
   # Reads the replay topics, writes the 5- and 15-minute live stats to the compacted topic foot-live-stats.
-  # One core of the worker, so a `make silver` can run beside it. Checkpoints: s3a://checkpoints/streaming-5min.
+  # STREAMING_CORES (default 2) of the worker. Checkpoint: s3a://checkpoints/streaming-5min-v2 (live_stats.py).
   streaming:
-    profiles: ["jobs"]
+    profiles: ["streaming"]
+    container_name: streaming-5min   # the name Prometheus, the Control Center and the alerts look for
+    restart: unless-stopped
+    ports: ["127.0.0.1:4040:4040"]   # Spark UI of the streaming driver
     image: ${SPARK_IMAGE:-apache/spark:4.0.5-scala2.13-java17-python3-ubuntu}
     user: "0:0"
     working_dir: /app
