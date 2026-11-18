@@ -77,7 +77,7 @@ shown = (
     .assign(player=lambda d: d.player_id.map(names))
 )
 st.dataframe(
-    shown.assign(enough=shown.is_eligible.map({True: "✓", False: "–"}))[
+    shown.assign(enough=shown.is_eligible.map({True: "✓", False: "–"}), drop=shown["drop"] * 100)[
         ["player", "minutes_on_pitch", "dpm_first15", "dpm_last5", "drop", "enough"]
     ].rename(
         columns={
@@ -92,7 +92,7 @@ st.dataframe(
     width="stretch",
     column_config={
         "drop": st.column_config.NumberColumn(
-            "drop", format="percent", help="How much less he ran at the end: 10 % = 10 % less"
+            "drop", format="%.0f %%", help="How much less he ran at the end: 10 % = 10 % less"
         ),
         "minutes on the pitch": st.column_config.NumberColumn(format="%.0f"),
         "metres per minute, first 15 min": st.column_config.NumberColumn(format="%.0f"),
