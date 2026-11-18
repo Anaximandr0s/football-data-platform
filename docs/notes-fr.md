@@ -936,3 +936,36 @@ de recevoir ; « mes données sont là » est ce dont l'étape a besoin.
 - La liste des conteneurs ne distingue pas un conteneur arrêté d'un conteneur tombé (cAdvisor ne voit que ceux qui
   tournent).
 - La page Live ne mesure son délai qu'après sa première visite : le Control Center le dit dans un bandeau.
+
+### Revue du Control Center : replays partiels, schéma en quatre couloirs, chiffres simplifiés (2026-11-18)
+
+| Fichier | Rôle |
+|---|---|
+| `ingestion/replay_ids.py` | fabrique et lit les `replay_id` : `m003-20261118T125242Z`, ou `...-partial` si le replay ne part pas du coup d'envoi |
+| `ingestion/producer_foot.py` | marque le replay partiel quand `--start` est après la première seconde du match |
+| `dagster/.../replays.py`, `spark/silver/bronze_to_silver.py`, `ingestion/check_bronze.py`, `scripts/bronze_prune.py` | ignorent les replays partiels : pas de run Dagster, pas de Silver, jamais « complet » |
+| `app/api/static/logos/` | les logos officiels, non modifiés : Simple Icons (CC0) et les fichiers de Dagster et d'Iceberg ; sources et marques dans `NOTICE` |
+| `app/api/static/thumbs/` + `scripts/control_center_thumbnails.py` | les vignettes « ce que vous voyez », de vraies captures refaites par le script |
+| `app/api/core.py` | `chips()` : les étapes du run Dagster d'un replay ; `performance()` : le trajet de la donnée, 5 cartes, les détails |
+
+**Le bug.** Un replay lancé à 88:00 qui allait jusqu'au coup de sifflet final était vu comme « fini » : Dagster
+construisait Silver et Gold avec 2 minutes de match. La règle est maintenant : complet = part du coup d'envoi **et**
+atteint le coup de sifflet final. La marque est dans le `replay_id` (suffixe `-partial`), donc chaque lecteur la voit
+sans lire de fichier en plus. Vérifié en vrai : le replay `m004-20261118T124916Z-partial` a atteint 90:00 +4:18 et
+aucun run Dagster n'a été créé (requête GraphQL sur `dagster/run_key`, résultat vide).
+
+**Pourquoi un suffixe et pas un en-tête Kafka.** Le dossier Bronze, le capteur Dagster et Silver ne voient que le
+`replay_id` ; un en-tête aurait demandé de le recopier à chaque étape. Le suffixe voyage tout seul.
+
+**Une idée = un chiffre = une source.** Les 5 cartes donnent un seul nombre chacune, avec sa source écrite dessous
+(le benchmark, le dernier run Soda, les rapports officiels). Les autres mesures, dont l'objectif de réussite des runs
+en échec (90,9 % sur 7 jours, 96,2 % depuis la correction 0d3c37a), sont dans « Détails », replié.
+
+**À retenir.** 1. Une donnée incomplète doit porter sa marque là où tout le monde la lit (ici l'identifiant), sinon un
+lecteur l'oubliera. 2. Un tableau de bord convainc par un chiffre clair et sa source, pas par dix chiffres proches.
+
+**Pas choisi.** Redessiner les logos (interdit par les marques et moins juste) ; une capture d'écran Dagster prise à
+la main (elle vieillit : le script la refait).
+
+**Limites.** Soda n'a pas de logo libre trouvé : son nom seulement. Une carte « arrêté » ou « partiel » reste affichée
+jusqu'au redémarrage du Control Center ; seule une carte « stocké dans Gold » disparaît, 30 s après la fin du run.
