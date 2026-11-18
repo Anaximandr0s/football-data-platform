@@ -889,3 +889,50 @@ réussis ; l'étape Bronze de m003 a duré 2 s alors que m004 était en train d'
 
 À retenir : **attendre la bonne condition**. « Plus rien en retard » est trop fort quand le système ne s'arrête jamais
 de recevoir ; « mes données sont là » est ce dont l'étape a besoin.
+
+## Le Control Center : la démo sans taper une commande (2026-11-18)
+
+### Ce qui a été construit
+
+| Fichier | Rôle |
+|---|---|
+| `app/api/core.py` | les règles, en fonctions pures : quel replay peut démarrer, où il commence, son horloge, la couleur de chaque boîte, les liens, les textes |
+| `app/api/services.py` | les accès : Prometheus, Dagster, le fichier Gold, Kafka (ce que chaque replay a vraiment envoyé), les processus du producteur |
+| `app/api/main.py` | FastAPI : des lectures (`GET /api/*`) et seulement deux actions, démarrer et arrêter un replay |
+| `app/api/static/` | une page HTML, son CSS et son JavaScript, sans étape de build ; les icônes Tabler (licence MIT) sont copiées dans le dépôt |
+| `app/streamlit/app.py` | un lien peut choisir la vue et le match : `/match_story?view=fan&match=m002` |
+| `make demo`, `make demo-reset` | tout démarrer, puis le Control Center ; rejouer les 4 matchs à x60 |
+
+### Pourquoi c'est construit ainsi
+
+- **Deux actions seulement, vérifiées par une liste blanche.** Un replay démarre si le match est dans Gold et préparé,
+  si la vitesse est un entier de 1 à 60, si le départ est dans le match, s'il ne joue pas déjà, et si moins de deux
+  replays jouent. La vérification se fait sous un verrou : deux clics simultanés ne peuvent pas dépasser la limite.
+  Tout le reste est en lecture seule ; un test essaie les autres routes et vérifie qu'elles sont refusées.
+- **La progression vient de Kafka, pas d'un calcul.** Le producteur peut être plus lent que la vitesse demandée ; le
+  Control Center lit les messages et affiche la dernière seconde vraiment envoyée.
+- **Pas de socket Docker.** La liste des conteneurs vient des métriques de cAdvisor dans Prometheus : le Control Center
+  ne peut ni démarrer ni arrêter un conteneur, seulement le voir.
+- **Un schéma qu'on peut exporter.** Le SVG est écrit à la main dans la page, avec ses icônes intégrées : le fichier SVG
+  et le PNG (deux fois plus grand) sont autonomes, pour les slides. Deux couleurs, et aussi deux styles de trait
+  (plein pour le direct, pointillé pour le stocké), pour rester lisible en noir et blanc et pour les daltoniens.
+
+### Les idées à retenir
+
+1. **Une interface de démo doit être aussi sûre qu'une API publique** : chaque action est une porte ; on en ouvre deux,
+   on vérifie tout ce qui passe, et on teste que les autres restent fermées.
+2. **Montrer l'état réel, pas l'état attendu** : la progression lue dans Kafka, les voyants lus dans Prometheus.
+
+### Ce qu'on n'a pas choisi
+
+- **Un framework front (React, Vue)** : une seule page, quelques appels ; du JavaScript simple évite une étape de build
+  et fonctionne hors ligne.
+- **Le socket Docker** pour lister les conteneurs : il donnerait aussi le pouvoir de les arrêter ou d'en lancer d'autres.
+
+### Limites connues
+
+- Un replay lancé depuis le Control Center s'arrête si le Control Center redémarre (le producteur est son processus
+  enfant).
+- La liste des conteneurs ne distingue pas un conteneur arrêté d'un conteneur tombé (cAdvisor ne voit que ceux qui
+  tournent).
+- La page Live ne mesure son délai qu'après sa première visite : le Control Center le dit dans un bandeau.

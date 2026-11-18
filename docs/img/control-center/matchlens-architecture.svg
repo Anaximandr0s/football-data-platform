@@ -1,0 +1,227 @@
+<svg id="arch" viewBox="0 0 1240 690" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="MatchLens architecture: live path from SkillCorner to the Live page, stored path from Kafka to the analysis app" class="" width="1240" height="690">
+<style>
+  .bg{fill:#ffffff}
+  .box rect.frame{fill:#ffffff;stroke:#2f3a33;stroke-width:1.2}
+  .box{cursor:pointer}
+  .box:hover rect.frame,.box:focus rect.frame{stroke:#146c34;stroke-width:2.2}
+  .box .t{font:700 15px system-ui,-apple-system,"Segoe UI",sans-serif;fill:#16201a}
+  .box .s{font:12.5px system-ui,-apple-system,"Segoe UI",sans-serif;fill:#4a564f}
+  .box use{color:#2f3a33}
+  .light{stroke:#ffffff;stroke-width:1.5}
+  .light.green{fill:#2e9e5b}.light.orange{fill:#d97706}.light.red{fill:#c0392b}.light.grey{fill:#a7b0ab}
+  .edge{fill:none;stroke-width:2.2}
+  .edge.live{stroke:#00897b}
+  .edge.stored{stroke:#7e57c2;stroke-dasharray:9 5}
+  .edge.control{stroke:#7e57c2;stroke-dasharray:2 4;stroke-width:1.6}
+  .moving .edge.live{stroke-dasharray:10 6;animation:flow .6s linear infinite}
+  .moving-stored .edge.stored{animation:flow .6s linear infinite}
+  @keyframes flow{to{stroke-dashoffset:-16}}
+  .step circle{fill:#ffffff;stroke-width:1.5}
+  .step.live circle{stroke:#00897b}.step.stored circle{stroke:#7e57c2}
+  .step text{font:700 12px system-ui,sans-serif;text-anchor:middle;dominant-baseline:central}
+  .step.live text{fill:#00695c}.step.stored text{fill:#5e35b1}
+  .elabel{font:11.5px system-ui,sans-serif;fill:#4a564f}
+  .band rect{fill:#f4f6f2;stroke:#a7b0ab;stroke-width:1;stroke-dasharray:4 3}
+  .legend text{font:12.5px system-ui,sans-serif;fill:#16201a}
+  .caption{font:italic 14px Georgia,"Times New Roman",serif;fill:#16201a;text-anchor:middle}
+  .rowlabel{font:600 11px system-ui,sans-serif;letter-spacing:.12em;fill:#7a857f}
+</style>
+<defs id="icon-defs">
+  <marker id="ah-live" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#00897b"/></marker>
+  <marker id="ah-stored" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#7e57c2"/></marker>
+<symbol id="i-video" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path xmlns="http://www.w3.org/2000/svg" stroke="none" d="M0 0h24v24H0z" fill="none"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M15 10l4.553 -2.276a1 1 0 0 1 1.447 .894v6.764a1 1 0 0 1 -1.447 .894l-4.553 -2.276v-4z"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M3 6m0 2a2 2 0 0 1 2 -2h8a2 2 0 0 1 2 2v8a2 2 0 0 1 -2 2h-8a2 2 0 0 1 -2 -2z"/>
+</symbol><symbol id="i-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path xmlns="http://www.w3.org/2000/svg" stroke="none" d="M0 0h24v24H0z" fill="none"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M10 14l11 -11"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M21 3l-6.5 18a.55 .55 0 0 1 -1 0l-3.5 -7l-7 -3.5a.55 .55 0 0 1 0 -1l18 -6.5"/>
+</symbol><symbol id="i-topology-star-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path xmlns="http://www.w3.org/2000/svg" stroke="none" d="M0 0h24v24H0z" fill="none"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M10 19a2 2 0 1 0 -4 0a2 2 0 0 0 4 0z"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M18 5a2 2 0 1 0 -4 0a2 2 0 0 0 4 0z"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M10 5a2 2 0 1 0 -4 0a2 2 0 0 0 4 0z"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M6 12a2 2 0 1 0 -4 0a2 2 0 0 0 4 0z"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M18 19a2 2 0 1 0 -4 0a2 2 0 0 0 4 0z"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M14 12a2 2 0 1 0 -4 0a2 2 0 0 0 4 0z"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M22 12a2 2 0 1 0 -4 0a2 2 0 0 0 4 0z"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M6 12h4"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M14 12h4"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M15 7l-2 3"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M9 7l2 3"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M11 14l-2 3"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M13 14l2 3"/>
+</symbol><symbol id="i-bolt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path xmlns="http://www.w3.org/2000/svg" stroke="none" d="M0 0h24v24H0z" fill="none"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M13 3l0 7l6 0l-8 11l0 -7l-6 0l8 -11"/>
+</symbol><symbol id="i-bucket" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path xmlns="http://www.w3.org/2000/svg" stroke="none" d="M0 0h24v24H0z" fill="none"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M12 7m-8 0a8 4 0 1 0 16 0a8 4 0 1 0 -16 0"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M4 7c0 .664 .088 1.324 .263 1.965l2.737 10.035c.5 1.5 2.239 2 5 2s4.5 -.5 5 -2c.333 -1 1.246 -4.345 2.737 -10.035a7.45 7.45 0 0 0 .263 -1.965"/>
+</symbol><symbol id="i-broadcast" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path xmlns="http://www.w3.org/2000/svg" stroke="none" d="M0 0h24v24H0z" fill="none"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M18.364 19.364a9 9 0 1 0 -12.728 0"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M15.536 16.536a5 5 0 1 0 -7.072 0"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M12 13m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"/>
+</symbol><symbol id="i-chart-bar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path xmlns="http://www.w3.org/2000/svg" stroke="none" d="M0 0h24v24H0z" fill="none"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M3 13a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v6a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1z"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M15 9a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v10a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1z"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M9 5a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v14a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1z"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M4 20h14"/>
+</symbol><symbol id="i-database" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path xmlns="http://www.w3.org/2000/svg" stroke="none" d="M0 0h24v24H0z" fill="none"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M12 6m-8 0a8 3 0 1 0 16 0a8 3 0 1 0 -16 0"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M4 6v6a8 3 0 0 0 16 0v-6"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M4 12v6a8 3 0 0 0 16 0v-6"/>
+</symbol><symbol id="i-database-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path xmlns="http://www.w3.org/2000/svg" stroke="none" d="M0 0h24v24H0z" fill="none"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M4 6c0 1.657 3.582 3 8 3s8 -1.343 8 -3s-3.582 -3 -8 -3s-8 1.343 -8 3"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M4 6v6c0 1.43 2.67 2.627 6.243 2.927"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M20 10.5v-4.5"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M4 12v6c0 1.546 3.12 2.82 7.128 2.982"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M17.8 20.817l-2.172 1.138a.392 .392 0 0 1 -.568 -.41l.415 -2.411l-1.757 -1.707a.389 .389 0 0 1 .217 -.665l2.428 -.352l1.086 -2.193a.392 .392 0 0 1 .702 0l1.086 2.193l2.428 .352a.39 .39 0 0 1 .217 .665l-1.757 1.707l.414 2.41a.39 .39 0 0 1 -.567 .411l-2.172 -1.138z"/>
+</symbol><symbol id="i-route" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path xmlns="http://www.w3.org/2000/svg" stroke="none" d="M0 0h24v24H0z" fill="none"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M3 19a2 2 0 1 0 4 0a2 2 0 0 0 -4 0"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M19 7a2 2 0 1 0 0 -4a2 2 0 0 0 0 4z"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M11 19h5.5a3.5 3.5 0 0 0 0 -7h-8a3.5 3.5 0 0 1 0 -7h4.5"/>
+</symbol><symbol id="i-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path xmlns="http://www.w3.org/2000/svg" stroke="none" d="M0 0h24v24H0z" fill="none"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M12 3l8 4.5l0 9l-8 4.5l-8 -4.5l0 -9l8 -4.5"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M12 12l8 -4.5"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M12 12l0 9"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M12 12l-8 -4.5"/>
+</symbol><symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path xmlns="http://www.w3.org/2000/svg" stroke="none" d="M0 0h24v24H0z" fill="none"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M7 11l5 5l5 -5"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M12 4l0 12"/>
+</symbol><symbol id="i-checklist" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path xmlns="http://www.w3.org/2000/svg" stroke="none" d="M0 0h24v24H0z" fill="none"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M9.615 20h-2.615a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h8a2 2 0 0 1 2 2v8"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M14 19l2 2l4 -4"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M9 8h4"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M9 12h2"/>
+</symbol><symbol id="i-player-play" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path xmlns="http://www.w3.org/2000/svg" stroke="none" d="M0 0h24v24H0z" fill="none"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M7 4v16l13 -8z"/>
+</symbol><symbol id="i-heart-rate-monitor" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path xmlns="http://www.w3.org/2000/svg" stroke="none" d="M0 0h24v24H0z" fill="none"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M3 4m0 1a1 1 0 0 1 1 -1h16a1 1 0 0 1 1 1v10a1 1 0 0 1 -1 1h-16a1 1 0 0 1 -1 -1z"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M7 20h10"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M9 16v4"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M15 16v4"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M7 10h2l2 3l2 -6l1 3h3"/>
+</symbol><symbol id="i-info-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path xmlns="http://www.w3.org/2000/svg" stroke="none" d="M0 0h24v24H0z" fill="none"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M12 9h.01"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M11 12h1v4h1"/>
+</symbol><symbol id="i-alert-triangle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path xmlns="http://www.w3.org/2000/svg" stroke="none" d="M0 0h24v24H0z" fill="none"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M12 9v4"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0z"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M12 16h.01"/>
+</symbol><symbol id="i-player-stop" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path xmlns="http://www.w3.org/2000/svg" stroke="none" d="M0 0h24v24H0z" fill="none"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M5 5m0 2a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v10a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2z"/>
+</symbol><symbol id="i-stack-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path xmlns="http://www.w3.org/2000/svg" stroke="none" d="M0 0h24v24H0z" fill="none"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M12 4l-8 4l8 4l8 -4l-8 -4"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M4 12l8 4l8 -4"/>
+  <path xmlns="http://www.w3.org/2000/svg" d="M4 16l8 4l8 -4"/>
+</symbol></defs>
+<rect class="bg" x="0" y="0" width="1240" height="690"/>
+
+<g class="legend" transform="translate(50,420)">
+  <line x1="0" y1="0" x2="34" y2="0" class="edge live"/><text x="42" y="4">live: data in motion</text>
+  <line x1="0" y1="22" x2="34" y2="22" class="edge stored"/><text x="42" y="26">stored: data at rest</text>
+  <circle cx="17" cy="44" r="6" class="light green"/><text x="42" y="48">status (green: working)</text>
+</g>
+<text class="rowlabel" x="680" y="62">LIVE PATH</text>
+<text class="rowlabel" x="660" y="380">STORED PATH</text>
+
+<!-- edges: live -->
+<g id="edges-live">
+  <path class="edge live" d="M180,270 L230,270" marker-end="url(#ah-live)"/>
+  <path class="edge live" d="M380,270 L430,270" marker-end="url(#ah-live)"/>
+  <path class="edge live" d="M580,250 C620,250 620,110 660,110" marker-end="url(#ah-live)"/>
+  <path class="edge live" d="M810,110 L900,110" marker-end="url(#ah-live)"/>
+  <path class="edge live" d="M505,230 L505,40 L975,40 L975,70" marker-end="url(#ah-live)"/>
+</g>
+<text class="elabel" x="815" y="100">5-min statistics</text>
+<text class="elabel" x="700" y="34">positions, score, clock (every second)</text>
+
+<!-- edges: stored -->
+<g id="edges-stored">
+  <path class="edge stored" d="M580,290 C600,290 590,430 600,430" marker-end="url(#ah-stored)"/>
+  <path class="edge stored" d="M750,430 L800,430" marker-end="url(#ah-stored)"/>
+  <path class="edge stored" d="M950,430 L1000,430" marker-end="url(#ah-stored)"/>
+  <path class="edge stored" d="M1110,390 L1110,312" marker-end="url(#ah-stored)"/>
+  <path class="edge control" d="M875,520 L875,472"/>
+  <path class="edge control" d="M1075,520 L1075,472"/>
+  <path class="edge control" d="M675,520 L675,472"/>
+</g>
+<text class="elabel" x="884" y="502">runs and checks</text>
+
+<!-- step numbers -->
+<g class="step live"><circle cx="205" cy="252" r="11"/><text x="205" y="252">1</text></g>
+<g class="step live"><circle cx="405" cy="252" r="11"/><text x="405" y="252">2</text></g>
+<g class="step live"><circle cx="622" cy="180" r="11"/><text x="622" y="180">4</text></g>
+<g class="step live"><circle cx="855" cy="128" r="11"/><text x="855" y="128">5</text></g>
+<g class="step live"><circle cx="560" cy="40" r="11"/><text x="560" y="40">3</text></g>
+<g class="step stored"><circle cx="602" cy="360" r="11"/><text x="602" y="360">6</text></g>
+<g class="step stored"><circle cx="775" cy="448" r="11"/><text x="775" y="448">7</text></g>
+<g class="step stored"><circle cx="975" cy="448" r="11"/><text x="975" y="448">8</text></g>
+<g class="step stored"><circle cx="1132" cy="350" r="11"/><text x="1132" y="350">9</text></g>
+
+<!-- boxes: x, y, 150 x 80 -->
+<g class="box" data-key="skillcorner" tabindex="0" role="button" aria-label="SkillCorner open data" transform="translate(30,230)">
+  <rect class="frame" width="150" height="80" rx="8"/><use href="#i-video" x="12" y="12" width="22" height="22"/>
+  <text class="t" x="12" y="54">SkillCorner</text><text class="s" x="12" y="70">open tracking data</text>
+  <circle class="light green" cx="138" cy="12" r="6"/></g>
+<g class="box" data-key="producer" tabindex="0" role="button" aria-label="Producer" transform="translate(230,230)">
+  <rect class="frame" width="150" height="80" rx="8"/><use href="#i-send" x="12" y="12" width="22" height="22"/>
+  <text class="t" x="12" y="54">Producer</text><text class="s" x="12" y="70">Python replay</text>
+  <circle class="light grey" cx="138" cy="12" r="6"/></g>
+<g class="box" data-key="kafka" tabindex="0" role="button" aria-label="Kafka" transform="translate(430,230)">
+  <rect class="frame" width="150" height="80" rx="8"/><use href="#i-topology-star-3" x="12" y="12" width="22" height="22"/>
+  <text class="t" x="12" y="54">Kafka</text><text class="s" x="12" y="70">5 topics, 7 days</text>
+  <circle class="light green" cx="138" cy="12" r="6"/></g>
+<g class="box" data-key="spark" tabindex="0" role="button" aria-label="Spark Streaming" transform="translate(660,70)">
+  <rect class="frame" width="150" height="80" rx="8"/><use href="#i-bolt" x="12" y="12" width="22" height="22"/>
+  <text class="t" x="12" y="54">Spark Streaming</text><text class="s" x="12" y="70">5-min windows</text>
+  <circle class="light green" cx="138" cy="12" r="6"/></g>
+<g class="box" data-key="live" tabindex="0" role="button" aria-label="Live page" transform="translate(900,70)">
+  <rect class="frame" width="150" height="80" rx="8"/><use href="#i-broadcast" x="12" y="12" width="22" height="22"/>
+  <text class="t" x="12" y="54">Live page</text><text class="s" x="12" y="70">Streamlit</text>
+  <circle class="light green" cx="138" cy="12" r="6"/></g>
+<g class="box" data-key="bronze" tabindex="0" role="button" aria-label="Bronze" transform="translate(600,390)">
+  <rect class="frame" width="150" height="80" rx="8"/><use href="#i-bucket" x="12" y="12" width="22" height="22"/>
+  <text class="t" x="12" y="54">Bronze</text><text class="s" x="12" y="70">MinIO, raw replays</text>
+  <circle class="light green" cx="138" cy="12" r="6"/></g>
+<g class="box" data-key="silver" tabindex="0" role="button" aria-label="Silver" transform="translate(800,390)">
+  <rect class="frame" width="150" height="80" rx="8"/><use href="#i-database" x="12" y="12" width="22" height="22"/>
+  <text class="t" x="12" y="54">Silver</text><text class="s" x="12" y="70">Spark + Iceberg</text>
+  <circle class="light green" cx="138" cy="12" r="6"/></g>
+<g class="box" data-key="gold" tabindex="0" role="button" aria-label="Gold" transform="translate(1000,390)">
+  <rect class="frame" width="150" height="80" rx="8"/><use href="#i-database-star" x="12" y="12" width="22" height="22"/>
+  <text class="t" x="12" y="54">Gold</text><text class="s" x="12" y="70">dbt + DuckDB</text>
+  <circle class="light green" cx="138" cy="12" r="6"/></g>
+<g class="box" data-key="analysis" tabindex="0" role="button" aria-label="Analysis app" transform="translate(1060,230)">
+  <rect class="frame" width="150" height="80" rx="8"/><use href="#i-chart-bar" x="12" y="12" width="22" height="22"/>
+  <text class="t" x="12" y="54">Analysis app</text><text class="s" x="12" y="70">fan and coach views</text>
+  <circle class="light green" cx="138" cy="12" r="6"/></g>
+<g class="box" data-key="dagster" tabindex="0" role="button" aria-label="Dagster and Soda" transform="translate(600,520)">
+  <rect class="frame" width="550" height="50" rx="8"/><use href="#i-route" x="12" y="14" width="22" height="22"/>
+  <text class="t" x="44" y="31">Dagster + Soda</text><text class="s" x="170" y="31">at the final whistle: Bronze check, Silver, Soda, Gold, Soda, report</text>
+  <circle class="light green" cx="538" cy="12" r="6"/></g>
+<g class="box band" data-key="monitoring" tabindex="0" role="button" aria-label="Monitoring" transform="translate(30,600)">
+  <rect width="1180" height="40" rx="8"/><use href="#i-heart-rate-monitor" x="12" y="9" width="22" height="22"/>
+  <text class="t" x="44" y="25">Monitoring</text><text class="s" x="150" y="25">Prometheus · Grafana · Alertmanager: every box above is measured every 15 s</text>
+  <circle class="light green" cx="1168" cy="12" r="6"/></g>
+
+<text class="caption" x="620" y="672">Figure 1. MatchLens architecture</text>
+</svg>
