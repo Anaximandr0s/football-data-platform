@@ -1,7 +1,7 @@
 # Shortcuts (Linux/macOS/WSL). Without make, run the plain commands from README.md.
 # Docker needs sudo on your machine?  make up DOCKER="sudo docker"
 .DEFAULT_GOAL := help
-.PHONY: help up down reset ps logs topics counts smoke lint test data bronze replay check silver gold gold-sql soda soda-silver soda-gold soda-demo app app-stop dagster dagster-stop evidence monitoring monitoring-stop benchmark benchmark-report bronze-prune
+.PHONY: help up down reset ps logs topics counts smoke lint test data bronze replay check silver gold gold-sql soda soda-silver soda-gold soda-demo app app-stop dagster dagster-stop evidence monitoring monitoring-stop benchmark benchmark-report bronze-prune demo demo-reset demo-stop
 
 DOCKER ?= docker
 COMPOSE = $(DOCKER) compose
@@ -18,8 +18,8 @@ up: ## Start MinIO, Kafka, Kafka UI, Spark and the Bronze writer (creates .env i
 	@test -f .env || cp .env.example .env
 	$(COMPOSE) up -d
 
-down: ## Stop (data kept), dashboard, Dagster and monitoring included
-	$(COMPOSE) --profile app --profile dagster --profile monitoring down
+down: ## Stop (data kept), dashboard, Dagster, monitoring and the Control Center included
+	$(COMPOSE) --profile app --profile dagster --profile monitoring --profile demo down
 
 reset: ## Stop and DELETE all data (topics, buckets, Dagster history)
 	$(COMPOSE) --profile app --profile dagster down -v
@@ -117,3 +117,19 @@ benchmark-report: ## Rebuild docs/performance.md and its charts from the last ma
 
 bronze-prune: ## Keep the last KEEP complete replays per match in Bronze (default 3); shows first, DELETE=yes deletes
 	python scripts/bronze_prune.py --keep $(or $(KEEP),3) $(if $(filter yes,$(DELETE)),--delete,)
+
+demo: ## Everything the demo needs, then the Control Center on http://localhost:8000 (safe to run again)
+	@test -f .env || cp .env.example .env
+	$(COMPOSE) up -d
+	$(COMPOSE) --profile dagster up -d --build dagster-webserver dagster-daemon
+	$(COMPOSE) --profile app up -d --build app
+	$(COMPOSE) --profile monitoring up -d --build
+	@$(DOCKER) ps --format '{{.Names}}' | grep -qx streaming-5min || $(MAKE) --no-print-directory streaming
+	$(COMPOSE) --profile demo up -d --build control-center
+	@echo "MatchLens Control Center: http://localhost:8000"
+
+demo-stop: ## Stop the Control Center (replays it started stop too)
+	$(COMPOSE) --profile demo stop control-center
+
+demo-reset: ## Replay m001-m004 once at x60, one after the other: each is in Bronze and rebuilt by Dagster
+	for m in m001 m002 m003 m004; do python -m ingestion.producer_foot --match $$m --speed 60 || exit 1; done

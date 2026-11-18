@@ -889,3 +889,83 @@ réussis ; l'étape Bronze de m003 a duré 2 s alors que m004 était en train d'
 
 À retenir : **attendre la bonne condition**. « Plus rien en retard » est trop fort quand le système ne s'arrête jamais
 de recevoir ; « mes données sont là » est ce dont l'étape a besoin.
+
+## Le Control Center : la démo sans taper une commande (2026-11-18)
+
+### Ce qui a été construit
+
+| Fichier | Rôle |
+|---|---|
+| `app/api/core.py` | les règles, en fonctions pures : quel replay peut démarrer, où il commence, son horloge, la couleur de chaque boîte, les liens, les textes |
+| `app/api/services.py` | les accès : Prometheus, Dagster, le fichier Gold, Kafka (ce que chaque replay a vraiment envoyé), les processus du producteur |
+| `app/api/main.py` | FastAPI : des lectures (`GET /api/*`) et seulement deux actions, démarrer et arrêter un replay |
+| `app/api/static/` | une page HTML, son CSS et son JavaScript, sans étape de build ; les icônes Tabler (licence MIT) sont copiées dans le dépôt |
+| `app/streamlit/app.py` | un lien peut choisir la vue et le match : `/match_story?view=fan&match=m002` |
+| `make demo`, `make demo-reset` | tout démarrer, puis le Control Center ; rejouer les 4 matchs à x60 |
+
+### Pourquoi c'est construit ainsi
+
+- **Deux actions seulement, vérifiées par une liste blanche.** Un replay démarre si le match est dans Gold et préparé,
+  si la vitesse est un entier de 1 à 60, si le départ est dans le match, s'il ne joue pas déjà, et si moins de deux
+  replays jouent. La vérification se fait sous un verrou : deux clics simultanés ne peuvent pas dépasser la limite.
+  Tout le reste est en lecture seule ; un test essaie les autres routes et vérifie qu'elles sont refusées.
+- **La progression vient de Kafka, pas d'un calcul.** Le producteur peut être plus lent que la vitesse demandée ; le
+  Control Center lit les messages et affiche la dernière seconde vraiment envoyée.
+- **Pas de socket Docker.** La liste des conteneurs vient des métriques de cAdvisor dans Prometheus : le Control Center
+  ne peut ni démarrer ni arrêter un conteneur, seulement le voir.
+- **Un schéma qu'on peut exporter.** Le SVG est écrit à la main dans la page, avec ses icônes intégrées : le fichier SVG
+  et le PNG (deux fois plus grand) sont autonomes, pour les slides. Deux couleurs, et aussi deux styles de trait
+  (plein pour le direct, pointillé pour le stocké), pour rester lisible en noir et blanc et pour les daltoniens.
+
+### Les idées à retenir
+
+1. **Une interface de démo doit être aussi sûre qu'une API publique** : chaque action est une porte ; on en ouvre deux,
+   on vérifie tout ce qui passe, et on teste que les autres restent fermées.
+2. **Montrer l'état réel, pas l'état attendu** : la progression lue dans Kafka, les voyants lus dans Prometheus.
+
+### Ce qu'on n'a pas choisi
+
+- **Un framework front (React, Vue)** : une seule page, quelques appels ; du JavaScript simple évite une étape de build
+  et fonctionne hors ligne.
+- **Le socket Docker** pour lister les conteneurs : il donnerait aussi le pouvoir de les arrêter ou d'en lancer d'autres.
+
+### Limites connues
+
+- Un replay lancé depuis le Control Center s'arrête si le Control Center redémarre (le producteur est son processus
+  enfant).
+- La liste des conteneurs ne distingue pas un conteneur arrêté d'un conteneur tombé (cAdvisor ne voit que ceux qui
+  tournent).
+- La page Live ne mesure son délai qu'après sa première visite : le Control Center le dit dans un bandeau.
+
+### Revue du Control Center : replays partiels, schéma en quatre couloirs, chiffres simplifiés (2026-11-18)
+
+| Fichier | Rôle |
+|---|---|
+| `ingestion/replay_ids.py` | fabrique et lit les `replay_id` : `m003-20261118T125242Z`, ou `...-partial` si le replay ne part pas du coup d'envoi |
+| `ingestion/producer_foot.py` | marque le replay partiel quand `--start` est après la première seconde du match |
+| `dagster/.../replays.py`, `spark/silver/bronze_to_silver.py`, `ingestion/check_bronze.py`, `scripts/bronze_prune.py` | ignorent les replays partiels : pas de run Dagster, pas de Silver, jamais « complet » |
+| `app/api/static/logos/` | les logos officiels, non modifiés : Simple Icons (CC0) et les fichiers de Dagster et d'Iceberg ; sources et marques dans `NOTICE` |
+| `app/api/static/thumbs/` + `scripts/control_center_thumbnails.py` | les vignettes « ce que vous voyez », de vraies captures refaites par le script |
+| `app/api/core.py` | `chips()` : les étapes du run Dagster d'un replay ; `performance()` : le trajet de la donnée, 5 cartes, les détails |
+
+**Le bug.** Un replay lancé à 88:00 qui allait jusqu'au coup de sifflet final était vu comme « fini » : Dagster
+construisait Silver et Gold avec 2 minutes de match. La règle est maintenant : complet = part du coup d'envoi **et**
+atteint le coup de sifflet final. La marque est dans le `replay_id` (suffixe `-partial`), donc chaque lecteur la voit
+sans lire de fichier en plus. Vérifié en vrai : le replay `m004-20261118T124916Z-partial` a atteint 90:00 +4:18 et
+aucun run Dagster n'a été créé (requête GraphQL sur `dagster/run_key`, résultat vide).
+
+**Pourquoi un suffixe et pas un en-tête Kafka.** Le dossier Bronze, le capteur Dagster et Silver ne voient que le
+`replay_id` ; un en-tête aurait demandé de le recopier à chaque étape. Le suffixe voyage tout seul.
+
+**Une idée = un chiffre = une source.** Les 5 cartes donnent un seul nombre chacune, avec sa source écrite dessous
+(le benchmark, le dernier run Soda, les rapports officiels). Les autres mesures, dont l'objectif de réussite des runs
+en échec (90,9 % sur 7 jours, 96,2 % depuis la correction 0d3c37a), sont dans « Détails », replié.
+
+**À retenir.** 1. Une donnée incomplète doit porter sa marque là où tout le monde la lit (ici l'identifiant), sinon un
+lecteur l'oubliera. 2. Un tableau de bord convainc par un chiffre clair et sa source, pas par dix chiffres proches.
+
+**Pas choisi.** Redessiner les logos (interdit par les marques et moins juste) ; une capture d'écran Dagster prise à
+la main (elle vieillit : le script la refait).
+
+**Limites.** Soda n'a pas de logo libre trouvé : son nom seulement. Une carte « arrêté » ou « partiel » reste affichée
+jusqu'au redémarrage du Control Center ; seule une carte « stocké dans Gold » disparaît, 30 s après la fin du run.

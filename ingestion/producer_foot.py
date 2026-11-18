@@ -29,6 +29,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from ingestion import replay_ids
 from ingestion.config import KAFKA_BOOTSTRAP, KEYS, PREPARED_DIR, REPLAY_HEADER, TOPICS
 
 
@@ -43,11 +44,6 @@ def by_ts(records: list[dict]) -> dict:
     for r in records:
         out[r["ts"]].append(r)
     return out
-
-
-def make_replay_id(match_id: str, started: dt.datetime) -> str:
-    """"m001-20261116T101503Z": the match and the UTC start of the run, unique per run and sortable by time."""
-    return f"{match_id}-{started.astimezone(dt.UTC):%Y%m%dT%H%M%SZ}"
 
 
 def main() -> None:
@@ -68,7 +64,9 @@ def main() -> None:
     reference = {t: read_records(mdir / f"{t}.parquet") for t in ("matches", "players")}
     live = {t: by_ts(read_records(mdir / f"{t}.parquet")) for t in ("tracking", "events", "ball")}
 
-    replay_id = make_replay_id(a.match, dt.datetime.now(dt.UTC))
+    first = min(set().union(*live.values()))
+    # started after the first second: a partial replay, live only (ingestion/replay_ids.py)
+    replay_id = replay_ids.make(a.match, dt.datetime.now(dt.UTC), partial=a.start > first)
     headers = [(REPLAY_HEADER, replay_id.encode())]
     print(f"replay_id={replay_id}", flush=True)
     errors: list[str] = []
@@ -103,7 +101,7 @@ def main() -> None:
             send(table, rec)
 
     all_ts = set().union(*live.values())
-    start_ts, last_ts = max(min(all_ts), a.start), max(all_ts)
+    start_ts, last_ts = max(first, a.start), max(all_ts)
     t0 = time.perf_counter()
     for ts in range(start_ts, last_ts + 1):
         delay = t0 + (ts - start_ts) / a.speed - time.perf_counter()   # absolute schedule: no drift

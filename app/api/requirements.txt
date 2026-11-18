@@ -1,0 +1,7 @@
+fastapi>=0.115,<1
+uvicorn>=0.32,<1
+duckdb>=2.0,<2.1          # the Gold file (read-only)
+pandas>=3.1,<4            # the producer and quality.py
+pyarrow>=26,<27
+confluent-kafka>=2.16,<3
+pyyaml>=6,<7

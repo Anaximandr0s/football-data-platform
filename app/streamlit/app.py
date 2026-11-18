@@ -2,7 +2,8 @@
 `streamlit run app/streamlit/app.py`.
 
 This script is the router: it builds the menu for the view chosen on Home (fan or coach), keeps the view and the match
-in st.session_state so they follow the visitor from page to page, and runs the page.
+in st.session_state so they follow the visitor from page to page, and runs the page. A link can choose them:
+`/match_story?view=fan&match=m001` (the Control Center's buttons).
 """
 import duckdb
 import streamlit as st
@@ -25,6 +26,19 @@ def match_choices() -> tuple[list[str], dict[str, str]]:
     teams = table("gold_team_match_stats")
     ids = sorted(teams.match_id.unique())
     return ids, {m: match_label(teams, m) for m in ids}
+
+
+def apply_link() -> None:
+    """?view=fan|coach and ?match=<id> set the view and the match once per new link: the parameters stay in the address
+    while the visitor clicks on, and must not undo the choices made since. An unknown match falls back in sidebar()."""
+    link = (st.query_params.get("view"), st.query_params.get("match"))
+    if link == (None, None) or st.session_state.get("_link") == link:
+        return
+    st.session_state["_link"] = link
+    if link[0] in sitemap.VIEWS:
+        st.session_state["view"] = link[0]
+    if link[1]:
+        st.session_state["match_id"] = link[1]
 
 
 def sidebar() -> None:
@@ -52,6 +66,7 @@ def sidebar() -> None:
     st.sidebar.caption(CREDIT)
 
 
+apply_link()
 pages = {section: [st.Page(f"sections/{p.key}.py", title=p.title, icon=p.icon, url_path=p.key, default=p.key == "home")
                    for p in specs]
          for section, specs in sitemap.menu(st.session_state.get("view")).items()}

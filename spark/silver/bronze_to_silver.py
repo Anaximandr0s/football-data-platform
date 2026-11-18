@@ -25,6 +25,7 @@ from pyspark.errors import AnalysisException
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 
+from ingestion import replay_ids
 from spark.silver import checks, config, transforms
 from spark.silver.session import build_spark
 
@@ -44,9 +45,11 @@ def _children(spark: SparkSession, uri: str) -> list[str]:
 
 
 def replays_in_bronze(spark: SparkSession, bronze_uri: str, match_id: str) -> list[str]:
-    """The replay folders of a match (its `matches` table): replay ids, any order."""
+    """The replay folders of a match (its `matches` table) that can make a match: not partial (started after
+    kick-off, ingestion/replay_ids.py), not without id. Replay ids, any order."""
     names = _children(spark, f"{bronze_uri.rstrip('/')}/matches/match_id={match_id}")
-    return [n.split("replay_id=", 1)[1] for n in names if n.startswith("replay_id=") and n != "replay_id=none"]
+    ids = [n.split("replay_id=", 1)[1] for n in names if n.startswith("replay_id=") and n != "replay_id=none"]
+    return [r for r in ids if not replay_ids.is_partial(r)]
 
 
 def choose_replay(replays: list[str], is_complete) -> str | None:
@@ -103,6 +106,10 @@ def process_match(spark: SparkSession, match_id: str, bronze_uri: str, manifest_
     replays = replays_in_bronze(spark, bronze_uri, match_id)
     if replay_id is None:
         replay_id = choose_replay(replays, lambda r: replay_complete(spark, bronze_uri, match_id, r))
+    if replay_id is not None and replay_ids.is_partial(replay_id):
+        print(f"{match_id}: {replay_id} started after kick-off: a partial replay is live only, Silver needs a whole "
+              f"match (replay it from kick-off)", file=sys.stderr)
+        return False
     if replay_id is None or replay_id not in replays:
         print(f"{match_id}: no complete replay in bronze's replay folders "
               f"({len(replays)} replay(s) found{', not ' + replay_id if replay_id else ''}): replay the match once "
