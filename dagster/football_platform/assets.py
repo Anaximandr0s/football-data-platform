@@ -13,7 +13,6 @@ import time
 from pathlib import Path
 
 import dagster as dg
-from confluent_kafka import Consumer, TopicPartition
 from dagster_dbt import DagsterDbtTranslator, DbtCliResource, dbt_assets
 
 from football_platform import soda
@@ -25,8 +24,6 @@ SODA_OUT = Path(os.getenv("SODA_OUT_DIR", ROOT / "data" / "soda"))
 REPORTS = Path(os.getenv("PIPELINE_OUT_DIR", ROOT / "data" / "pipeline")) / "reports"
 GOLD_DB = Path(os.getenv("GOLD_DUCKDB_PATH", ROOT / "data" / "football.duckdb"))
 BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "kafka:9092")
-BRONZE_GROUP = os.getenv("BRONZE_GROUP", "bronze-writer")
-BRONZE_TOPICS = ["foot-tracking", "foot-events", "foot-ball", "foot-players", "foot-matches"]
 BRONZE_WAIT_S = int(os.getenv("BRONZE_WAIT_S", "180"))
 SPARK_PACKAGES = os.getenv("SPARK_JARS_PACKAGES", "org.apache.hadoop:hadoop-aws:3.4.1,"
                                                   "org.apache.iceberg:iceberg-spark-runtime-4.0_2.13:1.10.0")
@@ -54,18 +51,24 @@ def run(context, args: list[str], ok_codes: tuple[int, ...] = (0,)) -> str:
     return proc.stdout
 
 
-def bronze_lag() -> int:
-    """Messages Kafka holds that the Bronze writer has not uploaded yet (it commits only after an upload)."""
-    c = Consumer({"bootstrap.servers": BOOTSTRAP, "group.id": BRONZE_GROUP, "enable.auto.commit": False})
-    try:
-        parts = [TopicPartition(t, p) for t in BRONZE_TOPICS for p in c.list_topics(t, timeout=10).topics[t].partitions]
-        lag = 0
-        for tp in c.committed(parts, timeout=10):
-            high = c.get_watermark_offsets(tp, timeout=10)[1]
-            lag += high - (tp.offset if tp.offset >= 0 else 0)
-        return lag
-    finally:
-        c.close()
+def wait_until(check, deadline_s: float, every_s: float = 10, clock=time.time, sleep=time.sleep):
+    """Calls check() -> (done, report) until done or deadline_s have passed. Returns (done, last report)."""
+    end = clock() + deadline_s
+    while True:
+        done, report = check()
+        if done or clock() >= end:
+            return done, report
+        sleep(every_s)
+
+
+def check_bronze(context) -> tuple[bool, str]:
+    """One run of ingestion.check_bronze for the run's replay: done when no table is MISSING (exit code 0)."""
+    args = ["python", "-m", "ingestion.check_bronze", "--match", context.partition_key, *replay_args(context)]
+    proc = subprocess.run(args, cwd=ROOT, capture_output=True, text=True, env={**os.environ, "PYTHONPATH": str(ROOT)})
+    if proc.returncode not in (0, 1):               # 1 = rows still missing; anything else is a crash: say it
+        raise dg.Failure(f"check_bronze exited with {proc.returncode}", metadata={
+            "log": dg.MetadataValue.text((proc.stdout + proc.stderr)[-3000:])})
+    return proc.returncode == 0, proc.stdout
 
 
 def replay_args(context) -> list[str]:
@@ -77,16 +80,20 @@ def replay_args(context) -> list[str]:
 
 @dg.asset(partitions_def=matches, group_name="bronze", kinds={"kafka", "s3"})
 def bronze(context: dg.AssetExecutionContext) -> dg.MaterializeResult:
-    """Every message of the replay is in Bronze: the writer has caught up with Kafka, and the row counts of the match
-    are at least those of the prepared files (python -m ingestion.check_bronze)."""
-    deadline = time.time() + BRONZE_WAIT_S
-    while (lag := bronze_lag()) > 0:
-        if time.time() > deadline:
-            raise dg.Failure(f"the Bronze writer is {lag} messages behind after {BRONZE_WAIT_S} s: is it running?")
-        context.log.info(f"waiting for the Bronze writer: {lag} messages to upload")
-        time.sleep(5)
-    out = run(context, ["python", "-m", "ingestion.check_bronze", "--match", context.partition_key, *replay_args(context)])
-    return dg.MaterializeResult(metadata={"check_bronze": dg.MetadataValue.md(f"```\n{out.strip()}\n```")})
+    """Every message of this replay is in Bronze: its folder holds at least the rows of the prepared files
+    (python -m ingestion.check_bronze --replay). Only this replay counts: other replays still streaming, and the
+    Bronze writer's total lag, do not hold it back."""
+    def check():
+        done, report = check_bronze(context)
+        if not done:
+            context.log.info("waiting for this replay's rows in Bronze:\n" + report.strip())
+        return done, report
+
+    done, report = wait_until(check, BRONZE_WAIT_S)
+    if not done:
+        raise dg.Failure(f"rows of this replay are still missing in Bronze after {BRONZE_WAIT_S} s: is the Bronze "
+                         "writer running?", metadata={"check_bronze": dg.MetadataValue.md(f"```\n{report.strip()}\n```")})
+    return dg.MaterializeResult(metadata={"check_bronze": dg.MetadataValue.md(f"```\n{report.strip()}\n```")})
 
 
 @dg.asset(partitions_def=matches, deps=[bronze], group_name="silver", kinds={"spark", "iceberg"}, retry_policy=RETRY)

@@ -13,8 +13,8 @@ make replay MATCH=m001 SPEED=60     # ~100 s later the run of m001 starts on its
 
 | Asset or check | Runs | Notes |
 |---|---|---|
-| `bronze` | waits until the Bronze writer has no lag on the 5 topics, then `python -m ingestion.check_bronze` | the writer commits its offsets after each upload, so no lag = every message is in MinIO |
-| `silver` | `spark-submit spark/silver/bronze_to_silver.py --match <id>` on `spark://spark-master:7077` | driver in the daemon container (`spark.driver.host=dagster-daemon`), executors on the worker, one core per run (the streaming job keeps its core); 2 retries, 30 s apart |
+| `bronze` | repeats `python -m ingestion.check_bronze --replay <replay_id>` every 10 s until the replay's folder holds every row of the prepared match (180 s at most) | only this replay counts: replays still streaming do not hold it back (the writer's total lag never reaches 0 while they run) |
+| `silver` | `spark-submit spark/silver/bronze_to_silver.py --match <id> --replay <replay_id>` on `spark://spark-master:7077` | driver in the daemon container (`spark.driver.host=dagster-daemon`), executors on the worker, one core per run (the streaming job keeps its two); 2 retries, 30 s apart |
 | `soda_silver` (blocking check on `silver`) | `soda/run_checks.py --layer silver` | a failure skips everything after it |
 | dbt models, `gold_*` | `dbt build --vars '{export_gold: true}'` (dagster-dbt) | one asset per model, the dbt tests as checks; rebuilds the whole DuckDB file; 2 retries |
 | `soda_gold` (blocking check on each `gold_*`) | `soda/run_checks.py --layer gold` | one result per Gold table |
