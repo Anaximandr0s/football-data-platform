@@ -84,3 +84,15 @@ def test_switching_view_on_the_player_page_stays_on_it(app_env):
     at.sidebar.segmented_control[0].set_value("coach").run()
     assert not at.exception
     assert at.session_state["view"] == "coach" and "COACH MODE" in " ".join(m.value for m in at.markdown)
+
+
+def test_a_link_sets_the_view_and_the_match_once(app_env):
+    at = router()
+    at.query_params["view"] = "coach"
+    at.query_params["match"] = "m1"
+    at.run()
+    assert not at.exception
+    assert (at.session_state["view"], at.session_state["match_id"]) == ("coach", "m1")
+    at.session_state["view"] = "fan"                     # the visitor changes the view afterwards
+    at.run()
+    assert at.session_state["view"] == "fan"             # the same link does not undo it
