@@ -21,6 +21,7 @@ data/benchmark/current.json
 *.parquet
 *.jsonl
 *.duckdb
+*.duckdb.wal
 
 # tools and editors
 dbt/target/
