@@ -95,3 +95,25 @@ def test_the_soda_checks_read_their_config_and_report_per_table(defs, monkeypatc
     assert entry["status"] == ("FAILURE" if inject_damage else "SUCCESS") and entry["trigger"] == "manual"
     assert {s["step"] for s in entry["steps"]} == {"silver_soda_silver", "soda_gold"}
     assert sum(not c["passed"] for c in entry["checks"]) == (2 if inject_damage else 0) and len(entry["checks"]) == 18
+
+
+def test_the_bronze_step_waits_for_its_replay_until_done_or_out_of_time():
+    from football_platform.assets import wait_until
+    now = [0.0]
+    answers = iter([(False, "MISSING"), (False, "MISSING"), (True, "OK")])
+    done, report = wait_until(lambda: next(answers), 60, every_s=10, clock=lambda: now[0],
+                              sleep=lambda s: now.__setitem__(0, now[0] + s))
+    assert (done, report, now[0]) == (True, "OK", 20.0)                     # third check, 20 s later
+
+    now[0] = 0.0
+    done, report = wait_until(lambda: (False, "MISSING"), 30, every_s=10, clock=lambda: now[0],
+                              sleep=lambda s: now.__setitem__(0, now[0] + s))
+    assert (done, report, now[0]) == (False, "MISSING", 30.0)               # gives up at the deadline
+
+
+def test_the_bronze_step_no_longer_waits_for_the_writers_total_lag():
+    import inspect
+
+    from football_platform import assets
+    assert not hasattr(assets, "bronze_lag")
+    assert "check_bronze" in inspect.getsource(assets.bronze.op.compute_fn.decorated_fn)

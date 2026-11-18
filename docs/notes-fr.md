@@ -878,3 +878,14 @@ complètes égales à Gold. `make bronze-prune KEEP=3 DELETE=yes` a libéré 205
   attend en vain et échoue après 180 s (vu sur m001). Il faudrait attendre seulement les messages de ce replay.
 - L'état de l'agrégation Spark ne se vide jamais (pas de watermark sur l'agrégation) : 384 000 lignes après une
   journée de replays. Il grossit avec chaque replay.
+
+## L'étape Bronze n'attend plus que son propre replay (2026-11-18)
+
+L'étape Bronze de Dagster attendait que bronze-writer n'ait plus aucun message en retard sur les 5 topics. Pendant que
+d'autres replays tournent, ce retard ne tombe jamais à zéro : deux replays enchaînés faisaient échouer le premier run
+après 180 s. Elle vérifie maintenant le dossier de **son** replay dans Bronze (`check_bronze --replay`, toutes les 10 s)
+et passe dès qu'il contient toutes les lignes du match. Testé : m003 puis m004 rejoués à la suite à x60, les deux runs
+réussis ; l'étape Bronze de m003 a duré 2 s alors que m004 était en train d'être rejoué.
+
+À retenir : **attendre la bonne condition**. « Plus rien en retard » est trop fort quand le système ne s'arrête jamais
+de recevoir ; « mes données sont là » est ce dont l'étape a besoin.
