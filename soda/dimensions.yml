@@ -5,6 +5,7 @@
 # from the Dagster runs.
 
 silver_tracking:
+  "tracking holds one replay per match": {dimension: uniqueness, plain: "tracking of each match comes from one replay only"}
   "tracking follows the data contract": {dimension: validity, plain: "tracking has the columns and types of the data contract"}
   "tracking is not empty": {dimension: completeness, plain: "tracking is not empty"}
   "tracking has one row per (match_id, player_id, ts)": {dimension: uniqueness, plain: "tracking has one row per (match_id, player_id, ts)"}
@@ -31,6 +32,7 @@ silver_tracking:
   "speed is never negative": {dimension: validity, plain: "speed is never negative"}
 
 silver_events:
+  "events holds one replay per match": {dimension: uniqueness, plain: "events of each match comes from one replay only"}
   "events follow the data contract": {dimension: validity, plain: "events has the columns and types of the data contract"}
   "row_count > 0": {dimension: completeness, plain: "events is not empty"}
   "run fields are set on runs only, and every run says if it was targeted and received": {dimension: validity, plain: "runs without the ball say if they were targeted and received"}
@@ -50,6 +52,7 @@ silver_events:
   "events period is 1 or 2": {dimension: validity, plain: "events period is 1 or 2"}
 
 silver_ball:
+  "ball holds one replay per match": {dimension: uniqueness, plain: "ball of each match comes from one replay only"}
   "ball follows the data contract": {dimension: validity, plain: "ball has the columns and types of the data contract"}
   "row_count > 0": {dimension: completeness, plain: "ball is not empty"}
   "ball has one row per (match_id, ts)": {dimension: uniqueness, plain: "ball has one row per (match_id, ts)"}
@@ -62,6 +65,7 @@ silver_ball:
   "ball possession is HOME, AWAY or null": {dimension: validity, plain: "the ball belongs to HOME, AWAY or nobody"}
 
 silver_players:
+  "players holds one replay per match": {dimension: uniqueness, plain: "players of each match comes from one replay only"}
   "players follow the data contract": {dimension: validity, plain: "players has the columns and types of the data contract"}
   "row_count > 0": {dimension: completeness, plain: "players is not empty"}
   "players have one row per (match_id, player_id)": {dimension: uniqueness, plain: "players have one row per (match_id, player_id)"}
@@ -74,6 +78,7 @@ silver_players:
   "players team_id is HOME or AWAY": {dimension: validity, plain: "players team_id is HOME or AWAY"}
 
 silver_matches:
+  "matches holds one replay per match": {dimension: uniqueness, plain: "matches of each match comes from one replay only"}
   "matches follow the data contract": {dimension: validity, plain: "matches has the columns and types of the data contract"}
   "row_count > 0": {dimension: completeness, plain: "matches is not empty"}
   "the pitch is 105 x 68": {dimension: validity, plain: "the pitch is 105 x 68"}

@@ -429,7 +429,7 @@ def recovery(probe: Probe, sampler: Sampler) -> list[dict]:
     goes on until 150 s after the last restart. The restart time is Docker's (the container's new start)."""
     restarts = {"bronze-writer": ("football-platform-bronze-writer-1", sampler.bronze),
                 "spark-streaming": ("streaming-5min", sampler.spark)}
-    done, stop = {}, threading.Event()
+    done, took, stop = {}, {}, threading.Event()
 
     def restarter():
         time.sleep(90)
@@ -439,7 +439,8 @@ def recovery(probe: Probe, sampler: Sampler) -> list[dict]:
             started = subprocess.run(["docker", "inspect", "-f", "{{.State.StartedAt}}", container], check=True,
                                      capture_output=True, text=True).stdout.strip()
             done[service] = datetime.fromisoformat(started.replace("Z", "+00:00")[:26] + "+00:00").timestamp()
-            log.info("restarted %s (docker restart took %.0f s)", container, time.time() - asked)
+            took[service] = time.time() - asked
+            log.info("restarted %s (docker restart took %.0f s)", container, took[service])
             time.sleep(130 if service == "bronze-writer" else 150)
         stop.set()
 
@@ -454,7 +455,7 @@ def recovery(probe: Probe, sampler: Sampler) -> list[dict]:
         after = sampler.between(series, at, at + 240)
         baseline = max(before, default=0)
         out.append({"service": service, "baseline": baseline, "peak": max((v for _, v in after), default=None),
-                    "back_to_normal_s": br.back_to_normal(after, at, baseline)})
+                    "back_to_normal_s": br.back_to_normal(after, at, baseline), "restart_s": took[service]})
     return out
 
 
@@ -487,16 +488,34 @@ def spark_batches(windows: list[tuple[float, float]]) -> dict:
         'football_spark_batch_duration_seconds{query="players-5min"}', t0, t1)])
 
 
+def last_fix() -> tuple[str, float] | None:
+    """The newest commit that fixed a real failure: the fix_commit entries of docs/quality_evidence.yml, by git date."""
+    import yaml
+    evidence = yaml.safe_load((ROOT / "docs" / "quality_evidence.yml").read_text(encoding="utf-8")) or {}
+    commits = {c["fix_commit"] for c in evidence.get("caught", []) if c.get("fix_commit")}
+    dated = [(c, float(subprocess.run(["git", "log", "-1", "--format=%ct", c], cwd=ROOT, capture_output=True,
+                                      text=True, check=True).stdout)) for c in commits]
+    return max(dated, key=lambda cd: cd[1]) if dated else None
+
+
+def success(runs: list[dict]) -> float | None:
+    return sum(r["status"] == "SUCCESS" for r in runs) / len(runs) if runs else None
+
+
 def reliability() -> dict:
+    """Over 7 days: every finished run, and the normal ones (no purpose tag); and the normal ones since the last fix."""
     after = time.time() - 7 * 24 * 3600
     runs = gql(f"{{ runsOrError(filter: {{createdAfter: {after}}}, limit: 500) {{ ... on Runs {{ results {{ status "
-               "tags { key value } stepStats { attempts { startTime } } } } } }")["runsOrError"]["results"]
+               "startTime tags { key value } stepStats { attempts { startTime } } } } } }")["runsOrError"]["results"]
     done = [r for r in runs if r["status"] in ("SUCCESS", "FAILURE")]
     normal = [r for r in done if not any(t["key"] == "purpose" for t in r["tags"])]
     retries = [sum(max(0, len(s["attempts"]) - 1) for s in r["stepStats"]) for r in runs]
+    fix = last_fix()
+    since = [r for r in normal if fix and (r["startTime"] or 0) >= fix[1]]
     return {"runs": len(done), "on_purpose": len(done) - len(normal),
-            "success_raw": sum(r["status"] == "SUCCESS" for r in done) / len(done),
-            "success_slo": sum(r["status"] == "SUCCESS" for r in normal) / len(normal),
+            "success_raw": success(done), "success_slo": success(normal),
+            "since_fix": {"commit": fix[0] if fix else None, "at": fix[1] if fix else None, "runs": len(since),
+                          "success": success(since)},
             "retries": sum(retries), "runs_with_retries": sum(n > 0 for n in retries)}
 
 
@@ -514,6 +533,9 @@ def preflight() -> None:
     for m in ("m001", "m002", "m003", "m004"):
         if not (ROOT / "data" / "prepared" / m).exists():
             raise SystemExit(f"data/prepared/{m} missing: make data")
+    app = prom_at('up{job="live_app"}', time.time())
+    if app != 1:      # the Live page's consumer and its metrics start with the first visit of the app
+        raise SystemExit("the app's live metrics are not up: open http://localhost:8501 once, then run again")
 
 
 def machine() -> dict:

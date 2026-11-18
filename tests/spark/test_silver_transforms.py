@@ -280,6 +280,15 @@ def test_the_quality_report_says_what_was_prepared_read_kept_and_corrected():
     manifest = {"tracking_rows": 10, "events": 2, "ball_rows": 1, "players": 2}
     r = checks.quality_report("m1", metrics, manifest, True, True, "2026-11-17T10:00:00Z")
     assert r["prepared_rows"] == {"tracking": 10, "events": 2, "ball": 1, "players": 2, "matches": 1}
-    assert r["replay_copies_removed"] == {"tracking": 20, "events": 4, "ball": 2, "players": 2, "matches": 1}
+    assert r["duplicates_removed"] == {"tracking": 20, "events": 4, "ball": 2, "players": 2, "matches": 1}
     assert (r["positions_corrected"], r["speeds_rejected"], r["checks_passed"]) == (3, 1, True)
     assert checks.quality_report("m1", metrics, None, False, False, "t")["prepared_rows"] is None
+
+
+def test_silver_takes_the_newest_complete_replay():
+    from spark.silver.bronze_to_silver import choose_replay
+    replays = ["m001-20261117T090000Z", "m001-20261117T130000Z", "m001-20261117T120000Z"]
+    complete = {"m001-20261117T090000Z", "m001-20261117T120000Z"}          # 13:00 was stopped half-way
+    assert choose_replay(replays, complete.__contains__) == "m001-20261117T120000Z"
+    assert choose_replay(replays, lambda r: False) is None
+    assert choose_replay([], lambda r: True) is None

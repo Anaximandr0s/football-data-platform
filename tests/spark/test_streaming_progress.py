@@ -13,7 +13,8 @@ def test_the_summary_adds_the_offsets_behind_of_every_kafka_source():
     assert progress.summary(p) == {"batch_id": 7, "input_rows": 300, "input_rows_per_second": 60.0,
                                    "processed_rows_per_second": 75.5, "batch_duration_ms": 1200,
                                    "offsets_behind_latest": 15.0,
-                                   "end_offsets": {"foot-tracking": {"0": 40, "1": 2}, "foot-matches": {"0": 4}}}
+                                   "end_offsets": {"foot-tracking": {"0": 40, "1": 2}, "foot-matches": {"0": 4}},
+                                   "duration_breakdown_ms": {"triggerExecution": 1200}, "state": []}
 
 
 def test_a_batch_without_offset_metrics_says_unknown_not_zero():

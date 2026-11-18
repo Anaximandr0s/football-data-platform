@@ -812,3 +812,69 @@ fois par clé (joueur, seconde). Le premier lancement automatique l'a montré : 
   vrai producteur et le code de la page mesurent ce que vivent nos utilisateurs.
 - **Corriger pendant qu'on mesure** : une mesure sert de référence ; les corrections viendront dans leurs branches et
   `make benchmark` dira si elles aident.
+
+## Corriger ce que le benchmark a trouvé : `fix/performance` (2026-11-17)
+
+### Ce qui a été changé
+
+| Fichier | Changement |
+|---|---|
+| `ingestion/bronze_writer.py` | un dossier par replay dans Bronze (`replay_id=<replay>`) ; arrêt propre sur SIGTERM : il écrit ce qu'il a en mémoire, valide ses offsets et s'arrête |
+| `spark/silver/bronze_to_silver.py` | Silver ne lit que le dernier replay complet d'un match (celui que Dagster lui donne, sinon le plus récent complet) et garde son `replay_id` |
+| `soda/checks/silver.yml`, `docs/contrat_donnees.md` | nouvelle garantie : chaque match vient d'un seul replay ; le contrat décrit le nouveau chemin de Bronze |
+| `dbt/models/staging/*.sql` | `replay_id` est retiré avant Gold : Gold ne change pas |
+| `scripts/bronze_prune.py` (`make bronze-prune KEEP=3`) | garde les 3 derniers replays complets par match, montre ce qu'il supprimerait, et ne supprime qu'avec `DELETE=yes` |
+| `spark/streaming/live_stats.py`, `docker-compose.yml` | 2 cœurs pour le streaming (4 pour le worker), 2 partitions de shuffle |
+| `app/streamlit/live_feed.py` | le retard de la page Live est mesuré par un autre thread, avec son propre consommateur |
+
+### Pourquoi c'est construit ainsi
+
+- **Un dossier par replay plutôt qu'un filtre.** Avec un filtre sur `kafka_replay_id`, Spark devrait quand même lister
+  et ouvrir chaque fichier de chaque replay ; avec un dossier, il ne regarde même pas les autres. Résultat : Silver
+  lit environ 97 000 lignes au lieu de 2 millions pour m001, en 73 s au lieu de 787 s.
+- **Échouer bruyamment plutôt que deviner.** Un match qui n'a pas de replay dans le nouveau format n'est pas
+  reconstruit : Silver dit de le rejouer. Relire l'ancien format aurait caché le problème.
+- **Mesurer avant de changer.** Le premier suspect pour Spark (200 partitions de shuffle) était faux : il y en avait
+  déjà 4. Le découpage de chaque lot a montré que le checkpoint sur MinIO ne coûte que 0,25 s ; le vrai coût était le
+  travail lui-même, fait par trois requêtes sur un seul cœur. Deux cœurs ont divisé la durée d'un lot par 2,5.
+- **Un réglage à la fois, sur le même replay.** Deux cœurs : 12,5 s → 5,0 s. Deux partitions : 25 % de mieux, mesuré
+  deux fois pour être sûr. RocksDB : plus lent (7,0 s), donc pas gardé. Le checkpoint reste sur MinIO : sur un vrai
+  cluster, il doit de toute façon être sur un stockage partagé, que tous les nœuds lisent.
+- **Silver garde son cœur.** Avec 2 cœurs pour le streaming, Silver attendait avec 0 cœur (vu dans l'interface de
+  Spark) : le worker passe donc de 2 à 4 cœurs.
+
+### Avant / après (`make benchmark`, détail dans `docs/performance.md`)
+
+| Mesure | Avant | Après |
+|---|---|---|
+| Silver pour le match à x60 | 787 s | 78 s |
+| Coup de sifflet final → Gold | 14,7 min (objectif manqué) | 2,5 min (tenu) |
+| Lot Spark, p50 / p95 | 11,2 / 17,0 s | 3,8 / 4,9 s |
+| Spark, rattrapage à 4 matchs | 22,7 s | 10,0 s |
+| Page Live (application), p95 à x1 | 2 925 ms | 518 ms (la sonde : 489 ms) |
+| Redémarrage de bronze-writer | 11 s | 2 s |
+| Runs réussis (normaux, 7 jours / depuis la dernière correction) | 88,0 % / – | 90,9 % / 96,2 % |
+
+Les résultats de Spark n'ont pas changé : `make evidence` trouve toujours les 10 021 valeurs des 2 017 fenêtres
+complètes égales à Gold. `make bronze-prune KEEP=3 DELETE=yes` a libéré 205,9 Mio de Bronze (251,9 → 46,0 Mio).
+
+### Les idées à retenir
+
+1. **Partitionner, c'est permettre de ne pas lire** : le chemin d'un fichier peut porter une information (ici le
+   replay) qui évite de l'ouvrir.
+2. **Un arrêt propre** : un programme qui reçoit SIGTERM doit finir son travail en cours et s'arrêter ; sinon Docker le
+   tue après 10 s, et ce qu'il avait en mémoire est relu (ou perdu, s'il avait déjà validé).
+
+### Ce qu'on n'a pas choisi
+
+- **Supprimer les anciens replays automatiquement** : Bronze est l'historique brut ; on le taille à la main, après
+  avoir vu ce qui serait supprimé.
+- **Changer la logique des fenêtres** (la fonction Python qui place chaque ligne dans sa fenêtre, l'état qui ne se vide
+  jamais) : ce serait plus rapide, mais les résultats pourraient changer ; c'est pour une autre branche.
+
+### Limites connues
+
+- L'étape Bronze de Dagster attend que le retard **total** de bronze-writer soit nul : si des replays s'enchaînent, elle
+  attend en vain et échoue après 180 s (vu sur m001). Il faudrait attendre seulement les messages de ce replay.
+- L'état de l'agrégation Spark ne se vide jamais (pas de watermark sur l'agrégation) : 384 000 lignes après une
+  journée de replays. Il grossit avec chaque replay.

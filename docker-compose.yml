@@ -190,7 +190,8 @@ services:
       spark-master:
         condition: service_healthy
     command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.worker.Worker",
-              "spark://spark-master:7077", "--cores", "2", "--memory", "2g", "--webui-port", "8081"]
+              "spark://spark-master:7077", "--cores", "4", "--memory", "2g", "--webui-port", "8081"]
+    # 4 cores: streaming 2 + Silver 1 (+1 for a second Silver when the memory allows it)
     volumes:
       - ./monitoring/spark/metrics.properties:/opt/spark/conf/metrics.properties:ro
     mem_limit: 2560m
@@ -271,7 +272,7 @@ services:
       - --conf
       - spark.jars.ivy=/tmp/ivy
       - --conf
-      - spark.cores.max=1
+      - spark.cores.max=${STREAMING_CORES:-2}   # the 3 queries shared 1 core: batches 12.5 s -> 5 s with 2
       - --conf
       - spark.sql.streaming.metricsEnabled=true   # rows/s and batch duration of each query on :4040/metrics/prometheus
       - --conf

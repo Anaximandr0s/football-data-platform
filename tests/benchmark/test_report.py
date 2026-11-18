@@ -87,7 +87,7 @@ def test_the_report_and_its_charts_are_built_from_the_results_alone(tmp_path):
                                                  "freshness_steps.png"]
     assert all((tmp_path / n.split("/")[-1]).stat().st_size > 10_000 for n in names)
     md = br.render(r, names)
-    assert "commit `abc1234`" in md and "| Run success >= 95 % | 94.0% (all runs: 85.0%) | FAIL |" in md
+    assert "commit `abc1234`" in md and "| Run success >= 95 % | 94.0% over 7 days (all runs: 85.0%) | FAIL |" in md
     assert "**Limit on this laptop: 2 matches at x60.**" in md
 
 
@@ -108,3 +108,20 @@ def test_silver_reading_many_bronze_copies_is_a_bottleneck():
 def test_the_slowest_reader_is_named_even_within_the_limit():
     found = " ".join(br.bottlenecks(results()))
     assert "**Slowest reader**: spark, 50.0 s to drain at 2 matches" in found
+
+
+def test_before_and_after_rows_and_chart(tmp_path):
+    before, after = results(), results()
+    after["freshness"] = {**after["freshness"], "gold_ready_s": 120.0}
+    after["spark"] = {"batch_s": br.percentiles([4.0, 4.5, 5.0])}
+    after["reliability"] = {**after["reliability"], "since_fix": {"commit": "0d3c37a", "at": 1.0, "runs": 24,
+                                                                  "success": 0.958}}
+    rows = {r["item"]: (r["before"], r["after"]) for r in br.comparison(before, after)}
+    assert rows["Final whistle → Gold ready"] == (290 / 60, 2.0)
+    assert rows["Spark batch p50"] == (9.2, 4.5)
+    assert rows["Run success since the last fix"][1] == 95.8 and rows["Run success since the last fix"][0] is None
+    names = br.charts(json.loads(json.dumps(after)), tmp_path, before)
+    assert names[-1].endswith("before_after.png") and (tmp_path / "before_after.png").stat().st_size > 10_000
+    md = br.render(after, names, {**before, "file": "b.json"})
+    assert "## Before and after fix/performance" in md and "| Spark batch p50 | 9.2 s | 4.5 s |" in md
+    assert "since the last fix (`0d3c37a`, 24 runs)" in md

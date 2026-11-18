@@ -66,10 +66,13 @@ The columns are in `docs/contrat_donnees.md`. The manifest is the health report 
 ## Kafka and bronze
 
 Five topics, one per table (`foot-tracking` has 3 partitions, keyed by `player_id`; the others have 1).
-Bronze: `s3://bronze/<table>/match_id=<id>/ingest_date=<day>/part-<epoch_ms>-<n>.parquet`, rows as received plus
-`kafka_partition`, `kafka_offset`, `kafka_ts`, `ingested_at` and `kafka_replay_id` (the Kafka header `replay_id`,
-`<match_id>-<start time UTC>`, set once per replay by the producer). Delivery is at-least-once: a second replay doubles the rows,
-and Silver deduplicates (keys in the contract). After one replay of m001 and m002, `make counts` shows
+Bronze: `s3://bronze/<table>/match_id=<id>/replay_id=<replay>/ingest_date=<day>/part-<epoch_ms>-<n>.parquet`, one
+folder per replay, rows as received plus `kafka_partition`, `kafka_offset`, `kafka_ts`, `ingested_at` and
+`kafka_replay_id` (the Kafka header `replay_id`, `<match_id>-<start time UTC>`, set once per replay by the producer).
+Silver reads only the latest complete replay of a match; older replays stay as raw history (`make bronze-prune KEEP=3`
+keeps the last 3 complete ones). Delivery is at-least-once: a restart can deliver a message twice inside its replay
+folder, and Silver deduplicates (keys in the contract). The writer stops cleanly on SIGTERM (`docker stop`): it writes
+what it holds, commits and exits, in about 1 s instead of being killed after 10 s. After one replay of m001 and m002, `make counts` shows
 202,950 tracking, 3,619 events, 9,225 ball, 64 players and 2 matches messages in total.
 
 ## Design rules

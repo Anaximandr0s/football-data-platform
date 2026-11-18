@@ -29,7 +29,12 @@ def summary(progress: dict) -> dict:
             "processed_rows_per_second": progress.get("processedRowsPerSecond") or 0.0,
             "batch_duration_ms": (progress.get("durationMs") or {}).get("triggerExecution", 0),
             "offsets_behind_latest": sum(behind) if behind else None,
-            "end_offsets": ends}
+            "end_offsets": ends,
+            # where a batch's time goes (addBatch = the work, walCommit/commit = the checkpoint), and its state store
+            "duration_breakdown_ms": progress.get("durationMs") or {},
+            "state": [{k: op.get(k) for k in ("numRowsTotal", "memoryUsedBytes", "commitTimeMs", "numShufflePartitions",
+                                                "allUpdatesTimeMs", "allRemovalsTimeMs")}
+                      for op in progress.get("stateOperators", [])]}
 
 
 class ProgressFile(StreamingQueryListener):

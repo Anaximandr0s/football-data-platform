@@ -74,9 +74,17 @@ def slo_verdicts(r: dict) -> list[dict]:
          "pass": p95 is not None and p95 < SLO["live_delay_p95_s"]},
         {"slo": "Freshness < 10 min", "measured": None if fresh is None else f"{fresh / 60:.1f} min",
          "pass": fresh is not None and fresh < SLO["freshness_s"]},
-        {"slo": "Run success >= 95 %", "measured": f"{rel['success_slo']:.1%} (all runs: {rel['success_raw']:.1%})",
+        {"slo": "Run success >= 95 %", "measured": f"{rel['success_slo']:.1%} over 7 days (all runs: "
+                                                    f"{rel['success_raw']:.1%})" + _since_fix(rel),
          "pass": rel["success_slo"] >= SLO["run_success"]},
     ]
+
+
+def _since_fix(rel: dict) -> str:
+    since = rel.get("since_fix") or {}
+    if since.get("success") is None:
+        return ""
+    return f"; {since['success']:.1%} since the last fix (`{since['commit']}`, {since['runs']} runs)"
 
 
 def bottlenecks(r: dict) -> list[str]:
@@ -127,6 +135,44 @@ def bottlenecks(r: dict) -> list[str]:
     return out
 
 
+def _step(r: dict, name: str) -> float | None:
+    return next((x["seconds"] for x in r["freshness"]["steps"] if x["step"] == name), None)
+
+
+def _drain(r: dict, reader: str) -> float | None:
+    return r["load"][-1]["readers"][reader]["drain_s"] if r["load"] else None
+
+
+def _restart(r: dict, service: str) -> float | None:
+    return next((x.get("restart_s") for x in r["recovery"] if x["service"] == service), None)
+
+
+def _x1(r: dict, key: str) -> float | None:
+    x1 = next(s for s in r["speeds"] if s["speed"] == 1)
+    return x1["app_p95_ms"] if key == "app" else x1["live_delay_ms"]["p95"]
+
+
+def comparison(before: dict, after: dict) -> list[dict]:
+    """One row per fixed item: (item, unit, before, after, lower_is_better)."""
+    rows = [
+        ("Silver for the x60 match", "s", lambda r: _step(r, "silver")),
+        ("Final whistle → Gold ready", "min", lambda r: r["freshness"]["gold_ready_s"] / 60
+         if r["freshness"]["gold_ready_s"] else None),
+        ("Bronze copies Silver read", "", lambda r: (r["freshness"].get("silver_input") or {}).get("bronze_copies")),
+        ("Spark batch p50", "s", lambda r: r["spark"]["batch_s"]["p50"]),
+        ("Spark batch p95", "s", lambda r: r["spark"]["batch_s"]["p95"]),
+        ("Spark drain, highest load level", "s", lambda r: _drain(r, "spark")),
+        ("Live page p95 at x1, the app's own", "ms", lambda r: _x1(r, "app")),
+        ("Live page p95 at x1, probe (same code)", "ms", lambda r: _x1(r, "probe")),
+        ("docker restart bronze-writer", "s", lambda r: _restart(r, "bronze-writer")),
+        ("Run success, normal runs, 7 days", "%", lambda r: r["reliability"]["success_slo"] * 100),
+        ("Run success since the last fix", "%", lambda r: (r["reliability"].get("since_fix") or {}).get("success")
+         and r["reliability"]["since_fix"]["success"] * 100),
+    ]
+    return [{"item": item, "unit": unit, "before": get(before), "after": get(after),
+             "lower_is_better": unit != "%"} for item, unit, get in rows]
+
+
 # ---------------------------------------------------------------- the document
 
 def fmt(v, unit: str = "", digits: int = 0) -> str:
@@ -137,7 +183,7 @@ def pct_cells(p: dict, digits: int = 0, unit: str = "") -> str:
     return " | ".join(fmt(p[k], unit, digits) for k in ("p50", "p95", "p99"))
 
 
-def render(r: dict, charts: list[str]) -> str:
+def render(r: dict, charts: list[str], before: dict | None = None) -> str:
     m = r["machine"]
     lines = [
         "# Performance of the platform",
@@ -155,6 +201,21 @@ def render(r: dict, charts: list[str]) -> str:
         "|---|---|---|",
     ]
     lines += [f"| {v['slo']} | {v['measured'] or '–'} | {'PASS' if v['pass'] else 'FAIL'} |" for v in slo_verdicts(r)]
+    if before:
+        lines += ["", "## Before and after fix/performance", "",
+                  f"Before: `data/benchmark/{before['file']}` (commit `{before['commit']}`, {before['generated_at']}). "
+                  f"After: this run. What changed: Silver reads only the latest complete replay; Spark streaming has "
+                  "2 cores (the worker 4) and 2 shuffle partitions; the Live page measures its lag outside its read "
+                  "loop; bronze-writer stops cleanly on SIGTERM; test runs are tagged.", "",
+                  "| Item | Before | After |", "|---|---|---|"]
+        for row in comparison(before, r):
+            u = row["unit"]
+            digits = 1 if u in ("s", "min", "%") else 0
+            lines.append(f"| {row['item']} | {fmt(row['before'], ' ' + u if u else '', digits)} | "
+                         f"{fmt(row['after'], ' ' + u if u else '', digits)} |")
+        lines += ["", f"![Before and after]({charts[4]})", "",
+                  "The restart times of the run before come from its log (whole seconds); the copies Silver read come "
+                  "from Silver's own report of that run."]
     lines += ["", "Run success counts the normal runs only; runs started on purpose for tests (tag `purpose`: the "
               "damaged-data demo, the benchmark rebuild) are left out, and the rate of all runs is shown next to it.",
               "", "## Bottlenecks", ""]
@@ -259,7 +320,7 @@ def render(r: dict, charts: list[str]) -> str:
     return "\n".join(lines)
 
 
-def charts(r: dict, out: Path) -> list[str]:
+def charts(r: dict, out: Path, before: dict | None = None) -> list[str]:
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -322,6 +383,19 @@ def charts(r: dict, out: Path) -> list[str]:
     ax.set_title(f"Final whistle to Gold ready ({r['freshness']['match']}, x60)")
     ax.legend(frameon=False, ncol=4, loc="upper center", bbox_to_anchor=(0.5, -0.25))
     names.append(_save(fig, out / "freshness_steps.png"))
+    if before:
+        rows = [x for x in comparison(before, r) if x["before"] is not None and x["after"] is not None
+                and x["unit"] in ("s", "min", "ms") and "probe" not in x["item"]]
+        fig, axes = plt.subplots(1, len(rows), figsize=(3.1 * len(rows), 5))
+        for ax, row in zip(axes, rows, strict=True):
+            ax.bar(["before", "after"], [row["before"], row["after"]], color=[grey, green])
+            for i, v in enumerate((row["before"], row["after"])):
+                ax.text(i, v, f"{v:,.1f}", ha="center", va="bottom", fontsize=14, fontweight="bold")
+            ax.set_title(row["item"].replace(", ", ",\n").replace(" for the", "\nfor the"), fontsize=13)
+            ax.set_ylabel(row["unit"])
+            ax.set_yticks([])
+        fig.suptitle("Before and after fix/performance (lower is better)", fontsize=20, fontweight="bold")
+        names.append(_save(fig, out / "before_after.png"))
     return names
 
 
@@ -333,18 +407,29 @@ def _save(fig, path: Path) -> str:
     return f"img/performance/{path.name}"
 
 
-def latest_results(folder: Path = RESULTS) -> Path:
-    files = sorted(folder.glob("*.json"))
+def results_files(folder: Path = RESULTS) -> list[Path]:
+    files = sorted(p for p in folder.glob("*.json") if p.name != "current.json")
     if not files:
         raise SystemExit("no results yet: run make benchmark")
-    return files[-1]
+    return files
+
+
+def load(path: Path) -> dict:
+    return {**json.loads(path.read_text(encoding="utf-8")), "file": path.name}
 
 
 def main() -> None:
-    path = latest_results()
-    results = {**json.loads(path.read_text(encoding="utf-8")), "file": path.name}
-    DOC.write_text(render(results, charts(results, IMG)), encoding="utf-8")
-    print(f"{DOC.relative_to(ROOT)} written from {path.name}")
+    import argparse
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--before", type=Path, help="results to compare with (default: the previous results file)")
+    a = ap.parse_args()
+    files = results_files()
+    results = load(files[-1])
+    before_path = a.before or (files[-2] if len(files) > 1 else None)
+    before = load(before_path) if before_path else None
+    DOC.write_text(render(results, charts(results, IMG, before), before), encoding="utf-8")
+    print(f"{DOC.relative_to(ROOT)} written from {files[-1].name}" + (f", compared with {before_path.name}"
+                                                                     if before else ""))
 
 
 if __name__ == "__main__":

@@ -6,7 +6,8 @@ replay_id header), so a page opened in the middle of a replay still gets the sco
 foot-live-stats, the 5-minute stats written by the streaming job (step 6), keeping the latest row per key.
 
 It also serves Prometheus metrics on METRICS_PORT: how far behind the end of each topic it is (no group offset is
-committed, so a Kafka exporter cannot see it), and the live delay from Kafka to the app.
+committed, so a Kafka exporter cannot see it), and the live delay from Kafka to the app. The lag is measured by its own
+thread and consumer: the reading loop only notes how far it has read, so a broker round trip never makes it wait.
 """
 import json
 import logging
@@ -38,6 +39,15 @@ def replay_id_of(headers) -> str | None:
     return None
 
 
+def lag_by_topic(ends: dict[tuple[str, int], tuple[int, int]], read: dict[tuple[str, int], int]) -> dict[str, int]:
+    """Messages not read yet per topic. ends: (topic, partition) -> (low, high) watermarks; read: the next offset the
+    feed will read, per partition (a partition not read yet counts from its low watermark)."""
+    behind: dict[str, int] = {}
+    for (topic, part), (low, high) in ends.items():
+        behind[topic] = behind.get(topic, 0) + max(0, high - read.get((topic, part), low))
+    return behind
+
+
 class Feed:
     def __init__(self, bootstrap: str):
         self._states: dict[str, live.MatchState] = {}
@@ -46,8 +56,10 @@ class Feed:
         self.messages = 0
         self.error: str | None = None
         self.caught_up = False      # before, it re-reads old replays: their delay says nothing about the live path
+        self._read: dict[tuple[str, int], int] = {}             # (topic, partition) -> next offset to read
         self._metrics()
         threading.Thread(target=self._run, args=(bootstrap,), daemon=True, name="live-feed").start()
+        threading.Thread(target=self._lag_loop, args=(bootstrap,), daemon=True, name="live-feed-lag").start()
 
     def snapshot(self) -> dict[str, live.MatchState]:
         with self._lock:
@@ -64,18 +76,14 @@ class Feed:
         consumer = Consumer({"bootstrap.servers": bootstrap, "group.id": f"live-page-{uuid.uuid4().hex[:8]}",
                              "auto.offset.reset": "earliest", "enable.auto.commit": False})
         consumer.subscribe([*TOPIC_TABLE, LIVE_STATS_TOPIC])
-        lag_at = 0.0
         try:
             while True:
-                msgs = consumer.consume(num_messages=1000, timeout=0.5)
-                if time.monotonic() - lag_at > LAG_EVERY_S:
-                    self._lag(consumer)
-                    lag_at = time.monotonic()
-                for msg in msgs:
+                for msg in consumer.consume(num_messages=1000, timeout=0.5):
                     if msg.error():
                         self.error = str(msg.error())
                         log.warning("kafka: %s", self.error)
                         continue
+                    self._read[(msg.topic(), msg.partition())] = msg.offset() + 1
                     if self.caught_up:
                         self._delay.labels(msg.topic()).observe(max(0.0, time.time() - msg.timestamp()[1] / 1000))
                     if msg.topic() == LIVE_STATS_TOPIC:
@@ -99,14 +107,20 @@ class Feed:
                                 ["topic"], buckets=DELAY_BUCKETS, registry=registry)
         start_http_server(METRICS_PORT, registry=registry)
 
-    def _lag(self, consumer) -> None:
-        from confluent_kafka import TopicPartition
+    def _lag_loop(self, bootstrap: str) -> None:
+        from confluent_kafka import Consumer, TopicPartition
 
-        behind: dict[str, int] = {}
-        for tp in consumer.assignment():
-            low, high = consumer.get_watermark_offsets(tp, timeout=2)
-            pos = consumer.position([TopicPartition(tp.topic, tp.partition)])[0].offset
-            behind[tp.topic] = behind.get(tp.topic, 0) + (high - (pos if pos >= 0 else low))
+        watcher = Consumer({"bootstrap.servers": bootstrap, "group.id": f"live-page-lag-{uuid.uuid4().hex[:8]}",
+                            "enable.auto.commit": False})
+        topics = [*TOPIC_TABLE, LIVE_STATS_TOPIC]
+        while True:
+            meta = watcher.list_topics(timeout=10).topics
+            ends = {(t, p): watcher.get_watermark_offsets(TopicPartition(t, p), timeout=5)
+                    for t in topics if t in meta for p in meta[t].partitions}
+            self._record_lag(lag_by_topic(ends, dict(self._read)))
+            time.sleep(LAG_EVERY_S)
+
+    def _record_lag(self, behind: dict[str, int]) -> None:
         for topic, n in behind.items():
             self._lag_gauge.labels(topic).set(n)
         if behind and not self.caught_up and sum(behind.values()) == 0:

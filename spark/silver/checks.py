@@ -68,14 +68,15 @@ PREPARED_KEYS = {"tracking": "tracking_rows", "events": "events", "ball": "ball_
 
 def quality_report(match_id: str, metrics: dict, manifest: dict | None, ok: bool, written: bool, at: str) -> dict:
     """What the Data quality page needs from this run (data/quality/silver_<match>.json): rows prepared from the
-    source, read from bronze (replays add copies) and kept in Silver, and the values Silver corrected or rejected."""
+    source, read from bronze (the one replay Silver read) and kept in Silver, and the values Silver corrected or
+    rejected. duplicates_removed: rows a replay holds twice (bronze_writer delivers at least once)."""
     prepared = None
     if manifest:
         prepared = {t: int(manifest[k]) for t, k in PREPARED_KEYS.items()} | {"matches": 1}
     bronze, silver = metrics["bronze_rows"], metrics["rows"]
     return {"match_id": match_id, "written_at_utc": at, "checks_passed": ok, "written": written,
             "prepared_rows": prepared, "bronze_rows": bronze, "silver_rows": silver,
-            "replay_copies_removed": {t: bronze[t] - silver[t] for t in silver},
+            "duplicates_removed": {t: bronze[t] - silver[t] for t in silver},
             "positions_corrected": metrics["tracking"]["was_corrected"],
             "speeds_rejected": metrics["tracking"]["speed_rejected"],
             "tracking_rows": silver["tracking"]}

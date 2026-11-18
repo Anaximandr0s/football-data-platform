@@ -13,6 +13,10 @@ How it keeps the numbers right:
                events in the attacking frame of the acting team, which is Gold's x_att)
   output       rows.py: one row = the full current value of a window, never an increment, sent again when it changes
                or becomes complete (end + 10 s of tracking, or the last second of the match)
+  settings     2 cores (the 3 queries shared 1: batches 12.5 s -> 5 s) and 2 shuffle partitions (25 % shorter
+               batches), measured on the same x60 replay. Not changed, measured: the checkpoint on MinIO costs about
+               0.25 s of a batch (moving it to a local volume would not help; on a real cluster it must stay on shared
+               storage anyway, every node reads it), and RocksDB made batches slower (7.0 s against 5.0 s)
   restarts     the aggregation state and the Kafka offsets live in the checkpoint (CHECKPOINT, MinIO); a batch replayed
                after a crash sends the same full rows again, which the compacted topic overwrites
 """
@@ -31,7 +35,8 @@ BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "kafka:9092")
 TOPIC = {t: os.getenv(f"KAFKA_TOPIC_{t.upper()}", f"foot-{t}") for t in ("tracking", "events", "ball", "players",
                                                                             "matches")}
 OUT_TOPIC = os.getenv("KAFKA_TOPIC_LIVE_STATS", "foot-live-stats")
-CHECKPOINT = os.getenv("STREAMING_CHECKPOINT", "s3a://checkpoints/streaming-5min")
+# v2: 2 shuffle partitions (a checkpoint keeps the number it was created with)
+CHECKPOINT = os.getenv("STREAMING_CHECKPOINT", "s3a://checkpoints/streaming-5min-v2")
 TRIGGER = os.getenv("STREAMING_TRIGGER", "5 seconds")
 MAX_SPEED_KMH = 40.0       # Silver's rule (spark/silver/config.py)
 
@@ -148,10 +153,15 @@ def sink(spark: SparkSession, build, kinds: set[str]):
 
 
 def main() -> None:
-    spark = (SparkSession.builder.appName("streaming-5min")
-             .config("spark.sql.session.timeZone", "UTC")
-             .config("spark.sql.shuffle.partitions", "4")
-             .getOrCreate())
+    builder = (SparkSession.builder.appName("streaming-5min")
+               .config("spark.sql.session.timeZone", "UTC")
+               # 2 rather than 4: batches 25 % shorter (docs/performance.md). Fixed by the checkpoint once a query
+               # has run: a new value needs a new STREAMING_CHECKPOINT
+               .config("spark.sql.shuffle.partitions", os.getenv("STREAMING_SHUFFLE_PARTITIONS", "2")))
+    if os.getenv("STREAMING_STATE_STORE", "hdfs") == "rocksdb":
+        builder = builder.config("spark.sql.streaming.stateStore.providerClass",
+                                 "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider")
+    spark = builder.getOrCreate()
     spark.sparkContext.setLogLevel("WARN")
     spark.streams.addListener(progress.ProgressFile())
     matches = static(spark, "matches")

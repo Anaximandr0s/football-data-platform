@@ -3,17 +3,21 @@
     python -m ingestion.bronze_writer                       # run until Ctrl+C
     python -m ingestion.bronze_writer --exit-when-idle 30   # stop 30 s after the last message
 
-Layout: s3://bronze/<table>/match_id=<id>/ingest_date=<YYYY-MM-DD>/part-<epoch_ms>-<n>.parquet
+Layout: s3://bronze/<table>/match_id=<id>/replay_id=<replay>/ingest_date=<YYYY-MM-DD>/part-<epoch_ms>-<n>.parquet
+(replay_id=none for a message without the header). One folder per replay: Silver reads only the latest complete one.
+Files written before 2026-11-17 sit directly under match_id=<id>/ingest_date=...: raw history, never read again.
 Tables: tracking, events, ball, players, matches (one per Kafka topic).
 Rows are stored as received + kafka_partition, kafka_offset, kafka_ts, ingested_at, kafka_replay_id (the replay_id
 header, null for messages sent before it existed), with the
 fixed column types of schemas.py. A file is written every 10 s or 5,000 rows, per (table, match).
 Offsets are committed after the upload, so delivery is at-least-once: Silver must deduplicate.
+On SIGTERM (docker stop) or Ctrl+C it writes what it holds, commits and exits, instead of being killed 10 s later.
 """
 import argparse
 import io
 import json
 import os
+import signal
 import sys
 import time
 from collections import defaultdict
@@ -45,6 +49,65 @@ def replay_id_of(headers: list[tuple[str, bytes]] | None) -> str | None:
     return None
 
 
+def object_key(table: str, match_id: str, replay_id: str | None, day: str, ms: int, part: int) -> str:
+    return f"{table}/match_id={match_id}/replay_id={replay_id or 'none'}/ingest_date={day}/part-{ms}-{part}.parquet"
+
+
+class Stop:
+    """Set by SIGTERM: the loop ends after its current poll, then writes and commits what it holds."""
+    def __init__(self):
+        self.requested = False
+
+    def __call__(self, _signum, _frame) -> None:
+        self.requested = True
+
+
+def run(c, s3, exit_when_idle: float = 0, stop: Stop | None = None) -> None:
+    """Consumes until `stop` is requested (or idle for `exit_when_idle` s), writing a file per (table, match, replay)
+    every BATCH_SECONDS or BATCH_MSGS. Whatever ends the loop, the buffer is written and committed before closing."""
+    stop = stop or Stop()
+    buf: dict[tuple[str, str, str | None], list[dict]] = defaultdict(list)
+    n_buf, part, got_any = 0, 0, False
+    last_flush = last_msg = time.time()
+
+    def flush() -> None:
+        nonlocal buf, n_buf, last_flush, part
+        for (table, match_id, replay_id), rows in buf.items():
+            part += 1
+            key = object_key(table, match_id, replay_id, time.strftime("%Y-%m-%d", time.gmtime()),
+                             int(time.time() * 1000), part)
+            s3.put_object(Bucket=BRONZE_BUCKET, Key=key, Body=to_parquet_bytes(table, rows))
+            print(f"wrote {len(rows):>5} rows -> s3://{BRONZE_BUCKET}/{key}", flush=True)
+        if n_buf:
+            c.commit(asynchronous=False)
+        buf, n_buf, last_flush = defaultdict(list), 0, time.time()
+
+    try:
+        while not stop.requested:
+            msg = c.poll(1.0)
+            if msg is not None:
+                if msg.error():
+                    print(f"kafka error: {msg.error()}", file=sys.stderr)
+                else:
+                    row = json.loads(msg.value())
+                    row.update(kafka_partition=msg.partition(), kafka_offset=msg.offset(),
+                               kafka_ts=msg.timestamp()[1], ingested_at=int(time.time() * 1000),
+                               kafka_replay_id=replay_id_of(msg.headers()))
+                    buf[(TABLE_OF[msg.topic()], row["match_id"], row["kafka_replay_id"])].append(row)
+                    n_buf += 1
+                    got_any, last_msg = True, time.time()
+            if n_buf and (n_buf >= BATCH_MSGS or time.time() - last_flush >= BATCH_SECONDS):
+                flush()
+            if exit_when_idle and got_any and time.time() - last_msg > exit_when_idle:
+                break
+    except KeyboardInterrupt:
+        pass
+    finally:
+        flush()
+        c.close()
+    print("stopped: buffer written and committed", flush=True)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     ap.add_argument("--exit-when-idle", type=float, default=0, metavar="SECONDS",
@@ -58,46 +121,9 @@ def main() -> None:
                   "group.id": os.getenv("BRONZE_GROUP", "bronze-writer"),
                   "auto.offset.reset": "earliest", "enable.auto.commit": False})
     c.subscribe(list(TOPICS.values()))
-
-    buf: dict[tuple[str, str], list[dict]] = defaultdict(list)
-    n_buf, part, got_any = 0, 0, False
-    last_flush = last_msg = time.time()
-
-    def flush() -> None:
-        nonlocal buf, n_buf, last_flush, part
-        for (table, match_id), rows in buf.items():
-            part += 1
-            day = time.strftime("%Y-%m-%d", time.gmtime())
-            key = f"{table}/match_id={match_id}/ingest_date={day}/part-{int(time.time() * 1000)}-{part}.parquet"
-            s3.put_object(Bucket=BRONZE_BUCKET, Key=key, Body=to_parquet_bytes(table, rows))
-            print(f"wrote {len(rows):>5} rows -> s3://{BRONZE_BUCKET}/{key}", flush=True)
-        if n_buf:
-            c.commit(asynchronous=False)
-        buf, n_buf, last_flush = defaultdict(list), 0, time.time()
-
-    try:
-        while True:
-            msg = c.poll(1.0)
-            if msg is not None:
-                if msg.error():
-                    print(f"kafka error: {msg.error()}", file=sys.stderr)
-                else:
-                    row = json.loads(msg.value())
-                    row.update(kafka_partition=msg.partition(), kafka_offset=msg.offset(),
-                               kafka_ts=msg.timestamp()[1], ingested_at=int(time.time() * 1000),
-                               kafka_replay_id=replay_id_of(msg.headers()))
-                    buf[(TABLE_OF[msg.topic()], row["match_id"])].append(row)
-                    n_buf += 1
-                    got_any, last_msg = True, time.time()
-            if n_buf and (n_buf >= BATCH_MSGS or time.time() - last_flush >= BATCH_SECONDS):
-                flush()
-            if a.exit_when_idle and got_any and time.time() - last_msg > a.exit_when_idle:
-                flush()
-                break
-    except KeyboardInterrupt:
-        flush()
-    finally:
-        c.close()
+    stop = Stop()
+    signal.signal(signal.SIGTERM, stop)
+    run(c, s3, a.exit_when_idle, stop)
 
 
 if __name__ == "__main__":

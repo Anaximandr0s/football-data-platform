@@ -75,7 +75,9 @@ def kept(reports: dict, frames: pd.DataFrame) -> pd.DataFrame:
         rows.append({"match_id": match_id, "prepared": prepared, "silver": silver, "gold": gold,
                      "gold_expected": expected_gold,
                      "kept_share": min(silver / prepared if prepared else 0, gold / expected_gold if expected_gold else 0),
-                     "copies_removed": sum(r["replay_copies_removed"].values()),
+                     # reports written before Silver read one replay call it replay_copies_removed
+                     "copies_removed": sum((r.get("duplicates_removed") or r.get("replay_copies_removed")).values()),
+                     "replays_in_bronze": r.get("replays_in_bronze"),
                      "positions_corrected": r["positions_corrected"], "speeds_rejected": r["speeds_rejected"],
                      "tracking_rows": r["tracking_rows"]})
     return pd.DataFrame(rows)
@@ -196,9 +198,12 @@ def cards(checks: pd.DataFrame, kept_rows: pd.DataFrame, library: pd.DataFrame, 
         f"the camera saw {seen:.0%} of the match time (a limit of the source, not of our pipeline)",
         _count(checks, "completeness") + " (no empty table, no missing key, 22 players in every second seen)"]))
     copies = int(kept_rows.copies_removed.sum()) if not kept_rows.empty else 0
+    replays = int(kept_rows.replays_in_bronze.fillna(0).sum()) if not kept_rows.empty else 0
     dupes = len(failed(checks, "uniqueness"))
     out.append(Card("uniqueness", _status(checks, "uniqueness"), f"{dupes}" if dupes else "0 duplicates", [
-        f"{copies:,} copies from replaying the matches were removed by Silver",
+        (f"Silver read one replay per match, the latest complete one, of {replays:,} kept in Bronze; it removed "
+         f"{copies:,} rows delivered twice" if replays else
+         f"{copies:,} copies from replaying the matches were removed by Silver"),
         _count(checks, "uniqueness") + " (one row per key in every table)"]))
     corrected = int(kept_rows.positions_corrected.sum()) if not kept_rows.empty else 0
     rows = int(kept_rows.tracking_rows.sum()) if not kept_rows.empty else 0

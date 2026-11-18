@@ -36,4 +36,4 @@ def test_every_check_has_exactly_one_dimension_and_a_plain_name():
         for name, entry in checks.items():
             assert entry["dimension"] in DIMENSIONS, (table, name)
             assert entry["plain"] and "_count(" not in entry["plain"], (table, name)
-    assert len(files) == 210
+    assert len(files) == 215
