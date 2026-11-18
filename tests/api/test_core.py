@@ -7,7 +7,7 @@ M = core.Match("m001", "Perth Glory 1-3 Brisbane Roar", p1_start=10, p1_end=2900
 
 
 def test_start_presets_kickoff_goal_and_the_tv_clock():
-    assert core.start_second(M, "kickoff") == 10
+    assert core.start_second(M, "kickoff") == 0                         # from the first second: a whole match
     assert core.start_second(M, "goal") == 300                          # 30 s before the ball was in the goal
     assert core.start_second(M, "12:30") == 10 + 750
     assert core.start_second(M, "45:00") == 3800                        # second kick-off
@@ -75,7 +75,7 @@ BASE = {"app": "http://localhost:8501", "grafana": "http://localhost:3001", "kaf
 def test_every_box_has_buttons_and_page_links_carry_the_match_and_view():
     out = core.links(BASE, "m002")
     assert set(out) == {"skillcorner", "producer", "kafka", "spark", "live", "bronze", "silver", "gold", "analysis",
-                        "dagster", "monitoring"}
+                        "dagster", "monitoring", "control"}
     urls = {b["label"]: b["url"] for buttons in out.values() for b in buttons}
     assert urls["Live page"] == "http://localhost:8501/live_match?match=m002"
     assert urls["Match story (fan)"] == "http://localhost:8501/match_story?view=fan&match=m002"
@@ -101,3 +101,44 @@ def test_every_box_has_a_role_and_numbers_are_formatted_plainly():
     assert [core.fmt(v, k) for v, k in ((1234.4, "rate"), (0.52, "s"), (0.958, "pct"), (None, "s"),
                                         (float("nan"), "pct"), (1, "yesno"))] == ["1,234/s", "0.5 s", "96%", "–", "–",
                                                                                   "yes"]
+
+
+def test_the_steps_of_a_run_become_chips_in_order():
+    running = core.chips({"bronze": "SUCCESS", "silver": "IN_PROGRESS"}, "STARTED")
+    assert [(c["label"], c["state"]) for c in running] == [("Bronze", "done"), ("Silver", "running"),
+                                                           ("Soda", "waiting"), ("Gold", "waiting"),
+                                                           ("Soda", "waiting"), ("report", "waiting")]
+    failed = core.chips({"bronze": "SUCCESS", "silver": "SUCCESS", "silver_soda_silver": "FAILURE"}, "FAILURE")
+    assert [c["state"] for c in failed] == ["done", "done", "failed", "not built", "not built", "not built"]
+
+
+def bench_results():
+    pct = {"n": 1, "p50": 1078.0, "p95": 1.0, "p99": 1.0, "max": 1.0}
+    reader = {"growing": False, "drain_s": 10.0, "peak_lag": 1}
+    return {"generated_at": "2026-11-17 23:41 UTC",
+            "speeds": [{"speed": 1, "live_delay_ms": {"p95": 491.9}}, {"speed": 60, "kafka_msgs_per_s": pct}],
+            "freshness": {"gold_ready_s": 150.0}, "spark": {"batch_s": {"p50": 3.8}},
+            "load": [{"level": 4, "readers": {"spark": reader}}],
+            "recovery": [{"service": "bronze-writer", "back_to_normal_s": 47.4}],
+            "reliability": {"runs": 41, "on_purpose": 10, "success_slo": 0.909, "since_fix": {"commit": "0d3c37a",
+                                                                                              "runs": 26, "success": 0.962}}}
+
+
+def test_the_panel_says_one_number_per_idea_each_with_its_source():
+    verdicts = [{"slo": "Live delay p95 < 2 s", "measured": "0.49 s (x1)", "pass": True},
+                {"slo": "Run success >= 95 %", "measured": "90.9% over 7 days", "pass": False}]
+    panel = core.performance(bench_results(), verdicts, (215, 215), (15, 15), "18 Nov 2026 11:12 UTC")
+    assert [h["title"] for h in panel["hero"]] == ["Live delay", "Ready after the final whistle", "Quality checks",
+                                                   "Goal minutes exact", "Capacity"]
+    assert [h["value"] for h in panel["hero"]] == ["0.5 s", "2.5 min", "215 / 215", "15 / 15", "4 matches at x60"]
+    assert all(h["source"] and h["icon"] for h in panel["hero"])
+    assert panel["journey"] == ["A player moves", "0.5 s", "Live page", "2.5 min after the final whistle",
+                                "Full statistics, checked and stored"]
+    fail = next(d for d in panel["details"] if d["title"].startswith("Run success"))
+    assert fail["value"] == "FAIL" and "below the 95 % goal (3 failed)" in fail["line"] and "96.2% of 26 runs" in fail["line"]
+
+
+def test_without_a_benchmark_the_panel_keeps_the_quality_numbers():
+    panel = core.performance(None, [], (210, 215), (14, 15), None)
+    assert [h["title"] for h in panel["hero"]] == ["Quality checks", "Goal minutes exact"]
+    assert panel["journey"] == [] and panel["details"] == []

@@ -13,3 +13,16 @@ Licence text: app/web3d/d3-delaunay.LICENSE. Used for the Voronoi cells of the R
 app/api/static/icons/*.svg: Tabler Icons 3.19.0 (https://github.com/tabler/tabler-icons), outline set. MIT licence,
 Copyright (c) 2020-2024 Paweł Kuna. Licence text: app/api/static/icons/LICENSE. Used in the Control Center's diagram;
 generic shapes only, no product logo.
+
+Technology logos (Control Center diagram, app/api/static/logos/), used unmodified next to the tools' names
+-------------------------------------------------------------------------------------------------------------
+- Simple Icons 13.21.0 (https://simpleicons.org, CC0 1.0, app/api/static/logos/LICENSE-simple-icons.md): Apache Kafka,
+  Apache Spark, MinIO, DuckDB, dbt, Streamlit, Grafana, Prometheus, FastAPI, Docker, Python.
+- Dagster: the project's own logo file, github.com/dagster-io/dagster at commit 933b2b9a,
+  docs/static/img/dagster-logo.svg.
+- Apache Iceberg: the project's own logo file, github.com/apache/iceberg at commit 0d99bcdf,
+  site/docs/assets/images/Iceberg-logo.svg.
+- Soda and SkillCorner have no logo here (none found in Simple Icons or their repositories): their names only.
+The licences above cover the image files, not the trademarks. Every name and logo is a trademark of its owner: Apache
+Kafka, Apache Spark and Apache Iceberg of the Apache Software Foundation, the others of their respective owners. They
+are shown only to say which tool does which job in this school project; no endorsement is implied.

@@ -29,10 +29,11 @@ class Match:
 # ---------------------------------------------------------------- starting a replay
 
 def start_second(m: Match, start: str) -> int:
-    """The match second a replay starts from: "kickoff", "goal" (30 s before the first goal, ball in the goal) or a
-    TV clock "mm:ss" (00:00 to 45:00 in the first half, 45:00 to 90:00 from the second kick-off)."""
+    """The match second a replay starts from: "kickoff" (the whole match: the only start Dagster turns into Gold),
+    "goal" (30 s before the first goal, ball in the goal) or a TV clock "mm:ss" (00:00 to 45:00 in the first half,
+    45:00 to 90:00 from the second kick-off). Any start but kick-off makes a partial replay, live only."""
     if start == "kickoff":
-        return m.p1_start
+        return 0                     # the first second of the data: a whole match (ingestion/replay_ids.py)
     if start == "goal":
         if m.first_goal_ts is None:
             raise Refused(f"{m.label}: no goal in this match")
@@ -103,6 +104,7 @@ def box_status(v: dict) -> dict[str, str]:
         "analysis": up(v.get("app_up")),
         "dagster": RED if v.get("dagster_up") == 0 else RED if v.get("runs_failed_latest") else up(v.get("dagster_up")),
         "monitoring": up(v.get("prometheus_up")),
+        "control": GREEN,                          # it answered this request
     }
 
 
@@ -163,6 +165,7 @@ def links(base: dict[str, str], match_id: str | None = None) -> dict[str, list[d
         "dagster": [{"label": "Dagster: runs", "url": f"{base['dagster']}/runs"},
                     {"label": "Dagster: asset graph", "url": f"{base['dagster']}/asset-groups"},
                     {"label": "Pipeline & lineage page", "url": page("pipeline_lineage")}],
+        "control": [],
         "monitoring": [{"label": "Grafana: Service levels", "url": f"{grafana}/d/slo"},
                        {"label": "Grafana: Infrastructure", "url": f"{grafana}/d/infrastructure"},
                        {"label": "Grafana: Streaming", "url": f"{grafana}/d/streaming"},
@@ -197,30 +200,54 @@ def containers(cpu: dict[str, float], memory: dict[str, float], limit: dict[str,
 
 # ---------------------------------------------------------------- performance and quality, in plain words
 
-def performance(results: dict, verdicts: list[dict]) -> list[dict]:
-    """The numbers of the last `make benchmark`, each with one line saying what it means."""
-    x1 = next(s for s in results["speeds"] if s["speed"] == 1)
-    x60 = next(s for s in results["speeds"] if s["speed"] == 60)
-    f, load = results["freshness"], results["load"]
-    top = load[-1] if load else None
-    spark = results["spark"]["batch_s"]
-    return [
-        {"title": "Live delay", "value": f"{x1['live_delay_ms']['p95'] / 1000:.2f} s",
-         "line": "95 % of the positions reach the Live page within this time after they are sent (x1)."},
-        {"title": "Final whistle → Gold", "value": f"{f['gold_ready_s'] / 60:.1f} min",
-         "line": "After the last second of a replay, the statistics of the match are rebuilt within this time."},
-        {"title": "Throughput", "value": f"{x60['kafka_msgs_per_s']['p50']:,.0f} msg/s",
-         "line": "Messages per second through Kafka when a match is replayed 60 times faster than real time."},
-        {"title": "Load", "value": f"{top['level']} matches" if top else "–",
-         "line": "Matches played at once at x60 without any reader falling behind "
-                 f"(the slowest needs {max(r['drain_s'] or 0 for r in top['readers'].values()):.0f} s to catch up)."
-                 if top else "No load test yet."},
-        {"title": "Spark batch", "value": f"{spark['p50']:.1f} s",
-         "line": "Time Spark needs for one batch of the 5-minute statistics (it starts a new one every 5 s)."},
-        {"title": "Run success", "value": f"{(results['reliability'].get('since_fix') or {}).get('success', 0):.0%}",
-         "line": "Pipeline runs that succeeded since the last bug fix (normal runs, tests left out)."},
-    ] + [{"title": v["slo"], "value": "PASS" if v["pass"] else "FAIL", "line": f"Measured: {v['measured']}.",
-          "pass": v["pass"]} for v in verdicts]
+def performance(results: dict | None, verdicts: list[dict], checks: tuple[int, int], goals: tuple[int, int],
+                soda_at: str | None) -> dict:
+    """The panel: a journey strip and 5 hero cards (one number per idea, from one stated source), then the details."""
+    hero, journey, details = [], [], []
+    passed, total = checks
+    exact, goal_total = goals
+    if results:
+        bench = f"make benchmark, {results['generated_at']}"
+        x1 = next(s for s in results["speeds"] if s["speed"] == 1)
+        delay = round(x1["live_delay_ms"]["p95"] / 1000, 1)
+        ready = results["freshness"]["gold_ready_s"] / 60
+        top = results["load"][-1] if results["load"] else None
+        journey = ["A player moves", f"{delay:g} s", "Live page", f"{ready:.1f} min after the final whistle",
+                   "Full statistics, checked and stored"]
+        hero += [{"icon": "broadcast", "title": "Live delay", "value": f"{delay:g} s",
+                  "line": "95 % of positions reach the Live page within this time.", "source": f"{bench}, x1"},
+                 {"icon": "clock-hour-4", "title": "Ready after the final whistle", "value": f"{ready:.1f} min",
+                  "line": "A whole match is cleaned, checked and turned into statistics.", "source": f"{bench}, x60"}]
+    hero += [{"icon": "shield-check", "title": "Quality checks", "value": f"{passed} / {total}",
+              "line": "Checks on Silver and Gold that passed in their last run.", "source": f"last Soda run, {soda_at}"},
+             {"icon": "ball-football", "title": "Goal minutes exact", "value": f"{exact} / {goal_total}",
+              "line": "Goals at the minute an official match report gives.", "source": "official reports, "
+                                                                                     "docs/external_checks.yml"}]
+    if results and top:
+        hero.append({"icon": "gauge", "title": "Capacity", "value": f"{top['level']} matches at x60",
+                     "line": "Played at once, every reader keeping up (the most we tried).", "source": bench})
+    if results:
+        rel = results["reliability"]
+        normal = rel["runs"] - rel["on_purpose"]
+        since = rel.get("since_fix") or {}
+        details = [{"title": v["slo"], "value": "PASS" if v["pass"] else "FAIL", "pass": v["pass"],
+                    "line": f"Measured: {v['measured']}."} for v in verdicts]
+        for d in details:
+            if d["title"].startswith("Run success") and not d["pass"]:
+                d["line"] = (f"{rel['success_slo']:.1%} of the {normal} normal runs of the last 7 days succeeded: "
+                             f"below the 95 % goal ({round(normal * (1 - rel['success_slo']))} failed). Since the last "
+                             f"recorded fix ({since.get('commit')}), {since.get('success', 0):.1%} of "
+                             f"{since.get('runs', 0)} runs succeeded. Test runs (tag purpose) are left out.")
+        x60 = next(s for s in results["speeds"] if s["speed"] == 60)
+        details += [
+            {"title": "Throughput at x60", "value": f"{x60['kafka_msgs_per_s']['p50']:,.0f} msg/s",
+             "line": "Messages per second through Kafka (median), one match replayed 60 times faster."},
+            {"title": "Spark batch", "value": f"{results['spark']['batch_s']['p50']:.1f} s",
+             "line": "Median time of one batch of the 5-minute statistics; a new one starts every 5 s."},
+        ] + [{"title": f"Back to normal after restarting {r['service']}", "value": f"{r['back_to_normal_s']:.0f} s",
+              "line": "In the middle of a replay at x10."} for r in results["recovery"] if r["back_to_normal_s"]]
+    return {"journey": journey, "hero": hero, "details": details,
+            "source": results and f"make benchmark, {results['generated_at']}"}
 
 
 # ---------------------------------------------------------------- the popups: role in our project, live numbers
@@ -248,6 +275,8 @@ ROLES = {
                 "check, Silver, Soda, Gold, Soda, report. A failed Soda check stops what follows."),
     "monitoring": ("Monitoring", "Prometheus reads every service every 15 s, Grafana shows four dashboards, "
                    "Alertmanager sends an email when something breaks, with what to check."),
+    "control": ("Control Center", "This page (FastAPI): it shows the platform and can do two things only, start and "
+                "stop a replay. A replay from kick-off is a whole match; any other start is partial, live only."),
 }
 
 # box -> (label, PromQL, format); formats: rate (/s), s, ms, pct, int, mib
@@ -287,6 +316,7 @@ NUMBERS = {
                    ("services answering", 'count(up == 1)', "int"),
                    ("services not answering", 'count(up == 0) or vector(0)', "int")],
     "skillcorner": [],
+    "control": [],
 }
 
 
@@ -296,3 +326,22 @@ def fmt(value: float | None, kind: str) -> str:
     return {"rate": lambda v: f"{v:,.0f}/s", "s": lambda v: f"{v:,.1f} s", "ms": lambda v: f"{v:,.0f} ms",
             "pct": lambda v: f"{v:.0%}", "int": lambda v: f"{v:,.0f}", "gib": lambda v: f"{v / 2**30:,.1f} GiB",
             "yesno": lambda v: "yes" if v >= 1 else "no"}[kind](value)
+
+
+# ---------------------------------------------------------------- the pipeline of a replay, as chips
+
+STEPS = (("bronze", "Bronze"), ("silver", "Silver"), ("silver_soda_silver", "Soda"), ("gold", "Gold"),
+         ("soda_gold", "Soda"), ("match_report", "report"))
+STATE = {"SUCCESS": "done", "IN_PROGRESS": "running", "FAILURE": "failed", "SKIPPED": "not built"}
+
+
+def chips(steps: dict[str, str], run_status: str) -> list[dict]:
+    """steps: Dagster step key -> status. One chip per step of the chain, in order: done, running, failed, not built
+    (after a failure), or waiting."""
+    out = []
+    for key, label in STEPS:
+        state = STATE.get(steps.get(key), "waiting")
+        if state == "waiting" and run_status in ("FAILURE", "CANCELED"):
+            state = "not built"
+        out.append({"label": label, "state": state})
+    return out

@@ -17,6 +17,8 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from ingestion import replay_ids
+
 HERE = Path(__file__).resolve().parent
 ROOT = services.ROOT
 
@@ -62,6 +64,12 @@ def prepared(match_id: str) -> bool:
     return (ROOT / "data" / "prepared" / match_id / "manifest.json").exists()
 
 
+@app.get("/api/config")
+def config() -> dict:
+    """The public addresses of the tools, for the diagram's pictures."""
+    return {"base": BASE, "max_running": core.MAX_RUNNING, "max_speed": core.MAX_SPEED}
+
+
 @app.get("/api/matches")
 def matches() -> list[dict]:
     out = []
@@ -100,9 +108,11 @@ def status() -> dict:
     plays = []
     for match_id, r in replays.snapshot().items():
         m = lib.get(match_id)
-        plays.append({**r, "match_id": match_id, "label": m.label if m else match_id,
+        partial = replay_ids.is_partial(r["replay_id"])
+        plays.append({**r, "match_id": match_id, "label": m.label if m else match_id, "partial": partial,
                       "progress": core.progress(m, watch.last(r["replay_id"])) if m else None,
                       "messages_per_s": watch.rate(r["replay_id"]),
+                      "pipeline": services.replay_run(r["replay_id"]) if r["finished"] and not partial else None,
                       "live_url": f"{BASE['app']}/live_match?match={match_id}"})
     runs = services.running_pipeline_runs()
     return {"lights": core.box_status(v), "warnings": core.warnings(v), "replays": plays, "pipeline_runs": runs,
@@ -117,8 +127,8 @@ def box(key: str) -> dict:
     numbers = [{"label": label, "value": core.fmt(prom.value(expr), kind)} for label, expr, kind in core.NUMBERS[key]]
     if key == "skillcorner":
         numbers = [{"label": "matches prepared", "value": str(values()["prepared_matches"])}]
-    if key == "producer":
-        numbers.append({"label": "replays playing", "value": str(len(replays.running()))})
+    if key in ("producer", "control"):
+        numbers.append({"label": "replays playing", "value": f"{len(replays.running())} of {core.MAX_RUNNING}"})
     return {"key": key, "title": title, "role": role, "numbers": numbers, "links": core.links(BASE)[key]}
 
 
@@ -140,24 +150,20 @@ def performance() -> dict:
 
     files = sorted(p for p in (ROOT / "data" / "benchmark").glob("*.json") if p.name != "current.json")
     results = json.loads(files[-1].read_text(encoding="utf-8")) if files else None
-    cards = core.performance(results, br.slo_verdicts(results)) if results else []
-    live = [{"title": t, "value": core.fmt(prom.value(e), k)} for t, e, k in (
-        ("Live delay p95 (7 days)", "slo:live_delay_p95_seconds:7d", "s"),
+    soda = {layer: json.loads((ROOT / "data" / "soda" / f"{layer}.json").read_text(encoding="utf-8"))
+            for layer in ("silver", "gold") if (ROOT / "data" / "soda" / f"{layer}.json").exists()}
+    mapping = yaml.safe_load((ROOT / "soda" / "dimensions.yml").read_text(encoding="utf-8")) or {}
+    checks = quality.checks_table(soda, mapping)
+    panel = core.performance(results, br.slo_verdicts(results) if results else [],
+                             (int(len(checks) - len(quality.failed(checks))), int(len(checks))), goal_minutes(quality),
+                             last_check(soda))
+    panel["now"] = [{"title": t, "value": core.fmt(prom.value(e), k)} for t, e, k in (
+        ("Live delay p95", "slo:live_delay_p95_seconds:7d", "s"),
         ("Slowest Gold after the whistle", "slo:gold_freshness_seconds:max", "s"),
         ("Run success (normal runs)", "slo:run_success_ratio:7d", "pct"),
         ("Blocking checks passed", "slo:blocking_checks_pass_ratio", "pct"),
-        ("App up (7 days)", "slo:app_up_ratio:7d", "pct"))]
-    results_soda = {layer: json.loads((ROOT / "data" / "soda" / f"{layer}.json").read_text(encoding="utf-8"))
-                    for layer in ("silver", "gold") if (ROOT / "data" / "soda" / f"{layer}.json").exists()}
-    mapping = yaml.safe_load((ROOT / "soda" / "dimensions.yml").read_text(encoding="utf-8")) or {}
-    checks = quality.checks_table(results_soda, mapping)
-    goals = goal_minutes(quality)
-    return {"benchmark": {"file": files[-1].name if files else None, "generated_at": results and results["generated_at"],
-                          "cards": cards},
-            "live": live,
-            "quality": {"checks_passed": int(len(checks) - len(quality.failed(checks))), "checks": int(len(checks)),
-                        "verdict": quality.verdict(checks, last_check(results_soda), len(services.gold_matches()))[1],
-                        "goal_minutes_exact": goals[0], "goals": goals[1]}}
+        ("App up", "slo:app_up_ratio:7d", "pct"))]
+    return panel
 
 
 def last_check(results: dict) -> str | None:

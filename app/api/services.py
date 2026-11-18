@@ -65,6 +65,21 @@ def running_pipeline_runs() -> list[dict]:
     return out
 
 
+def replay_run(replay_id: str) -> dict | None:
+    """The Dagster run the sensor started for a replay (its run key is the replay id), None before it exists."""
+    q = ('query ($rid: String!) { runsOrError(filter: {tags: [{key: "dagster/run_key", value: $rid}]}, limit: 1) '
+         '{ ... on Runs { results { runId status endTime stepStats { stepKey status } } } } }')
+    try:
+        runs = http_json(DAGSTER, {"query": q, "variables": {"rid": replay_id}})["data"]["runsOrError"]["results"]
+    except (OSError, KeyError):
+        return None
+    if not runs:
+        return None
+    r = runs[0]
+    return {"run_id": r["runId"], "status": r["status"], "ended_at": r["endTime"],
+            "chips": core.chips({s["stepKey"]: s["status"] for s in r["stepStats"]}, r["status"])}
+
+
 def gold_matches() -> dict[str, core.Match]:
     """The match library of Gold, with the second of each match's first goal (the ball in the goal)."""
     con = duckdb.connect(str(GOLD), read_only=True)

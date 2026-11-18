@@ -29,15 +29,19 @@
     </div>
   </div>
 
-<svg id="arch" viewBox="0 0 1240 690" xmlns="http://www.w3.org/2000/svg" role="img"
-     aria-label="MatchLens architecture: live path from SkillCorner to the Live page, stored path from Kafka to the analysis app">
+<svg id="arch" viewBox="0 0 1600 900" xmlns="http://www.w3.org/2000/svg" role="img"
+     aria-label="MatchLens architecture in four lanes: get the data, move it live, store and check, show it">
 <style>
   .bg{fill:#ffffff}
+  .lane{fill:#fbfbf8;stroke:#e3e8e1;stroke-width:1}
+  .lanehead{font:700 15px system-ui,-apple-system,"Segoe UI",sans-serif;fill:#16201a}
+  .lanehead tspan.n{fill:#146c34}
   .box rect.frame{fill:#ffffff;stroke:#2f3a33;stroke-width:1.2}
+  .box.dotted rect.frame{stroke-dasharray:4 3;fill:#fdfdfb}
   .box{cursor:pointer}
   .box:hover rect.frame,.box:focus rect.frame{stroke:#146c34;stroke-width:2.2}
   .box .t{font:700 15px system-ui,-apple-system,"Segoe UI",sans-serif;fill:#16201a}
-  .box .s{font:12.5px system-ui,-apple-system,"Segoe UI",sans-serif;fill:#4a564f}
+  .box .s{font:12px system-ui,-apple-system,"Segoe UI",sans-serif;fill:#4a564f}
   .box use{color:#2f3a33}
   .light{stroke:#ffffff;stroke-width:1.5}
   .light.green{fill:#2e9e5b}.light.orange{fill:#d97706}.light.red{fill:#c0392b}.light.grey{fill:#a7b0ab}
@@ -45,6 +49,7 @@
   .edge.live{stroke:#00897b}
   .edge.stored{stroke:#7e57c2;stroke-dasharray:9 5}
   .edge.control{stroke:#7e57c2;stroke-dasharray:2 4;stroke-width:1.6}
+  .edge.command{stroke:#4a564f;stroke-dasharray:3 3;stroke-width:1.6}
   .moving .edge.live{stroke-dasharray:10 6;animation:flow .6s linear infinite}
   .moving-stored .edge.stored{animation:flow .6s linear infinite}
   @keyframes flow{to{stroke-dashoffset:-16}}
@@ -52,112 +57,179 @@
   .step.live circle{stroke:#00897b}.step.stored circle{stroke:#7e57c2}
   .step text{font:700 12px system-ui,sans-serif;text-anchor:middle;dominant-baseline:central}
   .step.live text{fill:#00695c}.step.stored text{fill:#5e35b1}
-  .elabel{font:11.5px system-ui,sans-serif;fill:#4a564f}
+  .elabel{font:12px system-ui,sans-serif;fill:#4a564f}
+  .pill rect{fill:#f6f3fb;stroke:#7e57c2;stroke-width:1.2}
+  .pill text{font:600 12.5px ui-monospace,monospace;fill:#5e35b1;text-anchor:middle}
   .band rect{fill:#f4f6f2;stroke:#a7b0ab;stroke-width:1;stroke-dasharray:4 3}
   .legend text{font:12.5px system-ui,sans-serif;fill:#16201a}
-  .caption{font:italic 14px Georgia,"Times New Roman",serif;fill:#16201a;text-anchor:middle}
-  .rowlabel{font:600 11px system-ui,sans-serif;letter-spacing:.12em;fill:#7a857f}
+  .thumbframe{fill:none;stroke:#2f3a33;stroke-width:1}
+  .thumbcap{font:italic 12px system-ui,sans-serif;fill:#4a564f}
+  .thumb{cursor:pointer}
+  .thumb:hover .thumbframe{stroke:#146c34;stroke-width:2.2}
+  .caption{font:italic 15px Georgia,"Times New Roman",serif;fill:#16201a;text-anchor:middle}
 </style>
 <defs id="icon-defs">
   <marker id="ah-live" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#00897b"/></marker>
   <marker id="ah-stored" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#7e57c2"/></marker>
+  <marker id="ah-command" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#4a564f"/></marker>
 </defs>
-<rect class="bg" x="0" y="0" width="1240" height="690"/>
+<rect class="bg" x="0" y="0" width="1600" height="900"/>
 
-<g class="legend" transform="translate(50,420)">
+<!-- the four lanes -->
+<rect class="lane" x="20" y="14" width="320" height="778" rx="10"/>
+<rect class="lane" x="350" y="14" width="370" height="778" rx="10"/>
+<rect class="lane" x="730" y="14" width="440" height="778" rx="10"/>
+<rect class="lane" x="1180" y="14" width="400" height="778" rx="10"/>
+<text class="lanehead" x="36" y="42"><tspan class="n">1</tspan>  Get the data</text>
+<text class="lanehead" x="366" y="42"><tspan class="n">2</tspan>  Move it live</text>
+<text class="lanehead" x="746" y="42"><tspan class="n">3</tspan>  Store and check</text>
+<text class="lanehead" x="1196" y="42"><tspan class="n">4</tspan>  Show it</text>
+
+<!-- live path -->
+<path class="edge live" d="M120,178 L120,330" marker-end="url(#ah-live)"/>
+<path class="edge live" d="M200,369 L370,369" marker-end="url(#ah-live)"/>
+<path class="edge live" d="M450,330 L450,178" marker-end="url(#ah-live)"/>
+<path class="edge live" d="M530,345 L560,345 L560,70 L1280,70 L1280,100" marker-end="url(#ah-live)"/>
+<path class="edge live" d="M530,139 L1200,139" marker-end="url(#ah-live)"/>
+<text class="elabel" x="134" y="248">converted to 1 per second</text>
+<text class="elabel" x="134" y="264">(ingest_foot)</text>
+<text class="elabel" x="236" y="360">every second</text>
+<text class="elabel" x="760" y="62">positions, score, clock (every second)</text>
+<text class="elabel" x="760" y="131">via topic foot-live-stats</text>
+<g class="step live"><circle cx="120" cy="290" r="11"/><text x="120" y="290">1</text></g>
+<g class="step live"><circle cx="330" cy="369" r="11"/><text x="330" y="369">2</text></g>
+<g class="step live"><circle cx="1040" cy="70" r="11"/><text x="1040" y="70">3</text></g>
+<g class="step live"><circle cx="450" cy="254" r="11"/><text x="450" y="254">4</text></g>
+<g class="step live"><circle cx="1150" cy="139" r="11"/><text x="1150" y="139">5</text></g>
+
+<!-- stored path -->
+<path class="edge stored" d="M450,408 L450,470" marker-end="url(#ah-stored)"/>
+<path class="edge stored" d="M505,485 L740,485" marker-end="url(#ah-stored)"/>
+<path class="edge stored" d="M870,485 L885,485" marker-end="url(#ah-stored)"/>
+<path class="edge stored" d="M1015,485 L1030,485" marker-end="url(#ah-stored)"/>
+<path class="edge stored" d="M1160,485 L1200,485" marker-end="url(#ah-stored)"/>
+<path class="edge control" d="M805,580 L805,525"/><path class="edge control" d="M950,580 L950,525"/><path class="edge control" d="M1095,580 L1095,525"/>
+<g class="pill"><rect x="395" y="470" width="110" height="30" rx="15"/><text x="450" y="490">bronze-writer</text></g>
+<g class="step stored"><circle cx="620" cy="485" r="11"/><text x="620" y="485">6</text></g>
+<g class="step stored"><circle cx="878" cy="430" r="11"/><text x="878" y="430">7</text></g>
+<g class="step stored"><circle cx="1023" cy="430" r="11"/><text x="1023" y="430">8</text></g>
+<g class="step stored"><circle cx="1180" cy="430" r="11"/><text x="1180" y="430">9</text></g>
+<text class="elabel" x="960" y="566">runs and checks</text>
+
+<!-- Control Center -> Producer -->
+<path class="edge command" d="M120,560 L120,410" marker-end="url(#ah-command)"/>
+<text class="elabel" x="132" y="490">start / stop</text>
+
+<g class="box" data-key="skillcorner" tabindex="0" role="button" aria-label="SkillCorner" transform="translate(40,100)">
+  <rect class="frame" width="160" height="78" rx="8"/>
+  <use href="#i-video" x="12" y="10" width="20" height="20"/>
+  <text class="t" x="12" y="52">SkillCorner</text>
+  <text class="s" x="12" y="68">open tracking data</text>
+  <circle class="light grey" cx="148" cy="12" r="6"/>
+</g>
+<g class="box" data-key="producer" tabindex="0" role="button" aria-label="Producer" transform="translate(40,330)">
+  <rect class="frame" width="160" height="78" rx="8"/>
+  <image class="tlogo" href="/static/logos/python.svg" x="12" y="10.0" width="20" height="20"/>
+  <text class="t" x="12" y="52">Producer</text>
+  <text class="s" x="12" y="68">replays a match</text>
+  <circle class="light grey" cx="148" cy="12" r="6"/>
+</g>
+<g class="box dotted" data-key="control" tabindex="0" role="button" aria-label="Control Center" transform="translate(40,560)">
+  <rect class="frame" width="200" height="78" rx="8"/>
+  <image class="tlogo" href="/static/logos/fastapi.svg" x="12" y="11.0" width="18" height="18"/>
+  <text class="t" x="12" y="52">Control Center</text>
+  <text class="s" x="12" y="68">this page, FastAPI</text>
+  <circle class="light grey" cx="188" cy="12" r="6"/>
+</g>
+<g class="box" data-key="spark" tabindex="0" role="button" aria-label="Spark Streaming" transform="translate(370,100)">
+  <rect class="frame" width="160" height="78" rx="8"/>
+  <image class="tlogo" href="/static/logos/apachespark.svg" x="12" y="10.0" width="20" height="20"/>
+  <text class="t" x="12" y="52">Spark Streaming</text>
+  <text class="s" x="12" y="68">5-min windows</text>
+  <circle class="light grey" cx="148" cy="12" r="6"/>
+</g>
+<g class="box" data-key="kafka" tabindex="0" role="button" aria-label="Kafka" transform="translate(370,330)">
+  <rect class="frame" width="160" height="78" rx="8"/>
+  <image class="tlogo" href="/static/logos/apachekafka.svg" x="12" y="10.0" width="20" height="20"/>
+  <text class="t" x="12" y="52">Kafka</text>
+  <text class="s" x="12" y="68">5 topics, 7 days</text>
+  <circle class="light grey" cx="148" cy="12" r="6"/>
+</g>
+<g class="box" data-key="bronze" tabindex="0" role="button" aria-label="Bronze" transform="translate(740,445)">
+  <rect class="frame" width="130" height="80" rx="8"/>
+  <image class="tlogo" href="/static/logos/minio.svg" x="12" y="10.0" width="20" height="20"/>
+  <text class="t" x="12" y="54">Bronze</text>
+  <text class="s" x="12" y="70">MinIO, raw</text>
+  <circle class="light grey" cx="118" cy="12" r="6"/>
+</g>
+<g class="box" data-key="silver" tabindex="0" role="button" aria-label="Silver" transform="translate(885,445)">
+  <rect class="frame" width="130" height="80" rx="8"/>
+  <image class="tlogo" href="/static/logos/apachespark.svg" x="12" y="11.0" width="18" height="18"/>
+  <image class="tlogo" href="/static/logos/apache-iceberg.svg" x="38" y="13.0" width="52" height="14"/>
+  <text class="t" x="12" y="54">Silver</text>
+  <text class="s" x="12" y="70">Spark + Iceberg</text>
+  <circle class="light grey" cx="118" cy="12" r="6"/>
+</g>
+<g class="box" data-key="gold" tabindex="0" role="button" aria-label="Gold" transform="translate(1030,445)">
+  <rect class="frame" width="130" height="80" rx="8"/>
+  <image class="tlogo" href="/static/logos/dbt.svg" x="12" y="11.0" width="18" height="18"/>
+  <image class="tlogo" href="/static/logos/duckdb.svg" x="38" y="11.0" width="18" height="18"/>
+  <text class="t" x="12" y="54">Gold</text>
+  <text class="s" x="12" y="70">dbt + DuckDB</text>
+  <circle class="light grey" cx="118" cy="12" r="6"/>
+</g>
+<g class="box" data-key="dagster" tabindex="0" role="button" aria-label="Dagster + Soda" transform="translate(740,580)">
+  <rect class="frame" width="420" height="70" rx="8"/>
+  <image class="tlogo" href="/static/logos/dagster.svg" x="12" y="12.0" width="76" height="16"/>
+  <text class="t" x="12" y="44">Dagster + Soda</text>
+  <text class="s" x="12" y="60">at the final whistle: Bronze check, Silver, Soda, Gold, Soda, report</text>
+  <circle class="light grey" cx="408" cy="12" r="6"/>
+</g>
+<g class="box" data-key="live" tabindex="0" role="button" aria-label="Live page" transform="translate(1200,100)">
+  <rect class="frame" width="160" height="78" rx="8"/>
+  <image class="tlogo" href="/static/logos/streamlit.svg" x="12" y="10.0" width="20" height="20"/>
+  <text class="t" x="12" y="52">Live page</text>
+  <text class="s" x="12" y="68">Streamlit</text>
+  <circle class="light grey" cx="148" cy="12" r="6"/>
+</g>
+<g class="box" data-key="analysis" tabindex="0" role="button" aria-label="Analysis app" transform="translate(1200,445)">
+  <rect class="frame" width="160" height="80" rx="8"/>
+  <image class="tlogo" href="/static/logos/streamlit.svg" x="12" y="10.0" width="20" height="20"/>
+  <text class="t" x="12" y="54">Analysis app</text>
+  <text class="s" x="12" y="70">fan and coach views</text>
+  <circle class="light grey" cx="148" cy="12" r="6"/>
+</g>
+<g class="box band" data-key="monitoring" tabindex="0" role="button" aria-label="Monitoring" transform="translate(20,800)">
+  <rect width="1560" height="44" rx="8"/>
+  <image class="tlogo" href="/static/logos/prometheus.svg" x="12" y="12" width="20" height="20"/>
+  <image class="tlogo" href="/static/logos/grafana.svg" x="40" y="12" width="20" height="20"/>
+  <text class="t" x="70" y="27">Monitoring</text>
+  <text class="s" x="170" y="27">Prometheus · Grafana · Alertmanager: every box above is measured every 15 s, an email when something breaks</text>
+  <circle class="light grey" cx="1548" cy="12" r="6"/></g>
+
+<!-- what you see: real screenshots (scripts/control_center_thumbnails.py) -->
+<a class="thumb" data-link="app:/live_match" target="_blank"><image class="shot" href="/static/thumbs/live.png" x="1370" y="88" width="200" height="112" preserveAspectRatio="xMidYMid slice"/><rect class="thumbframe" x="1370" y="88" width="200" height="112" rx="4"/><text class="thumbcap" x="1370" y="214">Live page: the pitch, live</text></a>
+<a class="thumb" data-link="app:/match_story?view=fan" target="_blank"><image class="shot" href="/static/thumbs/fan.png" x="1370" y="312" width="200" height="112" preserveAspectRatio="xMidYMid slice"/><rect class="thumbframe" x="1370" y="312" width="200" height="112" rx="4"/><text class="thumbcap" x="1370" y="438">Fan view: match story</text></a>
+<a class="thumb" data-link="app:/team_analysis?view=coach" target="_blank"><image class="shot" href="/static/thumbs/coach.png" x="1370" y="448" width="200" height="112" preserveAspectRatio="xMidYMid slice"/><rect class="thumbframe" x="1370" y="448" width="200" height="112" rx="4"/><text class="thumbcap" x="1370" y="574">Coach view: team analysis</text></a>
+<a class="thumb" data-link="dagster:/asset-groups" target="_blank"><image class="shot" href="/static/thumbs/dagster.png" x="740" y="660" width="200" height="112" preserveAspectRatio="xMidYMid slice"/><rect class="thumbframe" x="740" y="660" width="200" height="112" rx="4"/><text class="thumbcap" x="740" y="786">Dagster: the asset graph</text></a>
+<a class="thumb" data-link="grafana:/d/slo" target="_blank"><image class="shot" href="/static/thumbs/grafana.png" x="1370" y="660" width="200" height="112" preserveAspectRatio="xMidYMid slice"/><rect class="thumbframe" x="1370" y="660" width="200" height="112" rx="4"/><text class="thumbcap" x="1370" y="786">Grafana: service levels</text></a>
+
+<g class="legend" transform="translate(40,666)">
   <line x1="0" y1="0" x2="34" y2="0" class="edge live"/><text x="42" y="4">live: data in motion</text>
   <line x1="0" y1="22" x2="34" y2="22" class="edge stored"/><text x="42" y="26">stored: data at rest</text>
-  <circle cx="17" cy="44" r="6" class="light green"/><text x="42" y="48">status (green: working)</text>
+  <line x1="0" y1="44" x2="34" y2="44" class="edge command"/><text x="42" y="48">command (start, stop)</text>
+  <circle cx="10" cy="68" r="6" class="light green"/><circle cx="26" cy="68" r="6" class="light grey"/>
+  <text x="42" y="72">green: working · grey: idle</text>
+  <circle cx="10" cy="90" r="6" class="light red"/><text x="42" y="94">red: down or failed</text>
 </g>
-<text class="rowlabel" x="680" y="62">LIVE PATH</text>
-<text class="rowlabel" x="660" y="380">STORED PATH</text>
 
-<!-- edges: live -->
-<g id="edges-live">
-  <path class="edge live" d="M180,270 L230,270" marker-end="url(#ah-live)"/>
-  <path class="edge live" d="M380,270 L430,270" marker-end="url(#ah-live)"/>
-  <path class="edge live" d="M580,250 C620,250 620,110 660,110" marker-end="url(#ah-live)"/>
-  <path class="edge live" d="M810,110 L900,110" marker-end="url(#ah-live)"/>
-  <path class="edge live" d="M505,230 L505,40 L975,40 L975,70" marker-end="url(#ah-live)"/>
-</g>
-<text class="elabel" x="815" y="100">5-min statistics</text>
-<text class="elabel" x="700" y="34">positions, score, clock (every second)</text>
-
-<!-- edges: stored -->
-<g id="edges-stored">
-  <path class="edge stored" d="M580,290 C600,290 590,430 600,430" marker-end="url(#ah-stored)"/>
-  <path class="edge stored" d="M750,430 L800,430" marker-end="url(#ah-stored)"/>
-  <path class="edge stored" d="M950,430 L1000,430" marker-end="url(#ah-stored)"/>
-  <path class="edge stored" d="M1110,390 L1110,312" marker-end="url(#ah-stored)"/>
-  <path class="edge control" d="M875,520 L875,472"/>
-  <path class="edge control" d="M1075,520 L1075,472"/>
-  <path class="edge control" d="M675,520 L675,472"/>
-</g>
-<text class="elabel" x="884" y="502">runs and checks</text>
-
-<!-- step numbers -->
-<g class="step live"><circle cx="205" cy="252" r="11"/><text x="205" y="252">1</text></g>
-<g class="step live"><circle cx="405" cy="252" r="11"/><text x="405" y="252">2</text></g>
-<g class="step live"><circle cx="622" cy="180" r="11"/><text x="622" y="180">4</text></g>
-<g class="step live"><circle cx="855" cy="128" r="11"/><text x="855" y="128">5</text></g>
-<g class="step live"><circle cx="560" cy="40" r="11"/><text x="560" y="40">3</text></g>
-<g class="step stored"><circle cx="602" cy="360" r="11"/><text x="602" y="360">6</text></g>
-<g class="step stored"><circle cx="775" cy="448" r="11"/><text x="775" y="448">7</text></g>
-<g class="step stored"><circle cx="975" cy="448" r="11"/><text x="975" y="448">8</text></g>
-<g class="step stored"><circle cx="1132" cy="350" r="11"/><text x="1132" y="350">9</text></g>
-
-<!-- boxes: x, y, 150 x 80 -->
-<g class="box" data-key="skillcorner" tabindex="0" role="button" aria-label="SkillCorner open data" transform="translate(30,230)">
-  <rect class="frame" width="150" height="80" rx="8"/><use href="#i-video" x="12" y="12" width="22" height="22"/>
-  <text class="t" x="12" y="54">SkillCorner</text><text class="s" x="12" y="70">open tracking data</text>
-  <circle class="light grey" cx="138" cy="12" r="6"/></g>
-<g class="box" data-key="producer" tabindex="0" role="button" aria-label="Producer" transform="translate(230,230)">
-  <rect class="frame" width="150" height="80" rx="8"/><use href="#i-send" x="12" y="12" width="22" height="22"/>
-  <text class="t" x="12" y="54">Producer</text><text class="s" x="12" y="70">Python replay</text>
-  <circle class="light grey" cx="138" cy="12" r="6"/></g>
-<g class="box" data-key="kafka" tabindex="0" role="button" aria-label="Kafka" transform="translate(430,230)">
-  <rect class="frame" width="150" height="80" rx="8"/><use href="#i-topology-star-3" x="12" y="12" width="22" height="22"/>
-  <text class="t" x="12" y="54">Kafka</text><text class="s" x="12" y="70">5 topics, 7 days</text>
-  <circle class="light grey" cx="138" cy="12" r="6"/></g>
-<g class="box" data-key="spark" tabindex="0" role="button" aria-label="Spark Streaming" transform="translate(660,70)">
-  <rect class="frame" width="150" height="80" rx="8"/><use href="#i-bolt" x="12" y="12" width="22" height="22"/>
-  <text class="t" x="12" y="54">Spark Streaming</text><text class="s" x="12" y="70">5-min windows</text>
-  <circle class="light grey" cx="138" cy="12" r="6"/></g>
-<g class="box" data-key="live" tabindex="0" role="button" aria-label="Live page" transform="translate(900,70)">
-  <rect class="frame" width="150" height="80" rx="8"/><use href="#i-broadcast" x="12" y="12" width="22" height="22"/>
-  <text class="t" x="12" y="54">Live page</text><text class="s" x="12" y="70">Streamlit</text>
-  <circle class="light grey" cx="138" cy="12" r="6"/></g>
-<g class="box" data-key="bronze" tabindex="0" role="button" aria-label="Bronze" transform="translate(600,390)">
-  <rect class="frame" width="150" height="80" rx="8"/><use href="#i-bucket" x="12" y="12" width="22" height="22"/>
-  <text class="t" x="12" y="54">Bronze</text><text class="s" x="12" y="70">MinIO, raw replays</text>
-  <circle class="light grey" cx="138" cy="12" r="6"/></g>
-<g class="box" data-key="silver" tabindex="0" role="button" aria-label="Silver" transform="translate(800,390)">
-  <rect class="frame" width="150" height="80" rx="8"/><use href="#i-database" x="12" y="12" width="22" height="22"/>
-  <text class="t" x="12" y="54">Silver</text><text class="s" x="12" y="70">Spark + Iceberg</text>
-  <circle class="light grey" cx="138" cy="12" r="6"/></g>
-<g class="box" data-key="gold" tabindex="0" role="button" aria-label="Gold" transform="translate(1000,390)">
-  <rect class="frame" width="150" height="80" rx="8"/><use href="#i-database-star" x="12" y="12" width="22" height="22"/>
-  <text class="t" x="12" y="54">Gold</text><text class="s" x="12" y="70">dbt + DuckDB</text>
-  <circle class="light grey" cx="138" cy="12" r="6"/></g>
-<g class="box" data-key="analysis" tabindex="0" role="button" aria-label="Analysis app" transform="translate(1060,230)">
-  <rect class="frame" width="150" height="80" rx="8"/><use href="#i-chart-bar" x="12" y="12" width="22" height="22"/>
-  <text class="t" x="12" y="54">Analysis app</text><text class="s" x="12" y="70">fan and coach views</text>
-  <circle class="light grey" cx="138" cy="12" r="6"/></g>
-<g class="box" data-key="dagster" tabindex="0" role="button" aria-label="Dagster and Soda" transform="translate(600,520)">
-  <rect class="frame" width="550" height="50" rx="8"/><use href="#i-route" x="12" y="14" width="22" height="22"/>
-  <text class="t" x="44" y="31">Dagster + Soda</text><text class="s" x="170" y="31">at the final whistle: Bronze check, Silver, Soda, Gold, Soda, report</text>
-  <circle class="light grey" cx="538" cy="12" r="6"/></g>
-<g class="box band" data-key="monitoring" tabindex="0" role="button" aria-label="Monitoring" transform="translate(30,600)">
-  <rect width="1180" height="40" rx="8"/><use href="#i-heart-rate-monitor" x="12" y="9" width="22" height="22"/>
-  <text class="t" x="44" y="25">Monitoring</text><text class="s" x="150" y="25">Prometheus · Grafana · Alertmanager: every box above is measured every 15 s</text>
-  <circle class="light grey" cx="1168" cy="12" r="6"/></g>
-
-<text class="caption" x="620" y="672">Figure 1. MatchLens architecture</text>
+<text class="caption" x="800" y="882">Figure 1. MatchLens architecture</text>
 </svg>
-  <p class="hint"><b>Live (teal)</b>: 1 a stored match is prepared, 2 replayed into Kafka second by second, 3 read by the
-    Live page (about half a second later), 4 counted by Spark in 5-minute windows, 5 shown on the Live page.
-    <b>Stored (purple)</b>: 6 every message is kept in Bronze; at the final whistle Dagster builds 7 Silver and 8 Gold,
-    each checked by Soda, and 9 the analysis app reads Gold. The arrows move while it happens.</p>
+  <p class="hint"><b>Live (teal)</b>: 1 a match is converted to one row per second, 2 replayed into Kafka second by
+    second, 3 read by the Live page about half a second later, 4 counted by Spark in 5-minute windows, 5 shown on the
+    Live page. <b>Stored (purple)</b>: 6 the bronze-writer keeps every message in Bronze; at the final whistle of a
+    whole match Dagster builds 7 Silver and 8 Gold, each checked by Soda, and 9 the analysis app reads Gold. The
+    arrows move while it happens; a picture opens the real page.</p>
 </section>
 
 <section class="card play" aria-labelledby="play-title">
@@ -176,20 +248,27 @@
       <input id="clock" placeholder="mm:ss" size="6" pattern="\d{1,2}:[0-5]\d" aria-label="start at, mm:ss">
     </fieldset>
     <button type="submit" class="primary" id="play-btn"><svg class="ico"><use href="#i-player-play"/></svg> Play</button>
+    <button type="button" class="ghost strong" id="play-full"><svg class="ico"><use href="#i-player-play"/></svg> Full match fast (x60)</button>
   </form>
+  <p class="note">Only a match played from kick-off to the final whistle is stored and rebuilt by Dagster. Any other
+    start is a <b>partial</b> replay: live only. <b>Full match fast</b> plays the whole match in about 100 s, the way to
+    show Dagster at work.</p>
   <p id="play-error" class="error" role="alert" hidden></p>
   <div id="replays"></div>
-  <p class="note">At most 2 replays at once, one per match. When a replay reaches its final whistle, Dagster rebuilds
-    the match: the purple path moves while it runs.</p>
+  <p class="note">At most 2 replays at once, one per match.</p>
 </section>
 
 <section class="card perf" aria-labelledby="perf-title">
   <h2 id="perf-title"><svg class="ico"><use href="#i-checklist"/></svg> Performance and data quality</h2>
-  <div id="quality"></div>
-  <h3>Service levels now <span class="small">(Prometheus, last 7 days)</span></h3>
-  <div id="slo" class="tiles"></div>
-  <h3>Last benchmark <span class="small" id="bench-when"></span></h3>
-  <div id="bench" class="tiles"></div>
+  <ol id="journey" class="journey" aria-label="The journey of the data"></ol>
+  <div id="hero" class="hero"></div>
+  <details id="details">
+    <summary><svg class="ico"><use href="#i-chevron-down"/></svg> Details: service levels, the other measures</summary>
+    <h3>Service levels <span class="small" id="details-source"></span></h3>
+    <div id="slo-details" class="tiles"></div>
+    <h3>Right now <span class="small">(Prometheus, last 7 days: a different period from the benchmark)</span></h3>
+    <div id="now" class="tiles"></div>
+  </details>
 </section>
 </main>
 

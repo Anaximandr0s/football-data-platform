@@ -93,3 +93,37 @@ table.ct td.num, table.ct th.num { text-align: right; }
   .top { padding: 16px; } .warnings { margin: 8px 16px 0; }
   select { min-width: 0; width: 100%; }
 }
+
+/* pipeline chips of a replay card */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.chip { border-radius: 999px; padding: 3px 10px; font-size: .85rem; font-weight: 600; border: 1px solid var(--line); background: #fff; color: var(--muted); }
+.chip.done { background: #d6f0df; border-color: var(--ok); color: #0f4d27; }
+.chip.running { background: #fff4e5; border-color: var(--warn); color: #7a3d00; }
+.chip.running::before { content: "● "; animation: blink 1s steps(2) infinite; }
+.chip.failed { background: #f8dcd8; border-color: var(--bad); color: #7a1d12; }
+.chip.not-built { text-decoration: line-through; }
+@keyframes blink { 50% { opacity: .2; } }
+.stored { margin-top: 8px; font-weight: 700; color: var(--green); }
+.replay { transition: opacity 1.5s ease; }
+.replay.fade { opacity: 0; }
+.replay.partial { border-left-color: var(--grey); }
+.tag { font-size: .8rem; font-weight: 700; border-radius: 6px; padding: 1px 6px; background: var(--soft); color: var(--muted); }
+button.strong { font-weight: 700; }
+
+/* data journey and hero cards */
+.journey { list-style: none; padding: 0; margin: 4px 0 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.journey li { padding: 6px 12px; border-radius: 8px; background: var(--soft); font-weight: 600; }
+.journey li.time { background: transparent; color: var(--live); font-weight: 800; }
+.journey li.time::before { content: "→ "; color: var(--muted); }
+.journey li.time::after { content: " →"; color: var(--muted); }
+.hero { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+.hero .card2 { border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; background: #fff; }
+.hero .head { display: flex; align-items: center; gap: 8px; font-weight: 700; color: var(--muted); }
+.hero .head .ico { width: 24px; height: 24px; color: var(--green); }
+.hero .big { font: 800 2rem/1.15 system-ui, sans-serif; margin: 6px 0 4px; }
+.hero .line { font-size: .95rem; }
+.hero .src { font-size: .8rem; color: var(--muted); margin-top: 6px; }
+details { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 10px; }
+summary { cursor: pointer; font-weight: 700; display: flex; align-items: center; gap: 6px; list-style: none; }
+summary::-webkit-details-marker { display: none; }
+details[open] summary .ico { transform: rotate(180deg); }
