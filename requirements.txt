@@ -23,6 +23,9 @@ protobuf>=6,<7     # dbt needs < 7; without it pip takes a grpcio-health-checkin
 streamlit>=1.67,<2   # the pitch component (st.components.v2) was tested on 1.67
 mplsoccer>=1.4,<2
 prometheus-client>=0.26,<1   # live feed metrics and monitoring/exporter
+fastapi>=0.115,<1            # app/api, the Control Center
+uvicorn>=0.32,<1
+httpx>=0.27,<1               # FastAPI's test client
 
 # --- Dev tools: lint, tests, hooks ---
 ruff>=0.17
