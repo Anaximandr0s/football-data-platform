@@ -18,6 +18,7 @@ import boto3
 import pyarrow.parquet as pq
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from ingestion import replay_ids  # noqa: E402
 from ingestion.config import BRONZE_BUCKET, S3_ENDPOINT, TOPICS  # noqa: E402
 
 
@@ -64,6 +65,8 @@ def complete_fn(s3, objects: dict[str, int]):
         return s3.get_object(Bucket=BRONZE_BUCKET, Key=key)["Body"].read()
 
     def is_complete(match: str, replay: str) -> bool:
+        if replay_ids.is_partial(replay):          # started after kick-off: never a whole match
+            return False
         if (match, replay) not in cache:
             prefix = f"/match_id={match}/replay_id={replay}/"
             matches = [k for k in objects if k.startswith("matches" + prefix)]

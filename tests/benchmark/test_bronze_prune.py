@@ -22,3 +22,16 @@ def test_keys_outside_the_layout_are_never_deleted():
     objects = {"tracking/README.txt": 1, R.format("m001-20261117T090000Z"): 10}
     out = bp.plan(objects, lambda m, r: True, keep=1)
     assert out == {"keep": ["tracking/README.txt", R.format("m001-20261117T090000Z")], "delete": []}
+
+
+def test_a_partial_replay_is_never_kept_as_a_complete_one():
+    objects = {R.format(r): 10 for r in ("m001-20261117T090000Z", "m001-20261117T100000Z-partial")}
+    seen = []
+
+    def complete(m, r):
+        seen.append(r)
+        return True
+    fn = bp.complete_fn(None, objects)
+    assert fn("m001", "m001-20261117T100000Z-partial") is False            # decided by its id, no file read
+    out = bp.plan(objects, lambda m, r: fn(m, r) if r.endswith("-partial") else complete(m, r), keep=1)
+    assert {bp.parse(k)[2] for k in out["keep"]} == {"m001-20261117T100000Z-partial", "m001-20261117T090000Z"}

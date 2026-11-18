@@ -292,3 +292,11 @@ def test_silver_takes_the_newest_complete_replay():
     assert choose_replay(replays, complete.__contains__) == "m001-20261117T120000Z"
     assert choose_replay(replays, lambda r: False) is None
     assert choose_replay([], lambda r: True) is None
+
+
+def test_silver_never_takes_a_partial_replay(monkeypatch):
+    from spark.silver import bronze_to_silver as b2s
+    folders = ["replay_id=m001-20261118T090000Z", "replay_id=m001-20261118T100000Z-partial", "replay_id=none"]
+    monkeypatch.setattr(b2s, "_children", lambda spark, uri: folders)
+    assert b2s.replays_in_bronze(None, "s3a://bronze", "m001") == ["m001-20261118T090000Z"]
+    assert b2s.process_match(None, "m001", "s3a://bronze", None, True, replay_id="m001-20261118T100000Z-partial") is False

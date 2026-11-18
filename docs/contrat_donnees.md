@@ -3,7 +3,7 @@
 Owner of sections 1 to 8: ingestion (Kafka, MinIO, bronze). Consumers: Silver (Spark + Iceberg), then Gold and Streamlit.
 Sections 9 (Silver) and 10 (Gold) have their own owners and code twins, given at the top of each section.
 The code twin of the table sections is `ingestion/schemas.py` (`SCHEMAS`): change both together, by pull request,
-and warn the Silver owner. Last update: 2026-11-17 (one Bronze folder per replay; Silver reads only the latest complete replay and keeps its `replay_id`, in sections 6, 9.2 and 9.4). Before: 2026-11-16 (Kafka header `replay_id`, bronze column `kafka_replay_id` and topic `foot-live-stats`, in sections 5, 6 and 9.2). Before: 2026-11-15 (possession on ball, `source_player_id` on players, `is_detected` on tracking, event context columns and off-ball runs as type `run`, in sections 4 to 9). Matches covered: `m001` (SkillCorner 1874553) and `m002` (SkillCorner 1925299).
+and warn the Silver owner. Last update: 2026-11-18 (a replay started after kick-off is partial: `-partial` id, never read by Silver, in sections 5 and 6). Before: 2026-11-17 (one Bronze folder per replay; Silver reads only the latest complete replay and keeps its `replay_id`, in sections 6, 9.2 and 9.4). Before: 2026-11-16 (Kafka header `replay_id`, bronze column `kafka_replay_id` and topic `foot-live-stats`, in sections 5, 6 and 9.2). Before: 2026-11-15 (possession on ball, `source_player_id` on players, `is_detected` on tracking, event context columns and off-ball runs as type `run`, in sections 4 to 9). Matches covered: `m001` (SkillCorner 1874553) and `m002` (SkillCorner 1925299).
 
 ## 1. Provenance
 
@@ -134,7 +134,9 @@ replay, then the live tables second by second. Replay speed x1 to x60 (x60: a ma
 
 Every message of a replay carries the Kafka header `replay_id` = `<match_id>-<start time UTC, YYYYMMDDTHHMMSSZ>`, for
 example `m001-20261116T101503Z`, set once when `producer_foot` starts. Two replays of the same match have two ids, so the
-Live page and the streaming job never mix them; for one match, a larger id is a newer replay. A message without the
+Live page and the streaming job never mix them; for one match, a larger id is a newer replay. A replay started after
+the first second of the match (`--start`) ends with `-partial` (`m001-20261118T120000Z-partial`): it is shown live, but
+never treated as a match (no Dagster run at its final whistle, never read by Silver). A message without the
 header (written before 2026-11-16) is ignored by both.
 
 ### 5.1 foot-live-stats (written by `spark/streaming`, read by the Live page)
@@ -172,8 +174,8 @@ Columns = the table columns (fixed types) plus `kafka_partition` (int32), `kafka
 before 2026-11-16).
 
 Delivery is at-least-once: a consumer restart can deliver a message twice, inside the same replay folder. Silver
-reads **one replay per match**: the one the Dagster run names (tag `replay_id`), else the newest complete one (its
-tracking reaches `matches.p2_end_ts`); a match with no replay folder is not rebuilt (Silver fails, saying to replay it).
+reads **one replay per match**: the one the Dagster run names (tag `replay_id`), else the newest complete one (not
+`-partial`, and its tracking reaches `matches.p2_end_ts`); a match with no replay folder is not rebuilt (Silver fails, saying to replay it).
 Silver deduplicates on: tracking
 (match_id, player_id, ts); events `event_id`; ball (match_id, ts); players (match_id, player_id); matches `match_id`.
 Files are micro-batches (about 10 s of arrival, at most 5,000 rows): row order inside and across files is NOT

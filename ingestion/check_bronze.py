@@ -16,6 +16,7 @@ import sys
 import boto3
 import pyarrow.parquet as pq
 
+from ingestion import replay_ids
 from ingestion.config import BRONZE_BUCKET, PREPARED_DIR, S3_ENDPOINT, TOPICS
 
 
@@ -24,7 +25,7 @@ def replays(s3, match_id: str) -> list[str]:
     pages = s3.get_paginator("list_objects_v2").paginate(
         Bucket=BRONZE_BUCKET, Prefix=f"matches/match_id={match_id}/replay_id=", Delimiter="/")
     names = [p["Prefix"].rstrip("/").split("replay_id=", 1)[1] for page in pages for p in page.get("CommonPrefixes", [])]
-    return sorted(n for n in names if n != "none")
+    return sorted(n for n in names if n != "none" and not replay_ids.is_partial(n))
 
 
 def bronze_rows(s3, table: str, match_id: str, replay_id: str) -> int:
@@ -49,6 +50,8 @@ def main() -> None:
     s3 = boto3.client("s3", endpoint_url=S3_ENDPOINT, region_name="us-east-1",
                       aws_access_key_id=os.environ["MINIO_ROOT_USER"],
                       aws_secret_access_key=os.environ["MINIO_ROOT_PASSWORD"])
+    if a.replay and replay_ids.is_partial(a.replay):
+        sys.exit(f"{a.replay} started after kick-off: a partial replay is never a whole match in Bronze")
     replay = a.replay or next(iter(reversed(replays(s3, a.match))), None)
     if replay is None:
         sys.exit(f"{a.match}: no replay folder in bronze: replay the match (make replay MATCH={a.match})")

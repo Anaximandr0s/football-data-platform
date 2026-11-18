@@ -117,3 +117,10 @@ def test_the_bronze_step_no_longer_waits_for_the_writers_total_lag():
     from football_platform import assets
     assert not hasattr(assets, "bronze_lag")
     assert "check_bronze" in inspect.getsource(assets.bronze.op.compute_fn.decorated_fn)
+
+
+def test_a_partial_replay_reaching_the_final_whistle_starts_no_run():
+    partial = "m001-20261118T120000Z-partial"
+    ends = replay_ends([(partial, {"match_id": "m001", "p2_end_ts": 6025}), (M1, {"match_id": "m001", "p2_end_ts": 6025})])
+    assert finished(ends, [(partial, 6025), (M1, 6025)]) == {M1}
+    assert match_of(partial) == "m001"
