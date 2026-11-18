@@ -1,5 +1,5 @@
 """pitch.py: the MatchLens pitch (docs/product.md, section 8.2), one canvas component for Live, Replay and the Player
-page. The drawing is app/web3d/pitch.js; this module only shapes the data and returns the player a visitor clicked.
+page. The drawing is app/pitch/pitch.js; this module only shapes the data and returns the player a visitor clicked.
 
 Coordinates are metres on a 105 x 68 pitch, origin bottom-left, in the Silver frame (HOME attacks toward x = 105) on
 every page.
@@ -9,7 +9,7 @@ from pathlib import Path
 
 import streamlit as st
 
-_WEB = Path(__file__).resolve().parents[1] / "web3d"
+_WEB = Path(__file__).resolve().parents[1] / "pitch"
 # d3-delaunay (Voronoi cells of the Replay) is a vendored UMD file that sets globalThis.d3 before pitch.js runs
 _JS = (_WEB / "d3-delaunay.min.js").read_text(encoding="utf-8") + "\n" + (_WEB / "pitch.js").read_text(encoding="utf-8")
 _component = st.components.v2.component("matchlens_pitch", js=_JS)
