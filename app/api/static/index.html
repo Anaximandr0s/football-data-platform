@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MatchLens Control Center</title>
+<link rel="icon" href="/logo.svg">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="top">
+  <img src="/logo.svg" alt="MatchLens" class="logo">
+  <div>
+    <h1>Control Center</h1>
+    <p class="sub">The whole platform on one page: click a box to see what it does, its live numbers and its real tool.</p>
+  </div>
+</header>
+
+<div id="warnings" class="warnings" role="alert" hidden></div>
+
+<main>
+<section class="card diagram-card" aria-labelledby="arch-title">
+  <div class="card-head">
+    <h2 id="arch-title">Architecture</h2>
+    <div class="actions">
+      <button class="ghost" id="docker" title="Running containers"><svg class="ico"><use href="#i-box"/></svg> Containers</button>
+      <button class="ghost" id="export-svg"><svg class="ico"><use href="#i-download"/></svg> SVG</button>
+      <button class="ghost" id="export-png"><svg class="ico"><use href="#i-download"/></svg> PNG (2x)</button>
+    </div>
+  </div>
+
+<svg id="arch" viewBox="0 0 1240 690" xmlns="http://www.w3.org/2000/svg" role="img"
+     aria-label="MatchLens architecture: live path from SkillCorner to the Live page, stored path from Kafka to the analysis app">
+<style>
+  .bg{fill:#ffffff}
+  .box rect.frame{fill:#ffffff;stroke:#2f3a33;stroke-width:1.2}
+  .box{cursor:pointer}
+  .box:hover rect.frame,.box:focus rect.frame{stroke:#146c34;stroke-width:2.2}
+  .box .t{font:700 15px system-ui,-apple-system,"Segoe UI",sans-serif;fill:#16201a}
+  .box .s{font:12.5px system-ui,-apple-system,"Segoe UI",sans-serif;fill:#4a564f}
+  .box use{color:#2f3a33}
+  .light{stroke:#ffffff;stroke-width:1.5}
+  .light.green{fill:#2e9e5b}.light.orange{fill:#d97706}.light.red{fill:#c0392b}.light.grey{fill:#a7b0ab}
+  .edge{fill:none;stroke-width:2.2}
+  .edge.live{stroke:#00897b}
+  .edge.stored{stroke:#7e57c2;stroke-dasharray:9 5}
+  .edge.control{stroke:#7e57c2;stroke-dasharray:2 4;stroke-width:1.6}
+  .moving .edge.live{stroke-dasharray:10 6;animation:flow .6s linear infinite}
+  .moving-stored .edge.stored{animation:flow .6s linear infinite}
+  @keyframes flow{to{stroke-dashoffset:-16}}
+  .step circle{fill:#ffffff;stroke-width:1.5}
+  .step.live circle{stroke:#00897b}.step.stored circle{stroke:#7e57c2}
+  .step text{font:700 12px system-ui,sans-serif;text-anchor:middle;dominant-baseline:central}
+  .step.live text{fill:#00695c}.step.stored text{fill:#5e35b1}
+  .elabel{font:11.5px system-ui,sans-serif;fill:#4a564f}
+  .band rect{fill:#f4f6f2;stroke:#a7b0ab;stroke-width:1;stroke-dasharray:4 3}
+  .legend text{font:12.5px system-ui,sans-serif;fill:#16201a}
+  .caption{font:italic 14px Georgia,"Times New Roman",serif;fill:#16201a;text-anchor:middle}
+  .rowlabel{font:600 11px system-ui,sans-serif;letter-spacing:.12em;fill:#7a857f}
+</style>
+<defs id="icon-defs">
+  <marker id="ah-live" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#00897b"/></marker>
+  <marker id="ah-stored" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#7e57c2"/></marker>
+</defs>
+<rect class="bg" x="0" y="0" width="1240" height="690"/>
+
+<g class="legend" transform="translate(50,420)">
+  <line x1="0" y1="0" x2="34" y2="0" class="edge live"/><text x="42" y="4">live: data in motion</text>
+  <line x1="0" y1="22" x2="34" y2="22" class="edge stored"/><text x="42" y="26">stored: data at rest</text>
+  <circle cx="17" cy="44" r="6" class="light green"/><text x="42" y="48">status (green: working)</text>
+</g>
+<text class="rowlabel" x="680" y="62">LIVE PATH</text>
+<text class="rowlabel" x="660" y="380">STORED PATH</text>
+
+<!-- edges: live -->
+<g id="edges-live">
+  <path class="edge live" d="M180,270 L230,270" marker-end="url(#ah-live)"/>
+  <path class="edge live" d="M380,270 L430,270" marker-end="url(#ah-live)"/>
+  <path class="edge live" d="M580,250 C620,250 620,110 660,110" marker-end="url(#ah-live)"/>
+  <path class="edge live" d="M810,110 L900,110" marker-end="url(#ah-live)"/>
+  <path class="edge live" d="M505,230 L505,40 L975,40 L975,70" marker-end="url(#ah-live)"/>
+</g>
+<text class="elabel" x="815" y="100">5-min statistics</text>
+<text class="elabel" x="700" y="34">positions, score, clock (every second)</text>
+
+<!-- edges: stored -->
+<g id="edges-stored">
+  <path class="edge stored" d="M580,290 C600,290 590,430 600,430" marker-end="url(#ah-stored)"/>
+  <path class="edge stored" d="M750,430 L800,430" marker-end="url(#ah-stored)"/>
+  <path class="edge stored" d="M950,430 L1000,430" marker-end="url(#ah-stored)"/>
+  <path class="edge stored" d="M1110,390 L1110,312" marker-end="url(#ah-stored)"/>
+  <path class="edge control" d="M875,520 L875,472"/>
+  <path class="edge control" d="M1075,520 L1075,472"/>
+  <path class="edge control" d="M675,520 L675,472"/>
+</g>
+<text class="elabel" x="884" y="502">runs and checks</text>
+
+<!-- step numbers -->
+<g class="step live"><circle cx="205" cy="252" r="11"/><text x="205" y="252">1</text></g>
+<g class="step live"><circle cx="405" cy="252" r="11"/><text x="405" y="252">2</text></g>
+<g class="step live"><circle cx="622" cy="180" r="11"/><text x="622" y="180">4</text></g>
+<g class="step live"><circle cx="855" cy="128" r="11"/><text x="855" y="128">5</text></g>
+<g class="step live"><circle cx="560" cy="40" r="11"/><text x="560" y="40">3</text></g>
+<g class="step stored"><circle cx="602" cy="360" r="11"/><text x="602" y="360">6</text></g>
+<g class="step stored"><circle cx="775" cy="448" r="11"/><text x="775" y="448">7</text></g>
+<g class="step stored"><circle cx="975" cy="448" r="11"/><text x="975" y="448">8</text></g>
+<g class="step stored"><circle cx="1132" cy="350" r="11"/><text x="1132" y="350">9</text></g>
+
+<!-- boxes: x, y, 150 x 80 -->
+<g class="box" data-key="skillcorner" tabindex="0" role="button" aria-label="SkillCorner open data" transform="translate(30,230)">
+  <rect class="frame" width="150" height="80" rx="8"/><use href="#i-video" x="12" y="12" width="22" height="22"/>
+  <text class="t" x="12" y="54">SkillCorner</text><text class="s" x="12" y="70">open tracking data</text>
+  <circle class="light grey" cx="138" cy="12" r="6"/></g>
+<g class="box" data-key="producer" tabindex="0" role="button" aria-label="Producer" transform="translate(230,230)">
+  <rect class="frame" width="150" height="80" rx="8"/><use href="#i-send" x="12" y="12" width="22" height="22"/>
+  <text class="t" x="12" y="54">Producer</text><text class="s" x="12" y="70">Python replay</text>
+  <circle class="light grey" cx="138" cy="12" r="6"/></g>
+<g class="box" data-key="kafka" tabindex="0" role="button" aria-label="Kafka" transform="translate(430,230)">
+  <rect class="frame" width="150" height="80" rx="8"/><use href="#i-topology-star-3" x="12" y="12" width="22" height="22"/>
+  <text class="t" x="12" y="54">Kafka</text><text class="s" x="12" y="70">5 topics, 7 days</text>
+  <circle class="light grey" cx="138" cy="12" r="6"/></g>
+<g class="box" data-key="spark" tabindex="0" role="button" aria-label="Spark Streaming" transform="translate(660,70)">
+  <rect class="frame" width="150" height="80" rx="8"/><use href="#i-bolt" x="12" y="12" width="22" height="22"/>
+  <text class="t" x="12" y="54">Spark Streaming</text><text class="s" x="12" y="70">5-min windows</text>
+  <circle class="light grey" cx="138" cy="12" r="6"/></g>
+<g class="box" data-key="live" tabindex="0" role="button" aria-label="Live page" transform="translate(900,70)">
+  <rect class="frame" width="150" height="80" rx="8"/><use href="#i-broadcast" x="12" y="12" width="22" height="22"/>
+  <text class="t" x="12" y="54">Live page</text><text class="s" x="12" y="70">Streamlit</text>
+  <circle class="light grey" cx="138" cy="12" r="6"/></g>
+<g class="box" data-key="bronze" tabindex="0" role="button" aria-label="Bronze" transform="translate(600,390)">
+  <rect class="frame" width="150" height="80" rx="8"/><use href="#i-bucket" x="12" y="12" width="22" height="22"/>
+  <text class="t" x="12" y="54">Bronze</text><text class="s" x="12" y="70">MinIO, raw replays</text>
+  <circle class="light grey" cx="138" cy="12" r="6"/></g>
+<g class="box" data-key="silver" tabindex="0" role="button" aria-label="Silver" transform="translate(800,390)">
+  <rect class="frame" width="150" height="80" rx="8"/><use href="#i-database" x="12" y="12" width="22" height="22"/>
+  <text class="t" x="12" y="54">Silver</text><text class="s" x="12" y="70">Spark + Iceberg</text>
+  <circle class="light grey" cx="138" cy="12" r="6"/></g>
+<g class="box" data-key="gold" tabindex="0" role="button" aria-label="Gold" transform="translate(1000,390)">
+  <rect class="frame" width="150" height="80" rx="8"/><use href="#i-database-star" x="12" y="12" width="22" height="22"/>
+  <text class="t" x="12" y="54">Gold</text><text class="s" x="12" y="70">dbt + DuckDB</text>
+  <circle class="light grey" cx="138" cy="12" r="6"/></g>
+<g class="box" data-key="analysis" tabindex="0" role="button" aria-label="Analysis app" transform="translate(1060,230)">
+  <rect class="frame" width="150" height="80" rx="8"/><use href="#i-chart-bar" x="12" y="12" width="22" height="22"/>
+  <text class="t" x="12" y="54">Analysis app</text><text class="s" x="12" y="70">fan and coach views</text>
+  <circle class="light grey" cx="138" cy="12" r="6"/></g>
+<g class="box" data-key="dagster" tabindex="0" role="button" aria-label="Dagster and Soda" transform="translate(600,520)">
+  <rect class="frame" width="550" height="50" rx="8"/><use href="#i-route" x="12" y="14" width="22" height="22"/>
+  <text class="t" x="44" y="31">Dagster + Soda</text><text class="s" x="170" y="31">at the final whistle: Bronze check, Silver, Soda, Gold, Soda, report</text>
+  <circle class="light grey" cx="538" cy="12" r="6"/></g>
+<g class="box band" data-key="monitoring" tabindex="0" role="button" aria-label="Monitoring" transform="translate(30,600)">
+  <rect width="1180" height="40" rx="8"/><use href="#i-heart-rate-monitor" x="12" y="9" width="22" height="22"/>
+  <text class="t" x="44" y="25">Monitoring</text><text class="s" x="150" y="25">Prometheus · Grafana · Alertmanager: every box above is measured every 15 s</text>
+  <circle class="light grey" cx="1168" cy="12" r="6"/></g>
+
+<text class="caption" x="620" y="672">Figure 1. MatchLens architecture</text>
+</svg>
+  <p class="hint"><b>Live (teal)</b>: 1 a stored match is prepared, 2 replayed into Kafka second by second, 3 read by the
+    Live page (about half a second later), 4 counted by Spark in 5-minute windows, 5 shown on the Live page.
+    <b>Stored (purple)</b>: 6 every message is kept in Bronze; at the final whistle Dagster builds 7 Silver and 8 Gold,
+    each checked by Soda, and 9 the analysis app reads Gold. The arrows move while it happens.</p>
+</section>
+
+<section class="card play" aria-labelledby="play-title">
+  <h2 id="play-title"><svg class="ico"><use href="#i-player-play"/></svg> Play a match live</h2>
+  <form id="play-form">
+    <label>Match <select id="match" required></select></label>
+    <fieldset class="seg" id="speed-set"><legend>Speed</legend>
+      <label><input type="radio" name="speed" value="1" checked><span>x1</span></label>
+      <label><input type="radio" name="speed" value="5"><span>x5</span></label>
+      <label><input type="radio" name="speed" value="10"><span>x10</span></label>
+    </fieldset>
+    <fieldset class="seg" id="start-set"><legend>Start</legend>
+      <label><input type="radio" name="start" value="kickoff" checked><span>kick-off</span></label>
+      <label><input type="radio" name="start" value="goal"><span id="goal-label">30 s before the first goal</span></label>
+      <label><input type="radio" name="start" value="clock"><span>at</span></label>
+      <input id="clock" placeholder="mm:ss" size="6" pattern="\d{1,2}:[0-5]\d" aria-label="start at, mm:ss">
+    </fieldset>
+    <button type="submit" class="primary" id="play-btn"><svg class="ico"><use href="#i-player-play"/></svg> Play</button>
+  </form>
+  <p id="play-error" class="error" role="alert" hidden></p>
+  <div id="replays"></div>
+  <p class="note">At most 2 replays at once, one per match. When a replay reaches its final whistle, Dagster rebuilds
+    the match: the purple path moves while it runs.</p>
+</section>
+
+<section class="card perf" aria-labelledby="perf-title">
+  <h2 id="perf-title"><svg class="ico"><use href="#i-checklist"/></svg> Performance and data quality</h2>
+  <div id="quality"></div>
+  <h3>Service levels now <span class="small">(Prometheus, last 7 days)</span></h3>
+  <div id="slo" class="tiles"></div>
+  <h3>Last benchmark <span class="small" id="bench-when"></span></h3>
+  <div id="bench" class="tiles"></div>
+</section>
+</main>
+
+<dialog id="popup" aria-labelledby="popup-title">
+  <form method="dialog"><button class="close" aria-label="Close">×</button></form>
+  <div id="popup-body"></div>
+</dialog>
+
+<template id="spinner"><div class="spinner" role="status" aria-label="Loading">
+  <svg viewBox="0 0 64 64" width="44" height="44"><circle cx="32" cy="32" r="29" fill="#fff" stroke="#16201a" stroke-width="3"/>
+  <polygon points="32,21 42,28 38,40 26,40 22,28" fill="#16201a"/>
+  <path d="M32 21V6M42 28l13-6M38 40l9 12M26 40l-9 12M22 28 9 22" stroke="#16201a" stroke-width="3" fill="none"/></svg>
+  <span>Loading…</span></div></template>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
