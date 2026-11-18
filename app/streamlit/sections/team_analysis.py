@@ -33,7 +33,6 @@ match = current_match(teams)
 colors = viz.team_colors(teams, match)
 short = {r.team_id: r.team_short for r in teams[teams.match_id == match].itertuples()}
 team = st.segmented_control("Team", ["HOME", "AWAY"], default="HOME", format_func=short.get, key="ta_team") or "HOME"
-other = "AWAY" if team == "HOME" else "HOME"
 
 
 def mine(name: str) -> pd.DataFrame:

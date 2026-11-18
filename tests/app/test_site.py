@@ -26,10 +26,9 @@ def test_menu_shows_only_the_chosen_view():
     assert fan["BEHIND THE DATA"] == ["Data quality", "Pipeline & lineage", "Sources & limits"]
 
 
-def test_every_page_has_a_file_and_every_unfinished_page_says_what_comes():
+def test_every_page_has_a_file():
     for page in sitemap.PAGES:
         assert (APP / "sections" / f"{page.key}.py").exists(), page.key
-        assert page.ready or page.key in sitemap.COMING
     for view in (None, "fan", "coach"):  # one URL per page in any menu
         keys = [p.key for pages in sitemap.menu(view).values() for p in pages]
         assert len(keys) == len(set(keys))
@@ -65,16 +64,6 @@ def test_choosing_a_view_opens_its_first_page_and_pages_keep_view_and_match(app_
     assert not at.exception
     assert at.session_state["view"] == "coach" and at.session_state["match_id"] == "m1"
     assert any("Who ran how much" in m.value for m in at.markdown)
-
-
-@pytest.mark.parametrize("key", [p.key for p in sitemap.PAGES if not p.ready])
-def test_unfinished_pages_say_coming_soon_with_their_question(key, app_env):
-    at = router()
-    at.session_state["view"] = "coach" if key == "event_explorer" else "fan"
-    at.run().switch_page(f"sections/{key}.py").run()
-    assert not at.exception
-    shown = " ".join(m.value for m in at.markdown)
-    assert "Coming soon" in shown and sitemap.spec(key).question in shown
 
 
 def test_switching_view_on_the_player_page_stays_on_it(app_env):

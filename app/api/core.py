@@ -6,7 +6,6 @@ from dataclasses import dataclass
 
 import clock  # app/streamlit/clock.py: the football clock fans see on TV
 
-PRESET_SPEEDS = (1, 5, 10)
 MAX_SPEED = 60
 MAX_RUNNING = 2  # replays at the same time, all matches together
 GOAL_LEAD_S = 30
