@@ -533,7 +533,7 @@ services:
       - /sys:/sys:ro
       - /var/lib/docker/:/var/lib/docker:ro
       - /dev/disk/:/dev/disk:ro
-    mem_limit: 384m   # measured 251 MiB during a replay: 256m left no margin
+    mem_limit: 512m   # peak 383 MiB over 7 days (270 MiB during a x60 replay): 384m ran at the limit
 
   kafka-exporter:    # topic offsets and consumer group lag (bronze-writer)
     <<: *common
