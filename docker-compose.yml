@@ -167,7 +167,7 @@ services:
   #   master UI: http://localhost:${SPARK_MASTER_UI_PORT}   cluster URL (inside Docker): spark://spark-master:7077
   spark-master:
     <<: *common
-    image: ${SPARK_IMAGE:-apache/spark:4.0.0-scala2.13-java17-python3-ubuntu}
+    image: ${SPARK_IMAGE:-apache/spark:4.3.0-scala2.13-java17-python3-ubuntu}
     hostname: spark-master
     command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.master.Master",
               "--host", "spark-master", "--port", "7077", "--webui-port", "8080"]
@@ -185,7 +185,7 @@ services:
 
   spark-worker:
     <<: *common
-    image: ${SPARK_IMAGE:-apache/spark:4.0.0-scala2.13-java17-python3-ubuntu}
+    image: ${SPARK_IMAGE:-apache/spark:4.3.0-scala2.13-java17-python3-ubuntu}
     depends_on:
       spark-master:
         condition: service_healthy
@@ -202,7 +202,7 @@ services:
   # Runs as root only so the named volume spark-ivy is writable (local development stack).
   silver:
     profiles: ["jobs"]
-    image: ${SPARK_IMAGE:-apache/spark:4.0.0-scala2.13-java17-python3-ubuntu}
+    image: ${SPARK_IMAGE:-apache/spark:4.3.0-scala2.13-java17-python3-ubuntu}
     user: "0:0"
     working_dir: /app
     depends_on:
@@ -244,7 +244,7 @@ services:
   # One core of the worker, so a `make silver` can run beside it. Checkpoints: s3a://checkpoints/streaming-5min.
   streaming:
     profiles: ["jobs"]
-    image: ${SPARK_IMAGE:-apache/spark:4.0.0-scala2.13-java17-python3-ubuntu}
+    image: ${SPARK_IMAGE:-apache/spark:4.3.0-scala2.13-java17-python3-ubuntu}
     user: "0:0"
     working_dir: /app
     depends_on:
