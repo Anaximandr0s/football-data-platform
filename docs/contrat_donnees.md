@@ -1,9 +1,8 @@
 # Data contract: ingestion, Silver and Gold (source -> Kafka -> bronze -> Silver -> Gold)
 
 Owner of sections 1 to 8: ingestion (Kafka, MinIO, bronze). Consumers: Silver (Spark + Iceberg), then Gold and Streamlit.
-Sections 9 (Silver) and 10 (Gold) have their own owners and code twins, given at the top of each section.
-The code twin of the table sections is `ingestion/schemas.py` (`SCHEMAS`): change both together, by pull request,
-and warn the Silver owner. Last update: 2026-11-18 (a replay started after kick-off is partial: `-partial` id, never read by Silver, in sections 5 and 6). Before: 2026-11-17 (one Bronze folder per replay; Silver reads only the latest complete replay and keeps its `replay_id`, in sections 6, 9.2 and 9.4). Before: 2026-11-16 (Kafka header `replay_id`, bronze column `kafka_replay_id` and topic `foot-live-stats`, in sections 5, 6 and 9.2). Before: 2026-11-15 (possession on ball, `source_player_id` on players, `is_detected` on tracking, event context columns and off-ball runs as type `run`, in sections 4 to 9). Matches covered: `m001` (SkillCorner 1874553) and `m002` (SkillCorner 1925299).
+Sections 9 (Silver) and 10 (Gold) name their consumers and code twins at the top of each section.
+The code twin of the table sections is `ingestion/schemas.py` (`SCHEMAS`): change both together, in one pull request. Last update: 2026-11-18 (a replay started after kick-off is partial: `-partial` id, never read by Silver, in sections 5 and 6). Before: 2026-11-17 (one Bronze folder per replay; Silver reads only the latest complete replay and keeps its `replay_id`, in sections 6, 9.2 and 9.4). Before: 2026-11-16 (Kafka header `replay_id`, bronze column `kafka_replay_id` and topic `foot-live-stats`, in sections 5, 6 and 9.2). Before: 2026-11-15 (possession on ball, `source_player_id` on players, `is_detected` on tracking, event context columns and off-ball runs as type `run`, in sections 4 to 9). Matches covered: `m001` (SkillCorner 1874553) and `m002` (SkillCorner 1925299).
 
 ## 1. Provenance
 
@@ -226,10 +225,9 @@ Gaps are a property of the source, not of a match: the 20 matches of the SkillCo
 
 ## 9. Silver (Iceberg tables written by `spark/silver`)
 
-Owner: Silver. Consumers: Gold (dbt), Soda, and the dashboard through Gold. Code twins: `spark/silver/transforms.py` (the
-`select` of each `clean_*` function) and the schema checks of `soda/checks/silver.yml`: change the three together, by
-pull request, and warn the Gold owner. Rules and decisions: [`silver-guide.md`](silver-guide.md) and
-[`../spark/silver/README.md`](../spark/silver/README.md).
+Consumers: Gold (dbt), Soda, and the dashboard through Gold. Code twins: `spark/silver/transforms.py` (the
+`select` of each `clean_*` function) and the schema checks of `soda/checks/silver.yml`: change the three together, in
+one pull request. Rules and decisions: [`../spark/silver/README.md`](../spark/silver/README.md).
 
 ### 9.1 Where and how
 
@@ -311,9 +309,9 @@ receiver on a run · possession `HOME`, `AWAY` or null · `source_player_id` pre
 
 ## 10. Gold (DuckDB tables built by dbt)
 
-Owner: Gold. Consumers: the dashboard (`app/streamlit`), Soda, the post-match report. Code twins: `dbt/models/marts/*.sql` with
-`dbt/models/marts/schema.yml`, and the schema checks of `soda/checks/gold.yml`: change them together, by pull request, and
-warn the dashboard owner. Definitions and examples: [`../dbt/README.md`](../dbt/README.md); specification: [`gold-guide.md`](gold-guide.md).
+Consumers: the dashboard (`app/streamlit`), Soda, the post-match report. Code twins: `dbt/models/marts/*.sql` with
+`dbt/models/marts/schema.yml`, and the schema checks of `soda/checks/gold.yml`: change them together, in one pull request.
+Definitions and examples: [`../dbt/README.md`](../dbt/README.md).
 
 ### 10.1 Where and how
 

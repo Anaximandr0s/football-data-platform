@@ -110,9 +110,8 @@ Troubleshooting:
 
 ## Documentation
 
-- **Start here (Silver and Gold): [`docs/silver-guide.md`](docs/silver-guide.md)**
 - Silver job (what it does, tables, decisions, checks): [`spark/silver/README.md`](spark/silver/README.md)
-- Gold layer (tables, definitions, tests, how to run): [`dbt/README.md`](dbt/README.md), specification in [`docs/gold-guide.md`](docs/gold-guide.md)
+- Gold layer (tables, definitions, tests, how to run): [`dbt/README.md`](dbt/README.md)
 - Data quality (what is checked, the failure demo): [`soda/README.md`](soda/README.md)
 - Dashboard (pages, how to read the graphics): [`app/streamlit/README.md`](app/streamlit/README.md)
 - Ingestion guide (files, outputs, how to verify): [`ingestion/README.md`](ingestion/README.md)

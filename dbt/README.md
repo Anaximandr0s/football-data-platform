@@ -3,7 +3,6 @@
 Silver is clean but still row-level (a player at a second, an action). Gold turns it into the numbers the app and the
 report need: distances, sprints, pass networks, shot maps, heatmaps. dbt-core + dbt-duckdb read the Silver Iceberg
 tables, build 17 Gold tables, test them against Silver, and export them to the MinIO bucket `gold`.
-The specification is [`docs/gold-guide.md`](../docs/gold-guide.md); this folder implements it.
 
 ```mermaid
 flowchart LR
