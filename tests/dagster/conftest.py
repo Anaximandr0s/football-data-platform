@@ -1,5 +1,6 @@
 """The Dagster code location loads from a dbt manifest: one is parsed into a temporary folder (no database needed).
 Skipped when Dagster or dbt is not installed."""
+
 import os
 import shutil
 import subprocess
@@ -19,9 +20,23 @@ def defs(tmp_path_factory):
     if shutil.which("dbt") is None:
         pytest.skip("dbt is not installed")
     target = tmp_path_factory.mktemp("dbt_target")
-    proc = subprocess.run(["dbt", "parse", "--project-dir", str(ROOT / "dbt"), "--profiles-dir", str(ROOT / "dbt"),
-                           "--target-path", str(target), "--log-path", str(target)], capture_output=True, text=True,
-                          env={**os.environ, "DBT_TARGET": "dev", "GOLD_DUCKDB_PATH": str(target / "gold.duckdb")})
+    proc = subprocess.run(
+        [
+            "dbt",
+            "parse",
+            "--project-dir",
+            str(ROOT / "dbt"),
+            "--profiles-dir",
+            str(ROOT / "dbt"),
+            "--target-path",
+            str(target),
+            "--log-path",
+            str(target),
+        ],
+        capture_output=True,
+        text=True,
+        env={**os.environ, "DBT_TARGET": "dev", "GOLD_DUCKDB_PATH": str(target / "gold.duckdb")},
+    )
     assert proc.returncode == 0, proc.stdout[-2000:]
     os.environ["DBT_MANIFEST"] = str(target / "manifest.json")
     from football_platform.definitions import defs as definitions

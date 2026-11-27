@@ -1,5 +1,6 @@
 """core.py: the Control Center's rules, as pure functions (no network, no disk): which replay may start, where it starts,
 how far it is, which box is green, where each button leads, and the numbers of the performance panel."""
+
 import re
 from dataclasses import dataclass
 
@@ -7,7 +8,7 @@ import clock  # app/streamlit/clock.py: the football clock fans see on TV
 
 PRESET_SPEEDS = (1, 5, 10)
 MAX_SPEED = 60
-MAX_RUNNING = 2                      # replays at the same time, all matches together
+MAX_RUNNING = 2  # replays at the same time, all matches together
 GOAL_LEAD_S = 30
 
 
@@ -18,22 +19,23 @@ class Refused(ValueError):
 @dataclass(frozen=True)
 class Match:
     match_id: str
-    label: str                       # "Perth Glory 1-3 Brisbane Roar · 15 Mar 2025"
+    label: str  # "Perth Glory 1-3 Brisbane Roar · 15 Mar 2025"
     p1_start: int
     p1_end: int
     p2_start: int
     p2_end: int
-    first_goal_ts: int | None        # the second the ball was in the goal (gold_events.goal_ts)
+    first_goal_ts: int | None  # the second the ball was in the goal (gold_events.goal_ts)
 
 
 # ---------------------------------------------------------------- starting a replay
+
 
 def start_second(m: Match, start: str) -> int:
     """The match second a replay starts from: "kickoff" (the whole match: the only start Dagster turns into Gold),
     "goal" (30 s before the first goal, ball in the goal) or a TV clock "mm:ss" (00:00 to 45:00 in the first half,
     45:00 to 90:00 from the second kick-off). Any start but kick-off makes a partial replay, live only."""
     if start == "kickoff":
-        return 0                     # the first second of the data: a whole match (ingestion/replay_ids.py)
+        return 0  # the first second of the data: a whole match (ingestion/replay_ids.py)
     if start == "goal":
         if m.first_goal_ts is None:
             raise Refused(f"{m.label}: no goal in this match")
@@ -75,8 +77,11 @@ def progress(m: Match, last_ts: int | None) -> dict:
         return {"last_ts": None, "clock": "–", "share": 0.0}
     period = 1 if last_ts < m.p2_start else 2
     share = (last_ts - m.p1_start) / (m.p2_end - m.p1_start) if m.p2_end > m.p1_start else 0.0
-    return {"last_ts": last_ts, "clock": clock.running(last_ts, period, m.p1_start, m.p2_start),
-            "share": min(1.0, max(0.0, share))}
+    return {
+        "last_ts": last_ts,
+        "clock": clock.running(last_ts, period, m.p1_start, m.p2_start),
+        "share": min(1.0, max(0.0, share)),
+    }
 
 
 # ---------------------------------------------------------------- the diagram: status of each box
@@ -86,6 +91,7 @@ GREEN, ORANGE, RED, GREY = "green", "orange", "red", "grey"
 
 def box_status(v: dict) -> dict[str, str]:
     """v: the values read from Prometheus and the replays (main.py, `status`). One light per box of the diagram."""
+
     def up(x) -> str:
         return GREY if x is None else GREEN if x >= 1 else RED
 
@@ -99,12 +105,17 @@ def box_status(v: dict) -> dict[str, str]:
         "live": up(v.get("app_up")) if v.get("live_up") != 0 else ORANGE,
         "bronze": RED if v.get("minio_up") == 0 else up(v.get("bronze_writer_up")),
         "silver": GREY if "silver" not in soda else GREEN if soda["silver"] == 0 else RED,
-        "gold": GREY if "gold" not in soda else RED if soda["gold"] else
-        GREEN if (v.get("freshness_max_s") or 0) <= 600 else ORANGE,
+        "gold": GREY
+        if "gold" not in soda
+        else RED
+        if soda["gold"]
+        else GREEN
+        if (v.get("freshness_max_s") or 0) <= 600
+        else ORANGE,
         "analysis": up(v.get("app_up")),
         "dagster": RED if v.get("dagster_up") == 0 else RED if v.get("runs_failed_latest") else up(v.get("dagster_up")),
         "monitoring": up(v.get("prometheus_up")),
-        "control": GREEN,                          # it answered this request
+        "control": GREEN,  # it answered this request
     }
 
 
@@ -112,20 +123,27 @@ def warnings(v: dict) -> list[str]:
     """What stops the demo from showing everything, in plain words."""
     out = []
     if not v.get("streaming_up"):
-        out.append("The Spark streaming job is not running: the 5-minute statistics will not be computed. Run "
-                   "`make streaming`.")
+        out.append(
+            "The Spark streaming job is not running: the 5-minute statistics will not be computed. Run "
+            "`make streaming`."
+        )
     if not v.get("bronze_writer_up"):
-        out.append("The Bronze writer is not running: a replay will not be stored, and Dagster will not rebuild the "
-                   "match. Run `make up`.")
+        out.append(
+            "The Bronze writer is not running: a replay will not be stored, and Dagster will not rebuild the "
+            "match. Run `make up`."
+        )
     if v.get("kafka_up") == 0:
         out.append("Kafka does not answer: nothing can be played. Run `make up`.")
     if v.get("app_up") == 1 and v.get("live_up") == 0:
-        out.append("The Live page has not been opened since the app started: its Kafka reader starts with the first "
-                   "visit. Open the Live page once (button of the Live page box).")
+        out.append(
+            "The Live page has not been opened since the app started: its Kafka reader starts with the first "
+            "visit. Open the Live page once (button of the Live page box)."
+        )
     return out
 
 
 # ---------------------------------------------------------------- buttons to the real tools
+
 
 def links(base: dict[str, str], match_id: str | None = None) -> dict[str, list[dict]]:
     """Per box, the buttons opening the real UIs. base: public URLs (http://localhost:<port>) by tool."""
@@ -139,69 +157,115 @@ def links(base: dict[str, str], match_id: str | None = None) -> dict[str, list[d
     return {
         "skillcorner": [{"label": "SkillCorner open data", "url": "https://github.com/SkillCorner/opendata"}],
         "producer": [{"label": "Kafka UI: topics", "url": f"{base['kafka_ui']}/ui/clusters/local/all-topics"}],
-        "kafka": [{"label": "Kafka UI: topics", "url": f"{base['kafka_ui']}/ui/clusters/local/all-topics"},
-                  {"label": "Kafka UI: consumer groups", "url": f"{base['kafka_ui']}/ui/clusters/local/consumer-groups"},
-                  {"label": "Grafana: Streaming", "url": f"{grafana}/d/streaming"}],
-        "spark": [{"label": "Spark: streaming job", "url": f"{base['spark_driver']}/StreamingQuery/"},
-                  {"label": "Spark: cluster", "url": base["spark_master"]},
-                  {"label": "Grafana: Streaming", "url": f"{grafana}/d/streaming"}],
-        "live": [{"label": "Live page", "url": page("live_match")},
-                 {"label": "Replay page", "url": page("replay")}],
-        "bronze": [{"label": "MinIO: bronze bucket", "url": f"{base['minio']}/browser/bronze"},
-                   {"label": "Grafana: Infrastructure", "url": f"{grafana}/d/infrastructure"}],
-        "silver": [{"label": "MinIO: silver bucket", "url": f"{base['minio']}/browser/silver"},
-                   {"label": "Data quality page", "url": page("data_quality")}],
-        "gold": [{"label": "MinIO: gold bucket", "url": f"{base['minio']}/browser/gold"},
-                 {"label": "Pipeline & lineage page", "url": page("pipeline_lineage")},
-                 {"label": "Grafana: Pipeline & data quality", "url": f"{grafana}/d/pipeline"}],
-        "analysis": [{"label": "Home", "url": page("")},
-                     {"label": "Match library", "url": page("match_library")},
-                     {"label": "Match story (fan)", "url": page("match_story", "fan")},
-                     {"label": "Team analysis (coach)", "url": page("team_analysis", "coach")},
-                     {"label": "Physical & fatigue (coach)", "url": page("physical_fatigue", "coach")},
-                     {"label": "Compare matches", "url": page("compare_matches")},
-                     {"label": "Data quality", "url": page("data_quality")},
-                     {"label": "Sources & limits", "url": page("sources_limits")}],
-        "dagster": [{"label": "Dagster: runs", "url": f"{base['dagster']}/runs"},
-                    {"label": "Dagster: asset graph", "url": f"{base['dagster']}/asset-groups"},
-                    {"label": "Pipeline & lineage page", "url": page("pipeline_lineage")}],
+        "kafka": [
+            {"label": "Kafka UI: topics", "url": f"{base['kafka_ui']}/ui/clusters/local/all-topics"},
+            {"label": "Kafka UI: consumer groups", "url": f"{base['kafka_ui']}/ui/clusters/local/consumer-groups"},
+            {"label": "Grafana: Streaming", "url": f"{grafana}/d/streaming"},
+        ],
+        "spark": [
+            {"label": "Spark: streaming job", "url": f"{base['spark_driver']}/StreamingQuery/"},
+            {"label": "Spark: cluster", "url": base["spark_master"]},
+            {"label": "Grafana: Streaming", "url": f"{grafana}/d/streaming"},
+        ],
+        "live": [{"label": "Live page", "url": page("live_match")}, {"label": "Replay page", "url": page("replay")}],
+        "bronze": [
+            {"label": "MinIO: bronze bucket", "url": f"{base['minio']}/browser/bronze"},
+            {"label": "Grafana: Infrastructure", "url": f"{grafana}/d/infrastructure"},
+        ],
+        "silver": [
+            {"label": "MinIO: silver bucket", "url": f"{base['minio']}/browser/silver"},
+            {"label": "Data quality page", "url": page("data_quality")},
+        ],
+        "gold": [
+            {"label": "MinIO: gold bucket", "url": f"{base['minio']}/browser/gold"},
+            {"label": "Pipeline & lineage page", "url": page("pipeline_lineage")},
+            {"label": "Grafana: Pipeline & data quality", "url": f"{grafana}/d/pipeline"},
+        ],
+        "analysis": [
+            {"label": "Home", "url": page("")},
+            {"label": "Match library", "url": page("match_library")},
+            {"label": "Match story (fan)", "url": page("match_story", "fan")},
+            {"label": "Team analysis (coach)", "url": page("team_analysis", "coach")},
+            {"label": "Physical & fatigue (coach)", "url": page("physical_fatigue", "coach")},
+            {"label": "Compare matches", "url": page("compare_matches")},
+            {"label": "Data quality", "url": page("data_quality")},
+            {"label": "Sources & limits", "url": page("sources_limits")},
+        ],
+        "dagster": [
+            {"label": "Dagster: runs", "url": f"{base['dagster']}/runs"},
+            {"label": "Dagster: asset graph", "url": f"{base['dagster']}/asset-groups"},
+            {"label": "Pipeline & lineage page", "url": page("pipeline_lineage")},
+        ],
         "control": [],
-        "monitoring": [{"label": "Grafana: Service levels", "url": f"{grafana}/d/slo"},
-                       {"label": "Grafana: Infrastructure", "url": f"{grafana}/d/infrastructure"},
-                       {"label": "Grafana: Streaming", "url": f"{grafana}/d/streaming"},
-                       {"label": "Grafana: Pipeline & data quality", "url": f"{grafana}/d/pipeline"},
-                       {"label": "Prometheus: targets", "url": f"{base['prometheus']}/targets"},
-                       {"label": "Alertmanager: alerts", "url": base["alertmanager"]}],
+        "monitoring": [
+            {"label": "Grafana: Service levels", "url": f"{grafana}/d/slo"},
+            {"label": "Grafana: Infrastructure", "url": f"{grafana}/d/infrastructure"},
+            {"label": "Grafana: Streaming", "url": f"{grafana}/d/streaming"},
+            {"label": "Grafana: Pipeline & data quality", "url": f"{grafana}/d/pipeline"},
+            {"label": "Prometheus: targets", "url": f"{base['prometheus']}/targets"},
+            {"label": "Alertmanager: alerts", "url": base["alertmanager"]},
+        ],
     }
 
 
 # ---------------------------------------------------------------- containers (cAdvisor, no Docker socket)
 
-EXPECTED = ("kafka", "minio", "bronze-writer", "kafka-ui", "spark-master", "spark-worker", "dagster-webserver",
-            "dagster-daemon", "app", "prometheus", "alertmanager", "grafana", "cadvisor", "node-exporter",
-            "kafka-exporter", "blackbox", "pipeline-exporter", "control-center")
+EXPECTED = (
+    "kafka",
+    "minio",
+    "bronze-writer",
+    "kafka-ui",
+    "spark-master",
+    "spark-worker",
+    "dagster-webserver",
+    "dagster-daemon",
+    "app",
+    "prometheus",
+    "alertmanager",
+    "grafana",
+    "cadvisor",
+    "node-exporter",
+    "kafka-exporter",
+    "blackbox",
+    "pipeline-exporter",
+    "control-center",
+)
 
 
 def short_name(name: str) -> str:
     return name.removeprefix("football-platform-").removesuffix("-1")
 
 
-def containers(cpu: dict[str, float], memory: dict[str, float], limit: dict[str, float],
-               started: dict[str, float], now: float) -> list[dict]:
+def containers(
+    cpu: dict[str, float], memory: dict[str, float], limit: dict[str, float], started: dict[str, float], now: float
+) -> list[dict]:
     """One row per container cAdvisor sees, plus every expected one it does not see (not running)."""
     seen = {short_name(n) for n in memory}
-    rows = [{"name": short_name(n), "running": True, "cpu_cores": cpu.get(n, 0.0), "memory_mib": memory[n] / 2**20,
-             "limit_mib": limit[n] / 2**20 if limit.get(n) else None,
-             "uptime_s": now - started[n] if started.get(n) else None} for n in memory]
-    rows += [{"name": e, "running": False, "cpu_cores": None, "memory_mib": None, "limit_mib": None, "uptime_s": None}
-             for e in EXPECTED if e not in seen]
+    rows = [
+        {
+            "name": short_name(n),
+            "running": True,
+            "cpu_cores": cpu.get(n, 0.0),
+            "memory_mib": memory[n] / 2**20,
+            "limit_mib": limit[n] / 2**20 if limit.get(n) else None,
+            "uptime_s": now - started[n] if started.get(n) else None,
+        }
+        for n in memory
+    ]
+    rows += [
+        {"name": e, "running": False, "cpu_cores": None, "memory_mib": None, "limit_mib": None, "uptime_s": None}
+        for e in EXPECTED
+        if e not in seen
+    ]
     return sorted(rows, key=lambda r: (not r["running"], -(r["memory_mib"] or 0)))
 
 
 # ---------------------------------------------------------------- performance and quality, in plain words
 
-def performance(results: dict | None, verdicts: list[dict], checks: tuple[int, int], goals: tuple[int, int],
-                soda_at: str | None) -> dict:
+
+def performance(
+    results: dict | None, verdicts: list[dict], checks: tuple[int, int], goals: tuple[int, int], soda_at: str | None
+) -> dict:
     """The panel: a journey strip and 5 hero cards (one number per idea, from one stated source), then the details."""
     hero, journey, details = [], [], []
     passed, total = checks
@@ -212,126 +276,270 @@ def performance(results: dict | None, verdicts: list[dict], checks: tuple[int, i
         delay = round(x1["live_delay_ms"]["p95"] / 1000, 1)
         ready = results["freshness"]["gold_ready_s"] / 60
         top = results["load"][-1] if results["load"] else None
-        journey = ["A player moves", f"{delay:g} s", "Live page", f"{ready:.1f} min after the final whistle",
-                   "Full statistics, checked and stored"]
-        hero += [{"icon": "broadcast", "title": "Live delay", "value": f"{delay:g} s",
-                  "line": "95 % of positions reach the Live page within this time.", "source": f"{bench}, x1"},
-                 {"icon": "clock-hour-4", "title": "Ready after the final whistle", "value": f"{ready:.1f} min",
-                  "line": "A whole match is cleaned, checked and turned into statistics.", "source": f"{bench}, x60"}]
-    hero += [{"icon": "shield-check", "title": "Quality checks", "value": f"{passed} / {total}",
-              "line": "Checks on Silver and Gold that passed in their last run.", "source": f"last Soda run, {soda_at}"},
-             {"icon": "ball-football", "title": "Goal minutes exact", "value": f"{exact} / {goal_total}",
-              "line": "Goals at the minute an official match report gives.", "source": "official reports, "
-                                                                                     "docs/external_checks.yml"}]
+        journey = [
+            "A player moves",
+            f"{delay:g} s",
+            "Live page",
+            f"{ready:.1f} min after the final whistle",
+            "Full statistics, checked and stored",
+        ]
+        hero += [
+            {
+                "icon": "broadcast",
+                "title": "Live delay",
+                "value": f"{delay:g} s",
+                "line": "95 % of positions reach the Live page within this time.",
+                "source": f"{bench}, x1",
+            },
+            {
+                "icon": "clock-hour-4",
+                "title": "Ready after the final whistle",
+                "value": f"{ready:.1f} min",
+                "line": "A whole match is cleaned, checked and turned into statistics.",
+                "source": f"{bench}, x60",
+            },
+        ]
+    hero += [
+        {
+            "icon": "shield-check",
+            "title": "Quality checks",
+            "value": f"{passed} / {total}",
+            "line": "Checks on Silver and Gold that passed in their last run.",
+            "source": f"last Soda run, {soda_at}",
+        },
+        {
+            "icon": "ball-football",
+            "title": "Goal minutes exact",
+            "value": f"{exact} / {goal_total}",
+            "line": "Goals at the minute an official match report gives.",
+            "source": "official reports, docs/external_checks.yml",
+        },
+    ]
     if results and top:
-        hero.append({"icon": "gauge", "title": "Capacity", "value": f"{top['level']} matches at x60",
-                     "line": "Played at once, every reader keeping up (the most we tried).", "source": bench})
+        hero.append(
+            {
+                "icon": "gauge",
+                "title": "Capacity",
+                "value": f"{top['level']} matches at x60",
+                "line": "Played at once, every reader keeping up (the most we tried).",
+                "source": bench,
+            }
+        )
     if results:
         rel = results["reliability"]
         normal = rel["runs"] - rel["on_purpose"]
         since = rel.get("since_fix") or {}
-        details = [{"title": v["slo"], "value": "PASS" if v["pass"] else "FAIL", "pass": v["pass"],
-                    "line": f"Measured: {v['measured']}."} for v in verdicts]
+        details = [
+            {
+                "title": v["slo"],
+                "value": "PASS" if v["pass"] else "FAIL",
+                "pass": v["pass"],
+                "line": f"Measured: {v['measured']}.",
+            }
+            for v in verdicts
+        ]
         for d in details:
             if d["title"].startswith("Run success") and not d["pass"]:
-                d["line"] = (f"{rel['success_slo']:.1%} of the {normal} normal runs of the last 7 days succeeded: "
-                             f"below the 95 % goal ({round(normal * (1 - rel['success_slo']))} failed). Since the last "
-                             f"recorded fix ({since.get('commit')}), {since.get('success', 0):.1%} of "
-                             f"{since.get('runs', 0)} runs succeeded. Test runs (tag purpose) are left out.")
+                d["line"] = (
+                    f"{rel['success_slo']:.1%} of the {normal} normal runs of the last 7 days succeeded: "
+                    f"below the 95 % goal ({round(normal * (1 - rel['success_slo']))} failed). Since the last "
+                    f"recorded fix ({since.get('commit')}), {since.get('success', 0):.1%} of "
+                    f"{since.get('runs', 0)} runs succeeded. Test runs (tag purpose) are left out."
+                )
         x60 = next(s for s in results["speeds"] if s["speed"] == 60)
         details += [
-            {"title": "Throughput at x60", "value": f"{x60['kafka_msgs_per_s']['p50']:,.0f} msg/s",
-             "line": "Messages per second through Kafka (median), one match replayed 60 times faster."},
-            {"title": "Spark batch", "value": f"{results['spark']['batch_s']['p50']:.1f} s",
-             "line": "Median time of one batch of the 5-minute statistics; a new one starts every 5 s."},
-        ] + [{"title": f"Back to normal after restarting {r['service']}", "value": f"{r['back_to_normal_s']:.0f} s",
-              "line": "In the middle of a replay at x10."} for r in results["recovery"] if r["back_to_normal_s"]]
-    return {"journey": journey, "hero": hero, "details": details,
-            "source": results and f"make benchmark, {results['generated_at']}"}
+            {
+                "title": "Throughput at x60",
+                "value": f"{x60['kafka_msgs_per_s']['p50']:,.0f} msg/s",
+                "line": "Messages per second through Kafka (median), one match replayed 60 times faster.",
+            },
+            {
+                "title": "Spark batch",
+                "value": f"{results['spark']['batch_s']['p50']:.1f} s",
+                "line": "Median time of one batch of the 5-minute statistics; a new one starts every 5 s.",
+            },
+        ] + [
+            {
+                "title": f"Back to normal after restarting {r['service']}",
+                "value": f"{r['back_to_normal_s']:.0f} s",
+                "line": "In the middle of a replay at x10.",
+            }
+            for r in results["recovery"]
+            if r["back_to_normal_s"]
+        ]
+    return {
+        "journey": journey,
+        "hero": hero,
+        "details": details,
+        "source": results and f"make benchmark, {results['generated_at']}",
+    }
 
 
 # ---------------------------------------------------------------- the popups: role in our project, live numbers
 
 ROLES = {
-    "skillcorner": ("SkillCorner open data", "Real broadcast tracking of four A-League matches (MIT licence): every "
-                    "player and the ball, once per second, plus the game events. Converted once into data/prepared."),
-    "producer": ("Producer", "Replays a stored match into Kafka as if it were live, second by second, at 1 to 60 times "
-                 "real speed. Each replay gets an id (replay_id) carried by every message."),
-    "kafka": ("Kafka", "The meeting point: five topics (tracking, ball, events, players, matches) hold every message "
-              "for 7 days. Everything downstream reads from here, live or later."),
-    "spark": ("Spark Structured Streaming", "Reads the live messages and computes 5- and 15-minute statistics per "
-              "player and team (distance, sprints, possession, pressing), written to the topic foot-live-stats."),
-    "live": ("Live page", "The match while it is being played: positions, score and clock from Kafka, and the "
-             "5-minute statistics from Spark. About half a second behind the producer."),
-    "bronze": ("Bronze (MinIO)", "Every message stored as received, one folder per replay: the raw history. Written "
-               "by the Bronze writer every 10 s or 5,000 rows."),
-    "silver": ("Silver (Iceberg)", "The latest complete replay of each match, cleaned: duplicates removed, both halves "
-               "in one direction, impossible speeds removed. Checked by Soda before Gold is built."),
-    "gold": ("Gold (dbt + DuckDB)", "The statistics the site shows: 17 tables built by dbt from Silver, tested, and "
-             "checked again by Soda. One DuckDB file, also exported to MinIO."),
-    "analysis": ("Analysis app", "The MatchLens website: a fan view (story, squad, players) and a coach view (team "
-                 "shape, pressing, fatigue, events), with every number explained and its limits stated."),
-    "dagster": ("Dagster + Soda", "When a replay reaches its final whistle, Dagster runs its match's chain: Bronze "
-                "check, Silver, Soda, Gold, Soda, report. A failed Soda check stops what follows."),
-    "monitoring": ("Monitoring", "Prometheus reads every service every 15 s, Grafana shows four dashboards, "
-                   "Alertmanager sends an email when something breaks, with what to check."),
-    "control": ("Control Center", "This page (FastAPI): it shows the platform and can do two things only, start and "
-                "stop a replay. A replay from kick-off is a whole match; any other start is partial, live only."),
+    "skillcorner": (
+        "SkillCorner open data",
+        "Real broadcast tracking of four A-League matches (MIT licence): every "
+        "player and the ball, once per second, plus the game events. Converted once into data/prepared.",
+    ),
+    "producer": (
+        "Producer",
+        "Replays a stored match into Kafka as if it were live, second by second, at 1 to 60 times "
+        "real speed. Each replay gets an id (replay_id) carried by every message.",
+    ),
+    "kafka": (
+        "Kafka",
+        "The meeting point: five topics (tracking, ball, events, players, matches) hold every message "
+        "for 7 days. Everything downstream reads from here, live or later.",
+    ),
+    "spark": (
+        "Spark Structured Streaming",
+        "Reads the live messages and computes 5- and 15-minute statistics per "
+        "player and team (distance, sprints, possession, pressing), written to the topic foot-live-stats.",
+    ),
+    "live": (
+        "Live page",
+        "The match while it is being played: positions, score and clock from Kafka, and the "
+        "5-minute statistics from Spark. About half a second behind the producer.",
+    ),
+    "bronze": (
+        "Bronze (MinIO)",
+        "Every message stored as received, one folder per replay: the raw history. Written "
+        "by the Bronze writer every 10 s or 5,000 rows.",
+    ),
+    "silver": (
+        "Silver (Iceberg)",
+        "The latest complete replay of each match, cleaned: duplicates removed, both halves "
+        "in one direction, impossible speeds removed. Checked by Soda before Gold is built.",
+    ),
+    "gold": (
+        "Gold (dbt + DuckDB)",
+        "The statistics the site shows: 17 tables built by dbt from Silver, tested, and "
+        "checked again by Soda. One DuckDB file, also exported to MinIO.",
+    ),
+    "analysis": (
+        "Analysis app",
+        "The MatchLens website: a fan view (story, squad, players) and a coach view (team "
+        "shape, pressing, fatigue, events), with every number explained and its limits stated.",
+    ),
+    "dagster": (
+        "Dagster + Soda",
+        "When a replay reaches its final whistle, Dagster runs its match's chain: Bronze "
+        "check, Silver, Soda, Gold, Soda, report. A failed Soda check stops what follows.",
+    ),
+    "monitoring": (
+        "Monitoring",
+        "Prometheus reads every service every 15 s, Grafana shows four dashboards, "
+        "Alertmanager sends an email when something breaks, with what to check.",
+    ),
+    "control": (
+        "Control Center",
+        "This page (FastAPI): it shows the platform and can do two things only, start and "
+        "stop a replay. A replay from kick-off is a whole match; any other start is partial, live only.",
+    ),
 }
 
 # box -> (label, PromQL, format); formats: rate (/s), s, ms, pct, int, mib
 NUMBERS = {
-    "producer": [("messages per second into Kafka",
-                  'sum(delta(kafka_topic_partition_current_offset{topic=~"foot-(tracking|ball|events)"}[30s])) / 30',
-                  "rate")],
-    "kafka": [("messages per second", 'sum(delta(kafka_topic_partition_current_offset{topic=~"foot-.+"}[30s])) / 30',
-               "rate"),
-              ("Bronze writer lag (messages)", 'sum(kafka_consumergroup_lag{consumergroup="bronze-writer"})', "int"),
-              ("messages kept (7 days)", 'sum(kafka_topic_partition_current_offset{topic=~"foot-.+"}) - '
-                                         'sum(kafka_topic_partition_oldest_offset{topic=~"foot-.+"})', "int")],
-    "spark": [("last batch", 'max(football_spark_batch_duration_seconds)', "s"),
-              ("rows per second processed", 'sum(football_spark_processed_rows_per_second)', "rate"),
-              ("messages not processed yet", 'max(football:consumer_lag{source="spark"})', "int")],
-    "live": [("delay p95, last 5 min", "football:live_delay_seconds:p95_5m", "s"),
-             ("messages not read yet", "sum(football_live_consumer_lag_messages)", "int")],
-    "bronze": [("rows written per second",
-                'sum(delta(kafka_consumergroup_current_offset{consumergroup="bronze-writer"}[1m])) / 60', "rate"),
-               ("MinIO free space", "minio_cluster_capacity_usable_free_bytes", "gib")],
-    "silver": [("Silver Soda checks passed",
-                'sum(football_soda_checks{layer="silver", result=~"pass|warn"}) / sum(football_soda_checks{layer="silver"})',
-                "pct"),
-               ("last Silver step", 'football_dagster_step_duration_seconds{dagster_job="match_pipeline", step="silver"}',
-                "s")],
-    "gold": [("Gold Soda checks passed",
-              'sum(football_soda_checks{layer="gold", result=~"pass|warn"}) / sum(football_soda_checks{layer="gold"})',
-              "pct"),
-             ("slowest Gold after the final whistle", "max(football_gold_freshness_seconds)", "s"),
-             ("dbt tests passed", 'sum(football_dbt_tests{status="pass"}) / sum(football_dbt_tests)', "pct")],
-    "analysis": [("answering", 'probe_success{service="app"}', "yesno"),
-                 ("up over 7 days", "slo:app_up_ratio:7d", "pct")],
-    "dagster": [("runs in the last 7 days", "sum(football_dagster_runs)", "int"),
-                ("run success (normal runs)", "slo:run_success_ratio:7d", "pct"),
-                ("answering", 'probe_success{service="dagster"}', "yesno")],
-    "monitoring": [("alerts firing", 'count(ALERTS{alertstate="firing"}) or vector(0)', "int"),
-                   ("services answering", 'count(up == 1)', "int"),
-                   ("services not answering", 'count(up == 0) or vector(0)', "int")],
+    "producer": [
+        (
+            "messages per second into Kafka",
+            'sum(delta(kafka_topic_partition_current_offset{topic=~"foot-(tracking|ball|events)"}[30s])) / 30',
+            "rate",
+        )
+    ],
+    "kafka": [
+        ("messages per second", 'sum(delta(kafka_topic_partition_current_offset{topic=~"foot-.+"}[30s])) / 30', "rate"),
+        ("Bronze writer lag (messages)", 'sum(kafka_consumergroup_lag{consumergroup="bronze-writer"})', "int"),
+        (
+            "messages kept (7 days)",
+            'sum(kafka_topic_partition_current_offset{topic=~"foot-.+"}) - '
+            'sum(kafka_topic_partition_oldest_offset{topic=~"foot-.+"})',
+            "int",
+        ),
+    ],
+    "spark": [
+        ("last batch", "max(football_spark_batch_duration_seconds)", "s"),
+        ("rows per second processed", "sum(football_spark_processed_rows_per_second)", "rate"),
+        ("messages not processed yet", 'max(football:consumer_lag{source="spark"})', "int"),
+    ],
+    "live": [
+        ("delay p95, last 5 min", "football:live_delay_seconds:p95_5m", "s"),
+        ("messages not read yet", "sum(football_live_consumer_lag_messages)", "int"),
+    ],
+    "bronze": [
+        (
+            "rows written per second",
+            'sum(delta(kafka_consumergroup_current_offset{consumergroup="bronze-writer"}[1m])) / 60',
+            "rate",
+        ),
+        ("MinIO free space", "minio_cluster_capacity_usable_free_bytes", "gib"),
+    ],
+    "silver": [
+        (
+            "Silver Soda checks passed",
+            'sum(football_soda_checks{layer="silver", result=~"pass|warn"}) / sum(football_soda_checks{layer="silver"})',
+            "pct",
+        ),
+        (
+            "last Silver step",
+            'football_dagster_step_duration_seconds{dagster_job="match_pipeline", step="silver"}',
+            "s",
+        ),
+    ],
+    "gold": [
+        (
+            "Gold Soda checks passed",
+            'sum(football_soda_checks{layer="gold", result=~"pass|warn"}) / sum(football_soda_checks{layer="gold"})',
+            "pct",
+        ),
+        ("slowest Gold after the final whistle", "max(football_gold_freshness_seconds)", "s"),
+        ("dbt tests passed", 'sum(football_dbt_tests{status="pass"}) / sum(football_dbt_tests)', "pct"),
+    ],
+    "analysis": [
+        ("answering", 'probe_success{service="app"}', "yesno"),
+        ("up over 7 days", "slo:app_up_ratio:7d", "pct"),
+    ],
+    "dagster": [
+        ("runs in the last 7 days", "sum(football_dagster_runs)", "int"),
+        ("run success (normal runs)", "slo:run_success_ratio:7d", "pct"),
+        ("answering", 'probe_success{service="dagster"}', "yesno"),
+    ],
+    "monitoring": [
+        ("alerts firing", 'count(ALERTS{alertstate="firing"}) or vector(0)', "int"),
+        ("services answering", "count(up == 1)", "int"),
+        ("services not answering", "count(up == 0) or vector(0)", "int"),
+    ],
     "skillcorner": [],
     "control": [],
 }
 
 
 def fmt(value: float | None, kind: str) -> str:
-    if value is None or value != value:              # missing or NaN
+    if value is None or value != value:  # missing or NaN
         return "–"
-    return {"rate": lambda v: f"{v:,.0f}/s", "s": lambda v: f"{v:,.1f} s", "ms": lambda v: f"{v:,.0f} ms",
-            "pct": lambda v: f"{v:.0%}", "int": lambda v: f"{v:,.0f}", "gib": lambda v: f"{v / 2**30:,.1f} GiB",
-            "yesno": lambda v: "yes" if v >= 1 else "no"}[kind](value)
+    return {
+        "rate": lambda v: f"{v:,.0f}/s",
+        "s": lambda v: f"{v:,.1f} s",
+        "ms": lambda v: f"{v:,.0f} ms",
+        "pct": lambda v: f"{v:.0%}",
+        "int": lambda v: f"{v:,.0f}",
+        "gib": lambda v: f"{v / 2**30:,.1f} GiB",
+        "yesno": lambda v: "yes" if v >= 1 else "no",
+    }[kind](value)
 
 
 # ---------------------------------------------------------------- the pipeline of a replay, as chips
 
-STEPS = (("bronze", "Bronze"), ("silver", "Silver"), ("silver_soda_silver", "Soda"), ("gold", "Gold"),
-         ("soda_gold", "Soda"), ("match_report", "report"))
+STEPS = (
+    ("bronze", "Bronze"),
+    ("silver", "Silver"),
+    ("silver_soda_silver", "Soda"),
+    ("gold", "Gold"),
+    ("soda_gold", "Soda"),
+    ("match_report", "report"),
+)
 STATE = {"SUCCESS": "done", "IN_PROGRESS": "running", "FAILURE": "failed", "SKIPPED": "not built"}
 
 

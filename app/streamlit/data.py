@@ -6,6 +6,7 @@ Source (first one that applies):
 The DuckDB file is opened read-only for the time of one query and closed at once: DuckDB allows a single writer and
 a connection that stays open would block the next `make gold`. Results are cached for a minute.
 """
+
 import json
 import os
 from pathlib import Path
@@ -15,14 +16,30 @@ import pandas as pd
 import streamlit as st
 
 ROOT = Path(__file__).resolve().parents[2]
-GOLD_TABLES = ("gold_player_match_stats", "gold_team_match_stats", "gold_zone_occupancy",
-               "gold_pass_network", "gold_shots", "gold_player_5min", "gold_match_library", "gold_player_card",
-               "gold_player_fatigue", "gold_events", "gold_match_timeline", "gold_team_profile", "gold_team_shape",
-               "gold_pressing", "gold_team_build_up", "gold_space_control")
+GOLD_TABLES = (
+    "gold_player_match_stats",
+    "gold_team_match_stats",
+    "gold_zone_occupancy",
+    "gold_pass_network",
+    "gold_shots",
+    "gold_player_5min",
+    "gold_match_library",
+    "gold_player_card",
+    "gold_player_fatigue",
+    "gold_events",
+    "gold_match_timeline",
+    "gold_team_profile",
+    "gold_team_shape",
+    "gold_pressing",
+    "gold_team_build_up",
+    "gold_space_control",
+)
 CREDIT = "Data: SkillCorner open data (MIT licence). Real tracking data of A-League matches."
-CAVEAT = ("Distances, speeds and sprints cover **tracked seconds only** (about 3/4 of each match) and come from 1 Hz "
-          "positions: they are approximate and under-estimate real values. Compare players inside a match rather than "
-          "quoting absolute numbers. Player ids are local to a match.")
+CAVEAT = (
+    "Distances, speeds and sprints cover **tracked seconds only** (about 3/4 of each match) and come from 1 Hz "
+    "positions: they are approximate and under-estimate real values. Compare players inside a match rather than "
+    "quoting absolute numbers. Player ids are local to a match."
+)
 
 
 def duckdb_path() -> Path:
@@ -79,12 +96,15 @@ def table(name: str) -> pd.DataFrame:
 def require_gold() -> pd.DataFrame:
     """Team table of every match, or a clear message and a stop if Gold is not there yet."""
     folder = parquet_dir()
-    missing = (folder is not None and not (folder / "gold_team_match_stats.parquet").exists()) or \
-              (folder is None and not duckdb_path().exists())
+    missing = (folder is not None and not (folder / "gold_team_match_stats.parquet").exists()) or (
+        folder is None and not duckdb_path().exists()
+    )
     if missing:
         st.error("The Gold tables are not available yet.")
-        st.markdown("Run the pipeline first: `make silver MATCH=\"m001 m002\"`, then `make gold`. "
-                    f"The dashboard reads `{folder or duckdb_path()}`.")
+        st.markdown(
+            'Run the pipeline first: `make silver MATCH="m001 m002"`, then `make gold`. '
+            f"The dashboard reads `{folder or duckdb_path()}`."
+        )
         st.stop()
     try:
         teams = table("gold_team_match_stats")
@@ -102,8 +122,10 @@ def match_label(teams: pd.DataFrame, match_id: str) -> str:
     rows = teams[teams.match_id == match_id].set_index("team_id")
     if "HOME" not in rows.index or "AWAY" not in rows.index:
         return match_id
-    return f"{match_id}: {rows.loc['HOME', 'team_short']} {rows.loc['HOME', 'score']}-{rows.loc['AWAY', 'score']} " \
-           f"{rows.loc['AWAY', 'team_short']}"
+    return (
+        f"{match_id}: {rows.loc['HOME', 'team_short']} {rows.loc['HOME', 'score']}-{rows.loc['AWAY', 'score']} "
+        f"{rows.loc['AWAY', 'team_short']}"
+    )
 
 
 def current_match(teams: pd.DataFrame) -> str:
@@ -178,7 +200,7 @@ def doc_section(doc: str, heading: str) -> str:
     text = (ROOT / "docs" / doc).read_text(encoding="utf-8")
     start = text.index(f"## {heading}\n") + len(heading) + 4
     end = text.find("\n## ", start)
-    return text[start:end if end >= 0 else None].strip()
+    return text[start : end if end >= 0 else None].strip()
 
 
 def _yaml(path: Path):
@@ -205,8 +227,14 @@ def quality_evidence() -> dict | None:
 def silver_reports() -> dict[str, dict]:
     """data/quality/silver_<match>.json, written by the Silver job for each match it processes."""
     folder = Path(os.getenv("QUALITY_OUT_DIR", ROOT / "data" / "quality"))
-    return {p.stem.removeprefix("silver_"): json.loads(p.read_text(encoding="utf-8"))
-            for p in sorted(folder.glob("silver_*.json"))} if folder.exists() else {}
+    return (
+        {
+            p.stem.removeprefix("silver_"): json.loads(p.read_text(encoding="utf-8"))
+            for p in sorted(folder.glob("silver_*.json"))
+        }
+        if folder.exists()
+        else {}
+    )
 
 
 def dbt_tests() -> tuple[int, int] | None:
@@ -220,8 +248,10 @@ def dbt_tests() -> tuple[int, int] | None:
 
 @st.cache_data(ttl=60, show_spinner=False)
 def _replay_counts(key: str) -> pd.DataFrame:
-    query = ("select match_id, count(*) filter (where object_type = 'player') as players, "
-             "count(*) filter (where object_type = 'ball') as balls from {} group by 1")
+    query = (
+        "select match_id, count(*) filter (where object_type = 'player') as players, "
+        "count(*) filter (where object_type = 'ball') as balls from {} group by 1"
+    )
     folder = parquet_dir()
     if folder:
         return duckdb.sql(query.format(f"read_parquet('{folder / 'gold_replay_frames.parquet'}')")).df()

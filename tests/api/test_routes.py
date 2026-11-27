@@ -1,11 +1,12 @@
 """The Control Center's routes: two actions only, both whitelisted; the read-only payloads the page uses."""
+
 import io
 import os
 
 import pytest
 
 pytest.importorskip("fastapi")
-os.environ["CONTROL_CENTER_WATCH"] = "0"                              # no Kafka in tests
+os.environ["CONTROL_CENTER_WATCH"] = "0"  # no Kafka in tests
 import core  # noqa: E402
 import main  # noqa: E402
 import services  # noqa: E402
@@ -16,6 +17,7 @@ LIB = {m: core.Match(m, f"Team A 1-0 Team B · {m}", 10, 2900, 3800, 6600, 330) 
 
 class FakeProc:
     """A producer that printed its replay id and runs until terminated."""
+
     count = 0
 
     def __init__(self, args, **_kw):
@@ -61,24 +63,27 @@ def test_start_and_stop_a_replay(client):
     r = client.post("/api/replay/start", json={"match": "m001", "speed": 5, "start": "goal"})
     assert r.status_code == 200 and r.json()["replay_id"].startswith("m001-")
     proc = main.replays.items["m001"]["proc"]
-    assert proc.args[proc.args.index("--start") + 1] == "300"           # 30 s before the ball was in the goal
+    assert proc.args[proc.args.index("--start") + 1] == "300"  # 30 s before the ball was in the goal
     assert proc.args[proc.args.index("--speed") + 1] == "5"
     assert client.post("/api/replay/stop", json={"match": "m001"}).json() == {"match": "m001", "stopped": True}
-    assert client.post("/api/replay/stop", json={"match": "m001"}).status_code == 404     # not playing any more
+    assert client.post("/api/replay/stop", json={"match": "m001"}).status_code == 404  # not playing any more
 
 
-@pytest.mark.parametrize("body, why", [
-    ({"match": "m009", "speed": 1}, "unknown match"),
-    ({"match": "m001", "speed": 0}, "speed"),
-    ({"match": "m001", "speed": 61}, "speed"),
-    ({"match": "m001", "speed": 2.5}, "speed"),
-    ({"match": "m001", "speed": "10; rm -rf /"}, "speed"),
-    ({"match": "m001", "speed": 1, "start": "95:00"}, "90:00"),
-])
+@pytest.mark.parametrize(
+    "body, why",
+    [
+        ({"match": "m009", "speed": 1}, "unknown match"),
+        ({"match": "m001", "speed": 0}, "speed"),
+        ({"match": "m001", "speed": 61}, "speed"),
+        ({"match": "m001", "speed": 2.5}, "speed"),
+        ({"match": "m001", "speed": "10; rm -rf /"}, "speed"),
+        ({"match": "m001", "speed": 1, "start": "95:00"}, "90:00"),
+    ],
+)
 def test_the_whitelist_refuses_in_plain_words(client, body, why):
     r = client.post("/api/replay/start", json=body)
     assert r.status_code == 409 and why in r.json()["detail"]
-    assert main.replays.items == {}                                    # nothing started
+    assert main.replays.items == {}  # nothing started
 
 
 def test_one_replay_per_match_and_two_at_most(client):
@@ -90,9 +95,17 @@ def test_one_replay_per_match_and_two_at_most(client):
     assert third.status_code == 409 and "2 replays are already playing" in third.json()["detail"]
 
 
-@pytest.mark.parametrize("method, path", [("get", "/api/replay/start"), ("delete", "/api/replay/stop"),
-                                          ("post", "/api/containers"), ("post", "/api/run"), ("put", "/api/box/kafka"),
-                                          ("post", "/api/docker/restart")])
+@pytest.mark.parametrize(
+    "method, path",
+    [
+        ("get", "/api/replay/start"),
+        ("delete", "/api/replay/stop"),
+        ("post", "/api/containers"),
+        ("post", "/api/run"),
+        ("put", "/api/box/kafka"),
+        ("post", "/api/docker/restart"),
+    ],
+)
 def test_nothing_else_can_be_done(client, method, path):
     assert getattr(client, method)(path).status_code in (404, 405)
 

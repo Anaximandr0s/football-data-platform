@@ -5,6 +5,7 @@
 
 Sorting ids sorts replays in time. Silver, the Dagster sensor and make bronze-prune ignore partial replays: a match
 built from one would miss its first minutes."""
+
 import datetime as dt
 
 PARTIAL = "-partial"
@@ -19,5 +20,5 @@ def is_partial(replay_id: str) -> bool:
 
 
 def match_of(replay_id: str) -> str:
-    """"m001-20261118T120000Z(-partial)" -> "m001"."""
+    """ "m001-20261118T120000Z(-partial)" -> "m001"."""
     return replay_id.removesuffix(PARTIAL).rsplit("-", 1)[0]

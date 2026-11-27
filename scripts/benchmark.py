@@ -11,6 +11,7 @@ Three threads run along: a probe that runs the Live page's own code (live.route)
 delay; a sampler of the lag of bronze-writer and Spark, every second; a safety guard that stops the producers when the
 laptop is in danger (memory, CPU, disk). Needs the stack, `make streaming`, `make dagster`, `make monitoring` and
 data/prepared/m001-m004. About 50 minutes; the laptop is busy meanwhile. Run from the repository root."""
+
 import json
 import logging
 import os
@@ -50,6 +51,7 @@ SAFETY = {"mem_available_mib": 1536, "cpu": 0.95, "cpu_seconds": 30, "disk_free"
 
 # ---------------------------------------------------------------- services
 
+
 def http_json(url: str, body: dict | None = None, timeout: float = 15) -> dict:
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(url, data, {"Content-Type": "application/json"} if data else {})
@@ -87,8 +89,11 @@ def sensor(running: bool) -> None:
     if running:
         gql("mutation ($s: SensorSelector!) { startSensor(sensorSelector: $s) { __typename } }", {"s": selector})
     else:
-        sid = gql("query ($s: SensorSelector!) { sensorOrError(sensorSelector: $s) { ... on Sensor { sensorState "
-                  "{ id } } } }", {"s": selector})["sensorOrError"]["sensorState"]["id"]
+        sid = gql(
+            "query ($s: SensorSelector!) { sensorOrError(sensorSelector: $s) { ... on Sensor { sensorState "
+            "{ id } } } }",
+            {"s": selector},
+        )["sensorOrError"]["sensorState"]["id"]
         gql("mutation ($id: String!) { stopSensor(id: $id) { __typename } }", {"id": sid})
     log.info("Dagster replay sensor %s", "running" if running else "paused")
 
@@ -100,13 +105,16 @@ def skip_paused_replays() -> None:
     parts = c.list_topics("foot-tracking", timeout=10).topics["foot-tracking"].partitions
     cursor = {str(p): c.get_watermark_offsets(TopicPartition("foot-tracking", p), timeout=10)[1] for p in parts}
     c.close()
-    gql("mutation ($s: SensorSelector!, $c: String) { setSensorCursor(sensorSelector: $s, cursor: $c) "
-        "{ __typename } }", {"s": {**LOCATION, "sensorName": "replay_end"}, "c": json.dumps(cursor)})
+    gql(
+        "mutation ($s: SensorSelector!, $c: String) { setSensorCursor(sensorSelector: $s, cursor: $c) { __typename } }",
+        {"s": {**LOCATION, "sensorName": "replay_end"}, "c": json.dumps(cursor)},
+    )
     log.info("replay sensor cursor moved to the end of foot-tracking: %s", cursor)
 
 
 class scenario:  # noqa: N801 - used as `with scenario("x60"):`
     """Marks a scenario in data/benchmark/current.json: the pipeline exporter turns it into Grafana annotations."""
+
     def __init__(self, name: str):
         self.name = name
 
@@ -121,6 +129,7 @@ class scenario:  # noqa: N801 - used as `with scenario("x60"):`
 
 # ---------------------------------------------------------------- the three threads
 
+
 class Probe(threading.Thread):
     """Reads every replay topic and foot-live-stats from their end, like the Live page: live.route on every message,
     then delay = now - the producer's timestamp. Also keeps, per replay, the first Kafka time of each match second
@@ -128,26 +137,35 @@ class Probe(threading.Thread):
 
     def __init__(self):
         super().__init__(daemon=True, name="probe")
-        self.delays: list[tuple[float, float]] = []                       # (received, delay ms)
-        self.first_ms: dict[str, dict[int, int]] = {}                     # replay -> ts -> kafka ms
-        self.complete_ms: dict[tuple, int] = {}                           # (replay, size, index, end_ts) -> kafka ms
-        self.lag: list[tuple[float, int]] = []                            # filled by the Sampler (it has the ends)
+        self.delays: list[tuple[float, float]] = []  # (received, delay ms)
+        self.first_ms: dict[str, dict[int, int]] = {}  # replay -> ts -> kafka ms
+        self.complete_ms: dict[tuple, int] = {}  # (replay, size, index, end_ts) -> kafka ms
+        self.lag: list[tuple[float, int]] = []  # filled by the Sampler (it has the ends)
         self.next_offset: dict[tuple[str, int], int] = {}
         self.stop_event = threading.Event()
         self.ready = threading.Event()
 
     def run(self) -> None:
-        c = Consumer({"bootstrap.servers": BOOTSTRAP, "group.id": f"benchmark-probe-{time.time_ns()}",
-                      "enable.auto.commit": False, "log_level": 3})
-        parts = [TopicPartition(t, p) for t in [*REPLAY_TOPICS, STATS_TOPIC]
-                 for p in c.list_topics(t, timeout=10).topics[t].partitions]
+        c = Consumer(
+            {
+                "bootstrap.servers": BOOTSTRAP,
+                "group.id": f"benchmark-probe-{time.time_ns()}",
+                "enable.auto.commit": False,
+                "log_level": 3,
+            }
+        )
+        parts = [
+            TopicPartition(t, p)
+            for t in [*REPLAY_TOPICS, STATS_TOPIC]
+            for p in c.list_topics(t, timeout=10).topics[t].partitions
+        ]
         start = {(tp.topic, tp.partition): c.get_watermark_offsets(tp, timeout=10)[1] for tp in parts}
         c.assign([TopicPartition(t, p, o) for (t, p), o in start.items()])
         self.next_offset = {k: o for k, o in start.items() if k[0] != STATS_TOPIC}
         self.ready.set()
         states = {}
         while not self.stop_event.is_set():
-            for msg in c.consume(1000, 0.5):                              # as app/streamlit/live_feed.py
+            for msg in c.consume(1000, 0.5):  # as app/streamlit/live_feed.py
                 if msg.error():
                     continue
                 if msg.topic() != STATS_TOPIC:
@@ -175,7 +193,7 @@ class Probe(threading.Thread):
         seconds = sorted(sent)
         out = []
         for (rid, _size, _index, end_ts), done_ms in list(self.complete_ms.items()):
-            i = bisect_left(seconds, end_ts + 10)                      # rows.GRACE_S
+            i = bisect_left(seconds, end_ts + 10)  # rows.GRACE_S
             if rid == replay and i < len(seconds):
                 out.append((done_ms - sent[seconds[i]]) / 1000)
         return out
@@ -191,13 +209,14 @@ class Sampler(threading.Thread):
         self.bronze: list[tuple[float, int]] = []
         self.spark: list[tuple[float, float]] = []
         self.produced: list[tuple[float, int]] = []
-        self.host: list[tuple[float, float, float]] = []                    # (t, cpu fraction, MiB available)
+        self.host: list[tuple[float, float, float]] = []  # (t, cpu fraction, MiB available)
         self.danger: str | None = None
         self.stop_event = threading.Event()
 
     def run(self) -> None:
-        c = Consumer({"bootstrap.servers": BOOTSTRAP, "group.id": "bronze-writer", "enable.auto.commit": False,
-                      "log_level": 3})
+        c = Consumer(
+            {"bootstrap.servers": BOOTSTRAP, "group.id": "bronze-writer", "enable.auto.commit": False, "log_level": 3}
+        )
         parts = [TopicPartition(t, p) for t in REPLAY_TOPICS for p in c.list_topics(t, timeout=10).topics[t].partitions]
         cpu_prev, high_cpu_since = _cpu_times(), None
         while not self.stop_event.is_set():
@@ -246,26 +265,56 @@ def _spark_behind(now: float, ends: dict[tuple[str, int], int]) -> float | None:
     for the slowest query. None when no query reported in the last 30 s (a restart): unknown, not zero."""
     try:
         queries = json.loads(PROGRESS.read_text())
-    except (OSError, json.JSONDecodeError):          # being replaced by the listener: next second
+    except (OSError, json.JSONDecodeError):  # being replaced by the listener: next second
         return None
-    behind = [sum(max(0, ends[(topic, int(p))] - o) for topic, parts in q["end_offsets"].items()
-                  for p, o in parts.items() if (topic, int(p)) in ends)
-              for q in queries.values()
-              if q.get("running") and now - q["reported_at"] < 30 and q.get("end_offsets")]
+    behind = [
+        sum(
+            max(0, ends[(topic, int(p))] - o)
+            for topic, parts in q["end_offsets"].items()
+            for p, o in parts.items()
+            if (topic, int(p)) in ends
+        )
+        for q in queries.values()
+        if q.get("running") and now - q["reported_at"] < 30 and q.get("end_offsets")
+    ]
     return max(behind) if behind else None
 
 
 # ---------------------------------------------------------------- replays
 
-def produce(matches: list[str], speed: float, start: int = 0, seconds: float | None = None,
-            sampler: Sampler | None = None, stop: threading.Event | None = None) -> tuple[float, float, dict[str, str]]:
+
+def produce(
+    matches: list[str],
+    speed: float,
+    start: int = 0,
+    seconds: float | None = None,
+    sampler: Sampler | None = None,
+    stop: threading.Event | None = None,
+) -> tuple[float, float, dict[str, str]]:
     """Replays the matches at once; stops them after `seconds`, when `stop` is set or when the safety guard fires.
     (start, stop, replay id per match)."""
-    procs = {m: subprocess.Popen([sys.executable, "-m", "ingestion.producer_foot", "--match", m, "--speed", str(speed),
-                                  "--start", str(start)], cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                 text=True) for m in matches}
+    procs = {
+        m: subprocess.Popen(
+            [
+                sys.executable,
+                "-m",
+                "ingestion.producer_foot",
+                "--match",
+                m,
+                "--speed",
+                str(speed),
+                "--start",
+                str(start),
+            ],
+            cwd=ROOT,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        for m in matches
+    }
     replays = {m: _replay_id(p) for m, p in procs.items()}
-    for p in procs.values():      # keep reading their output, so a full pipe never blocks them
+    for p in procs.values():  # keep reading their output, so a full pipe never blocks them
         threading.Thread(target=p.stdout.read, daemon=True).start()
     t0 = time.time()
     while any(p.poll() is None for p in procs.values()):
@@ -289,8 +338,11 @@ def _replay_id(proc: subprocess.Popen) -> str:
 def target_rate(match: str, start: int, seconds: float | None, speed: float) -> float:
     """Messages per second the producer must send: the match's rows per second of play, times the speed."""
     folder = ROOT / "data" / "prepared" / match
-    ts = [t for name in ("tracking", "events", "ball") for t in pq.read_table(folder / f"{name}.parquet",
-                                                                               columns=["ts"]).column("ts").to_pylist()]
+    ts = [
+        t
+        for name in ("tracking", "events", "ball")
+        for t in pq.read_table(folder / f"{name}.parquet", columns=["ts"]).column("ts").to_pylist()
+    ]
     end = start + seconds * speed if seconds else max(ts) + 1
     first = max(start, min(ts))
     return sum(first <= t < end for t in ts) / (end - first) * speed
@@ -298,29 +350,55 @@ def target_rate(match: str, start: int, seconds: float | None, speed: float) -> 
 
 # ---------------------------------------------------------------- scenarios
 
+
 def speeds(probe: Probe, sampler: Sampler) -> tuple[list[dict], dict]:
     out, x60_replay = [], None
     # 6 minutes: a 5-minute window is crossed whole, + its 10 s of grace
     for speed, match, start, seconds in ((1, "m002", 600, 360), (10, "m003", 600, 360), (60, "m001", 0, None)):
         with scenario(f"x{speed}"):
             t0, t1, replays = produce([match], speed, start, seconds, sampler)
-            time.sleep(30)                                             # the last windows complete, readers drain
-        lo = t0 + 30                                                   # skip the first half-minute: ramp-up
-        out.append({
-            "speed": speed, "match": match, "seconds": t1 - t0, "target_msgs_per_s": target_rate(match, start, seconds,
-                                                                                                speed),
-            "kafka_msgs_per_s": br.percentiles(prom_range(
-                'sum(delta(kafka_topic_partition_current_offset{topic=~"foot-(tracking|events|ball|players|matches)"}'
-                '[30s])) / 30', lo, t1)),
-            "bronze_rows_per_s": br.percentiles(prom_range(
-                'sum(delta(kafka_consumergroup_current_offset{consumergroup="bronze-writer"}[30s])) / 30', lo, t1)),
-            "spark_rows_per_s": br.percentiles(prom_range(
-                "metrics_streaming_driver_spark_streaming_players_5min_processingRate_total_Value", lo, t1)),
-            "live_delay_ms": br.percentiles(probe.delays_between(t0, t1 + 30)),
-            "app_p95_ms": _ms(prom_at("histogram_quantile(0.95, sum by (le) (increase("
-                                      f"football_live_delay_seconds_bucket[{int(t1 - t0) + 30}s])))", t1 + 30)),
-            "window_s": br.percentiles(probe.window_latencies(replays[match])),
-            "replay_id": replays[match], "t0": t0, "t1": t1})
+            time.sleep(30)  # the last windows complete, readers drain
+        lo = t0 + 30  # skip the first half-minute: ramp-up
+        out.append(
+            {
+                "speed": speed,
+                "match": match,
+                "seconds": t1 - t0,
+                "target_msgs_per_s": target_rate(match, start, seconds, speed),
+                "kafka_msgs_per_s": br.percentiles(
+                    prom_range(
+                        'sum(delta(kafka_topic_partition_current_offset{topic=~"foot-(tracking|events|ball|players|matches)"}'
+                        "[30s])) / 30",
+                        lo,
+                        t1,
+                    )
+                ),
+                "bronze_rows_per_s": br.percentiles(
+                    prom_range(
+                        'sum(delta(kafka_consumergroup_current_offset{consumergroup="bronze-writer"}[30s])) / 30',
+                        lo,
+                        t1,
+                    )
+                ),
+                "spark_rows_per_s": br.percentiles(
+                    prom_range(
+                        "metrics_streaming_driver_spark_streaming_players_5min_processingRate_total_Value", lo, t1
+                    )
+                ),
+                "live_delay_ms": br.percentiles(probe.delays_between(t0, t1 + 30)),
+                "app_p95_ms": _ms(
+                    prom_at(
+                        "histogram_quantile(0.95, sum by (le) (increase("
+                        f"football_live_delay_seconds_bucket[{int(t1 - t0) + 30}s])))",
+                        t1 + 30,
+                    )
+                ),
+                "window_s": br.percentiles(probe.window_latencies(replays[match])),
+                "replay_id": replays[match],
+                "t0": t0,
+                "t1": t1,
+            }
+        )
         if speed == 60:
             x60_replay = (match, replays[match])
     return out, freshness(*x60_replay)
@@ -339,8 +417,10 @@ def wait_run(run_key: str | None = None, run_id: str | None = None, timeout: flo
         if run_id:
             run = gql(f'{{ runOrError(runId: "{run_id}") {{ ... on Run {{ {RUN_FIELDS} }} }} }}')["runOrError"]
         else:
-            runs = gql(f'{{ runsOrError(filter: {{tags: [{{key: "dagster/run_key", value: "{run_key}"}}]}}) '
-                       f'{{ ... on Runs {{ results {{ {RUN_FIELDS} }} }} }} }}')["runsOrError"]["results"]
+            runs = gql(
+                f'{{ runsOrError(filter: {{tags: [{{key: "dagster/run_key", value: "{run_key}"}}]}}) '
+                f"{{ ... on Runs {{ results {{ {RUN_FIELDS} }} }} }} }}"
+            )["runsOrError"]["results"]
             run = runs[0] if runs else None
         if run and run["status"] in ("SUCCESS", "FAILURE", "CANCELED"):
             return run
@@ -352,32 +432,53 @@ def freshness(match: str, replay: str) -> dict:
     """The x60 replay's own Dagster run (started by the sensor): each step, its CPU and peak memory."""
     run = wait_run(run_key=replay)
     steps = sorted((s for s in run["stepStats"] if s["startTime"] and s["endTime"]), key=lambda s: s["startTime"])
-    whistle = steps[0]["startTime"]                                    # quality.freshness: the run's start
-    time.sleep(30)                                                     # the last scrape after the run is in
+    whistle = steps[0]["startTime"]  # quality.freshness: the run's start
+    time.sleep(30)  # the last scrape after the run is in
     memory = f"sum(container_memory_working_set_bytes{{{STEP_CONTAINERS}}})"
     idle = prom_at(memory, whistle - 20)
     out = []
     for s in steps:
         start, end = s["startTime"], s["endTime"]
         # CPU counters are scraped every 15 s: under 30 s, a step's share cannot be told from its neighbours'
-        cpu = [prom_at(f"sum(container_cpu_usage_seconds_total{{{STEP_CONTAINERS}}})", t) for t in (start, end + 15)] \
-            if end - start >= 30 else [None, None]
+        cpu = (
+            [prom_at(f"sum(container_cpu_usage_seconds_total{{{STEP_CONTAINERS}}})", t) for t in (start, end + 15)]
+            if end - start >= 30
+            else [None, None]
+        )
         peak = prom_at(f"max_over_time({memory}[{max(15, int(end - start) + 15)}s:5s])", end + 15)
-        out.append({"step": s["stepKey"], "status": s["status"], "start_s": start - whistle, "seconds": end - start,
-                    "cpu_s": cpu[1] - cpu[0] if None not in cpu else None,
-                    "peak_mib": peak / 2**20 if peak is not None else None,
-                    "idle_mib": idle / 2**20 if idle is not None else None})
+        out.append(
+            {
+                "step": s["stepKey"],
+                "status": s["status"],
+                "start_s": start - whistle,
+                "seconds": end - start,
+                "cpu_s": cpu[1] - cpu[0] if None not in cpu else None,
+                "peak_mib": peak / 2**20 if peak is not None else None,
+                "idle_mib": idle / 2**20 if idle is not None else None,
+            }
+        )
     gold = next((s for s in steps if s["stepKey"] == "gold" and s["status"] == "SUCCESS"), None)
-    return {"match": match, "replay_id": replay, "run_id": run["runId"], "status": run["status"], "steps": out,
-            "gold_ready_s": gold["endTime"] - whistle if gold else None, "silver_input": silver_input(match)}
+    return {
+        "match": match,
+        "replay_id": replay,
+        "run_id": run["runId"],
+        "status": run["status"],
+        "steps": out,
+        "gold_ready_s": gold["endTime"] - whistle if gold else None,
+        "silver_input": silver_input(match),
+    }
 
 
 def silver_input(match: str) -> dict:
     """What Silver read for the match (its own report, data/quality): Bronze keeps every replay, so Silver reads
     every copy and removes the duplicates."""
     report = json.loads((ROOT / "data" / "quality" / f"silver_{match}.json").read_text(encoding="utf-8"))
-    return {"bronze_copies": report["bronze_rows"]["matches"], "bronze_tracking_rows": report["bronze_rows"]["tracking"],
-            "kept_tracking_rows": report["silver_rows"]["tracking"], "written_at": report["written_at_utc"]}
+    return {
+        "bronze_copies": report["bronze_rows"]["matches"],
+        "bronze_tracking_rows": report["bronze_rows"]["tracking"],
+        "kept_tracking_rows": report["silver_rows"]["tracking"],
+        "written_at": report["written_at_utc"],
+    }
 
 
 def load(probe: Probe, sampler: Sampler) -> list[dict]:
@@ -397,22 +498,38 @@ def load(probe: Probe, sampler: Sampler) -> list[dict]:
         readers = {}
         for name, series in (("bronze-writer", sampler.bronze), ("spark", sampler.spark), ("live-page", probe.lag)):
             s = sampler.between(series, t0, t2)
-            readers[name] = {"growing": br.growing(s, t0, t1), "drain_s": br.drain_seconds(s, t1),
-                             "peak_lag": max((v for _, v in s), default=None)}
+            readers[name] = {
+                "growing": br.growing(s, t0, t1),
+                "drain_s": br.drain_seconds(s, t1),
+                "peak_lag": max((v for _, v in s), default=None),
+            }
         host = [(c, m) for t, c, m in list(sampler.host) if t0 <= t <= t1]
-        cores = prom_by(f"sum by (name) (rate(container_cpu_usage_seconds_total{{{CONTAINERS}}}[30s]))",
-                        t0 + 30, t1, "name")
-        out.append({"level": level, "matches": matches, "replays": replays, "seconds": t1 - t0,
-                    "target_msgs_per_s": sum(target_rate(m, 0, None, 60) for m in matches),
-                    "achieved_msgs_per_s": produced / (t1 - t0), "readers": readers,
-                    "live_delay_ms": br.percentiles(probe.delays_between(t0, t1)),
-                    "host_cpu": br.percentiles([c for c, _ in host]),
-                    "mem_available_min_mib": min((m for _, m in host), default=None),
-                    "cpu_cores": {n.removeprefix("football-platform-").removesuffix("-1"): br.percentiles(v)["p95"]
-                                  for n, v in cores.items()},
-                    "t0": t0, "t1": t1, "t2": t2})
+        cores = prom_by(
+            f"sum by (name) (rate(container_cpu_usage_seconds_total{{{CONTAINERS}}}[30s]))", t0 + 30, t1, "name"
+        )
+        out.append(
+            {
+                "level": level,
+                "matches": matches,
+                "replays": replays,
+                "seconds": t1 - t0,
+                "target_msgs_per_s": sum(target_rate(m, 0, None, 60) for m in matches),
+                "achieved_msgs_per_s": produced / (t1 - t0),
+                "readers": readers,
+                "live_delay_ms": br.percentiles(probe.delays_between(t0, t1)),
+                "host_cpu": br.percentiles([c for c, _ in host]),
+                "mem_available_min_mib": min((m for _, m in host), default=None),
+                "cpu_cores": {
+                    n.removeprefix("football-platform-").removesuffix("-1"): br.percentiles(v)["p95"]
+                    for n, v in cores.items()
+                },
+                "t0": t0,
+                "t1": t1,
+                "t2": t2,
+            }
+        )
         log.info("load %s: %s", level, {k: (v["drain_s"], v["growing"]) for k, v in readers.items()})
-        time.sleep(20)                                                 # cool-down between levels
+        time.sleep(20)  # cool-down between levels
     return out
 
 
@@ -427,8 +544,10 @@ def _all_drained(probe: Probe, sampler: Sampler, stop: float) -> bool:
 def recovery(probe: Probe, sampler: Sampler) -> list[dict]:
     """A replay of m004 at x10: bronze-writer restarted after 90 s, the Spark driver 130 s after it is back; the replay
     goes on until 150 s after the last restart. The restart time is Docker's (the container's new start)."""
-    restarts = {"bronze-writer": ("football-platform-bronze-writer-1", sampler.bronze),
-                "spark-streaming": ("streaming-5min", sampler.spark)}
+    restarts = {
+        "bronze-writer": ("football-platform-bronze-writer-1", sampler.bronze),
+        "spark-streaming": ("streaming-5min", sampler.spark),
+    }
     done, took, stop = {}, {}, threading.Event()
 
     def restarter():
@@ -436,8 +555,12 @@ def recovery(probe: Probe, sampler: Sampler) -> list[dict]:
         for service, (container, _) in restarts.items():
             asked = time.time()
             subprocess.run(["docker", "restart", container], check=True, capture_output=True)
-            started = subprocess.run(["docker", "inspect", "-f", "{{.State.StartedAt}}", container], check=True,
-                                     capture_output=True, text=True).stdout.strip()
+            started = subprocess.run(
+                ["docker", "inspect", "-f", "{{.State.StartedAt}}", container],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
             done[service] = datetime.fromisoformat(started.replace("Z", "+00:00")[:26] + "+00:00").timestamp()
             took[service] = time.time() - asked
             log.info("restarted %s (docker restart took %.0f s)", container, took[service])
@@ -454,47 +577,88 @@ def recovery(probe: Probe, sampler: Sampler) -> list[dict]:
         before = [v for t, v in series if at - 60 <= t < at]
         after = sampler.between(series, at, at + 240)
         baseline = max(before, default=0)
-        out.append({"service": service, "baseline": baseline, "peak": max((v for _, v in after), default=None),
-                    "back_to_normal_s": br.back_to_normal(after, at, baseline), "restart_s": took[service]})
+        out.append(
+            {
+                "service": service,
+                "baseline": baseline,
+                "peak": max((v for _, v in after), default=None),
+                "back_to_normal_s": br.back_to_normal(after, at, baseline),
+                "restart_s": took[service],
+            }
+        )
     return out
 
 
 def rebuild(replays: dict[str, str]) -> dict:
     """One Dagster run per match of the load test, tagged with its latest replay (freshness counts it) and
     purpose=benchmark (left out of the run-success objective). Then: freshness green, no GoldStale firing."""
-    query = ("mutation ($p: ExecutionParams!) { launchRun(executionParams: $p) { __typename ... on LaunchRunSuccess "
-             "{ run { runId } } ... on PythonError { message } } }")
+    query = (
+        "mutation ($p: ExecutionParams!) { launchRun(executionParams: $p) { __typename ... on LaunchRunSuccess "
+        "{ run { runId } } ... on PythonError { message } } }"
+    )
     runs = {}
     for match, replay in sorted(replays.items()):
-        answer = gql(query, {"p": {"selector": {**LOCATION, "jobName": "match_pipeline"}, "executionMetadata": {"tags": [
-            {"key": "dagster/partition", "value": match}, {"key": "replay_id", "value": replay},
-            {"key": "purpose", "value": "benchmark"}]}}})["launchRun"]
+        answer = gql(
+            query,
+            {
+                "p": {
+                    "selector": {**LOCATION, "jobName": "match_pipeline"},
+                    "executionMetadata": {
+                        "tags": [
+                            {"key": "dagster/partition", "value": match},
+                            {"key": "replay_id", "value": replay},
+                            {"key": "purpose", "value": "benchmark"},
+                        ]
+                    },
+                }
+            },
+        )["launchRun"]
         if answer["__typename"] != "LaunchRunSuccess":
             raise RuntimeError(f"rebuild of {match}: {answer}")
         runs[match] = answer["run"]["runId"]
     statuses = {m: wait_run(run_id=r, timeout=2400)["status"] for m, r in runs.items()}
-    time.sleep(45)                                                     # two scrapes, then the rule evaluation
+    time.sleep(45)  # two scrapes, then the rule evaluation
     fresh = {m: prom_at(f'football_gold_freshness_seconds{{match_id="{m}"}}', time.time()) for m in runs}
     alerts = http_json(f"{ALERTMANAGER}/api/v2/alerts")
-    return {"rebuilt": sorted(runs), "runs": runs, "statuses": statuses, "freshness_s": fresh,
-            "freshness_green": all(v is not None and v <= br.SLO["freshness_s"] for v in fresh.values()),
-            "goldstale_firing": any(a["labels"]["alertname"] == "GoldStale" for a in alerts)}
+    return {
+        "rebuilt": sorted(runs),
+        "runs": runs,
+        "statuses": statuses,
+        "freshness_s": fresh,
+        "freshness_green": all(v is not None and v <= br.SLO["freshness_s"] for v in fresh.values()),
+        "goldstale_firing": any(a["labels"]["alertname"] == "GoldStale" for a in alerts),
+    }
 
 
 def spark_batches(windows: list[tuple[float, float]]) -> dict:
     """Duration of the Spark batches that carried data (the players query), sampled every 15 s while replays ran.
     Spark's own latency metric also counts the empty triggers between replays (a few ms each): not used."""
-    return br.percentiles([v for t0, t1 in windows for v in prom_range(
-        'football_spark_batch_duration_seconds{query="players-5min"}', t0, t1)])
+    return br.percentiles(
+        [
+            v
+            for t0, t1 in windows
+            for v in prom_range('football_spark_batch_duration_seconds{query="players-5min"}', t0, t1)
+        ]
+    )
 
 
 def last_fix() -> tuple[str, float] | None:
     """The newest commit that fixed a real failure: the fix_commit entries of docs/quality_evidence.yml, by git date."""
     import yaml
+
     evidence = yaml.safe_load((ROOT / "docs" / "quality_evidence.yml").read_text(encoding="utf-8")) or {}
     commits = {c["fix_commit"] for c in evidence.get("caught", []) if c.get("fix_commit")}
-    dated = [(c, float(subprocess.run(["git", "log", "-1", "--format=%ct", c], cwd=ROOT, capture_output=True,
-                                      text=True, check=True).stdout)) for c in commits]
+    dated = [
+        (
+            c,
+            float(
+                subprocess.run(
+                    ["git", "log", "-1", "--format=%ct", c], cwd=ROOT, capture_output=True, text=True, check=True
+                ).stdout
+            ),
+        )
+        for c in commits
+    ]
     return max(dated, key=lambda cd: cd[1]) if dated else None
 
 
@@ -505,36 +669,52 @@ def success(runs: list[dict]) -> float | None:
 def reliability() -> dict:
     """Over 7 days: every finished run, and the normal ones (no purpose tag); and the normal ones since the last fix."""
     after = time.time() - 7 * 24 * 3600
-    runs = gql(f"{{ runsOrError(filter: {{createdAfter: {after}}}, limit: 500) {{ ... on Runs {{ results {{ status "
-               "startTime tags { key value } stepStats { attempts { startTime } } } } } }")["runsOrError"]["results"]
+    runs = gql(
+        f"{{ runsOrError(filter: {{createdAfter: {after}}}, limit: 500) {{ ... on Runs {{ results {{ status "
+        "startTime tags { key value } stepStats { attempts { startTime } } } } } }"
+    )["runsOrError"]["results"]
     done = [r for r in runs if r["status"] in ("SUCCESS", "FAILURE")]
     normal = [r for r in done if not any(t["key"] == "purpose" for t in r["tags"])]
     retries = [sum(max(0, len(s["attempts"]) - 1) for s in r["stepStats"]) for r in runs]
     fix = last_fix()
     since = [r for r in normal if fix and (r["startTime"] or 0) >= fix[1]]
-    return {"runs": len(done), "on_purpose": len(done) - len(normal),
-            "success_raw": success(done), "success_slo": success(normal),
-            "since_fix": {"commit": fix[0] if fix else None, "at": fix[1] if fix else None, "runs": len(since),
-                          "success": success(since)},
-            "retries": sum(retries), "runs_with_retries": sum(n > 0 for n in retries)}
+    return {
+        "runs": len(done),
+        "on_purpose": len(done) - len(normal),
+        "success_raw": success(done),
+        "success_slo": success(normal),
+        "since_fix": {
+            "commit": fix[0] if fix else None,
+            "at": fix[1] if fix else None,
+            "runs": len(since),
+            "success": success(since),
+        },
+        "retries": sum(retries),
+        "runs_with_retries": sum(n > 0 for n in retries),
+    }
 
 
 # ---------------------------------------------------------------- main
 
+
 def preflight() -> None:
     http_json(f"{PROMETHEUS}/api/v1/status/buildinfo")
     gql("{ version }")
-    names = subprocess.run(["docker", "ps", "--format", "{{.Names}}"], capture_output=True, text=True,
-                           check=True).stdout.split()
-    missing = [n for n in ("streaming-5min", "football-platform-bronze-writer-1", "football-platform-pipeline-exporter-1")
-               if n not in names]
+    names = subprocess.run(
+        ["docker", "ps", "--format", "{{.Names}}"], capture_output=True, text=True, check=True
+    ).stdout.split()
+    missing = [
+        n
+        for n in ("streaming-5min", "football-platform-bronze-writer-1", "football-platform-pipeline-exporter-1")
+        if n not in names
+    ]
     if missing:
         raise SystemExit(f"not running: {missing} (make streaming, make up, make monitoring)")
     for m in ("m001", "m002", "m003", "m004"):
         if not (ROOT / "data" / "prepared" / m).exists():
             raise SystemExit(f"data/prepared/{m} missing: make data")
     app = prom_at('up{job="live_app"}', time.time())
-    if app != 1:      # the Live page's consumer and its metrics start with the first visit of the app
+    if app != 1:  # the Live page's consumer and its metrics start with the first visit of the app
         raise SystemExit("the app's live metrics are not up: open http://localhost:8501 once, then run again")
 
 
@@ -549,8 +729,9 @@ def main() -> None:
     preflight()
     OUT.mkdir(parents=True, exist_ok=True)
     started = time.time()
-    commit = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, capture_output=True, text=True,
-                            check=True).stdout.strip()
+    commit = subprocess.run(
+        ["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, capture_output=True, text=True, check=True
+    ).stdout.strip()
     probe = Probe()
     sampler = Sampler(probe)
     probe.start()
@@ -566,21 +747,37 @@ def main() -> None:
         try:
             skip_paused_replays()
         finally:
-            sensor(True)                                              # whatever happened above
+            sensor(True)  # whatever happened above
     latest = {m: r for lv in levels for m, r in lv["replays"].items()}
     final = rebuild(latest)
     probe.stop_event.set()
     sampler.stop_event.set()
     ended = time.time()
     results = {
-        "generated_at": datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC"), "commit": commit, "machine": machine(),
-        "speeds": speed_rows, "freshness": fresh, "load": levels, "recovery": restarts, "final_check": final,
+        "generated_at": datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC"),
+        "commit": commit,
+        "machine": machine(),
+        "speeds": speed_rows,
+        "freshness": fresh,
+        "load": levels,
+        "recovery": restarts,
+        "final_check": final,
         "safety": {"stopped": sampler.danger is not None, "reason": sampler.danger, "thresholds": SAFETY},
-        "spark": {"batch_s": spark_batches([(s["t0"], s["t1"]) for s in speed_rows]
-                                           + [(lv["t0"], lv["t1"]) for lv in levels])},
-        "stack_peak_mib": (prom_at(f"max_over_time(sum(container_memory_working_set_bytes{{{CONTAINERS}}})"
-                                   f"[{int(ended - started)}s:15s])", ended) or 0) / 2**20,
-        "reliability": reliability(), "started": started, "ended": ended}
+        "spark": {
+            "batch_s": spark_batches([(s["t0"], s["t1"]) for s in speed_rows] + [(lv["t0"], lv["t1"]) for lv in levels])
+        },
+        "stack_peak_mib": (
+            prom_at(
+                f"max_over_time(sum(container_memory_working_set_bytes{{{CONTAINERS}}})[{int(ended - started)}s:15s])",
+                ended,
+            )
+            or 0
+        )
+        / 2**20,
+        "reliability": reliability(),
+        "started": started,
+        "ended": ended,
+    }
     path = OUT / f"{datetime.now(UTC):%Y-%m-%dT%H%M%SZ}.json"
     path.write_text(json.dumps(results, indent=1), encoding="utf-8")
     log.info("results: %s (%.0f min)", path.relative_to(ROOT), (ended - started) / 60)

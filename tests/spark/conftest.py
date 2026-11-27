@@ -2,6 +2,7 @@
 
 The tests are skipped, not failed, on a machine without pyspark or without Java.
 """
+
 import os
 import shutil
 import sys
@@ -18,11 +19,14 @@ def spark():
     os.environ.setdefault("PYSPARK_PYTHON", sys.executable)
     from pyspark.sql import SparkSession
 
-    session = (SparkSession.builder.master("local[1]").appName("silver-tests")
-               .config("spark.sql.shuffle.partitions", "1")
-               .config("spark.ui.enabled", "false")
-               .config("spark.sql.session.timeZone", "UTC")
-               .getOrCreate())
+    session = (
+        SparkSession.builder.master("local[1]")
+        .appName("silver-tests")
+        .config("spark.sql.shuffle.partitions", "1")
+        .config("spark.ui.enabled", "false")
+        .config("spark.sql.session.timeZone", "UTC")
+        .getOrCreate()
+    )
     session.sparkContext.setLogLevel("ERROR")
     yield session
     session.stop()

@@ -1,6 +1,7 @@
 """Event explorer (COACH VIEW, docs/product.md: E1, E2): every action and run of the match, filtered by team, type,
 player, phase, period and football minutes; shown as arrows or as a heatmap of start points, with a summary, a
 head-to-head of two players on the same filters, and the momentum of the match."""
+
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -17,8 +18,8 @@ import viz
 from data import CAVEAT, clock_bounds, current_match, require_gold, table
 
 MAX_ARROWS = 400
-READABLE_ARROWS = 100   # more arrows than this make a tangle: the page shows zones instead
-GRID = (12, 8)   # heatmap cells: 8.75 m x 8.5 m
+READABLE_ARROWS = 100  # more arrows than this make a tangle: the page shows zones instead
+GRID = (12, 8)  # heatmap cells: 8.75 m x 8.5 m
 
 
 def say(sentence) -> None:
@@ -68,10 +69,16 @@ window_ids = dict(zip(window_names, labels.window_index, strict=True))
 
 # ---------------------------------------------------------------- filters
 f1, f2, f3 = st.columns([1, 2, 2])
-side = f1.segmented_control("Team", ["Both", "HOME", "AWAY"], default="HOME",
-                            format_func=lambda t: short.get(t, t), key="ee_team") or "Both"
+side = (
+    f1.segmented_control(
+        "Team", ["Both", "HOME", "AWAY"], default="HOME", format_func=lambda t: short.get(t, t), key="ee_team"
+    )
+    or "Both"
+)
 kinds = sorted(events.type.unique())
-chosen_kinds = f2.multiselect("Types (runs included)", kinds, default=[k for k in ("pass", "shot", "goal") if k in kinds])
+chosen_kinds = f2.multiselect(
+    "Types (runs included)", kinds, default=[k for k in ("pass", "shot", "goal") if k in kinds]
+)
 pool = events if side == "Both" else events[events.team_id == side]
 who = dict(zip(pool.player_id, pool.player_short_name, strict=False))
 chosen_players = f3.multiselect("Players (all if empty)", sorted(who, key=who.get), format_func=who.get)
@@ -94,38 +101,77 @@ view_col, table_col = st.columns([3, 2])
 with view_col:
     many = len(ev) > READABLE_ARROWS
     if many:
-        st.info(f"{len(ev)} events: too many to read one by one, so the page shows where they start. To see each "
-                "arrow, filter by player, phase or minutes (100 events or fewer), or choose Arrows.")
-    view = st.segmented_control("Show", ["Arrows", "Heatmap", "Directions"], default="Heatmap" if many else "Arrows",
-                                key=f"ee_view_{'many' if many else 'few'}") or "Arrows"
+        st.info(
+            f"{len(ev)} events: too many to read one by one, so the page shows where they start. To see each "
+            "arrow, filter by player, phase or minutes (100 events or fewer), or choose Arrows."
+        )
+    view = (
+        st.segmented_control(
+            "Show",
+            ["Arrows", "Heatmap", "Directions"],
+            default="Heatmap" if many else "Arrows",
+            key=f"ee_view_{'many' if many else 'few'}",
+        )
+        or "Arrows"
+    )
     color = colors[side] if side in colors else theme.ACCENT
     if view == "Directions":
-        pitch.show(key="ee_dirs", players={}, colors=colors, clickable=False, arrows={"home": "right"},
-                   passes=views.directions(ev, GRID))
-        st.caption("One arrow per zone of 8.75 m x 8.5 m with at least 3 events: their average move. Solid white: most "
-                   "were successful; dashed gold: most were not.")
+        pitch.show(
+            key="ee_dirs",
+            players={},
+            colors=colors,
+            clickable=False,
+            arrows={"home": "right"},
+            passes=views.directions(ev, GRID),
+        )
+        st.caption(
+            "One arrow per zone of 8.75 m x 8.5 m with at least 3 events: their average move. Solid white: most "
+            "were successful; dashed gold: most were not."
+        )
     elif view == "Arrows":
         shown = ev.head(MAX_ARROWS)
-        ok = [(r.outcome == "successful") if r.type == "pass" else bool(r.received) if r.type == "run" else True
-              for r in shown.itertuples()]
-        pitch.show(key="ee_pitch", players={}, colors=colors, clickable=False, arrows={"home": "right"},
-                   passes=[[r.x_start, r.y_start, r.x_end, r.y_end, k] for r, k in zip(shown.itertuples(), ok,
-                                                                                         strict=True)])
+        ok = [
+            (r.outcome == "successful") if r.type == "pass" else bool(r.received) if r.type == "run" else True
+            for r in shown.itertuples()
+        ]
+        pitch.show(
+            key="ee_pitch",
+            players={},
+            colors=colors,
+            clickable=False,
+            arrows={"home": "right"},
+            passes=[[r.x_start, r.y_start, r.x_end, r.y_end, k] for r, k in zip(shown.itertuples(), ok, strict=True)],
+        )
         cut = f" (the first {MAX_ARROWS} shown)" if len(ev) > MAX_ARROWS else ""
-        st.caption(f"From start to end of each event{cut}. Solid white: successful pass, received run; dashed gold: "
-                   f"not. {short['HOME']} attacks to the right, {short['AWAY']} to the left.")
+        st.caption(
+            f"From start to end of each event{cut}. Solid white: successful pass, received run; dashed gold: "
+            f"not. {short['HOME']} attacks to the right, {short['AWAY']} to the left."
+        )
     else:
-        pitch.show(key="ee_heat", players={}, colors=colors, clickable=False, arrows={"home": "right"},
-                   heat={"nx": GRID[0], "ny": GRID[1], "cells": heat_cells(ev), "color": color})
+        pitch.show(
+            key="ee_heat",
+            players={},
+            colors=colors,
+            clickable=False,
+            arrows={"home": "right"},
+            heat={"nx": GRID[0], "ny": GRID[1], "cells": heat_cells(ev), "color": color},
+        )
         st.caption("Where the filtered events started: share of them per cell of 8.75 m x 8.5 m.")
     say(coach.events_summary(ev))
 with table_col:
     st.markdown("**Summary**")
-    st.dataframe(as_text(summary(ev), {"count": "{:.0f}", "success": "{:.0%}", "xthreat": "{:.3f}"})
-                 .rename(columns={"xthreat": "xThreat (mean)"}), width="stretch",
-                 column_config={"xThreat (mean)": st.column_config.TextColumn(help=glossary.help("xThreat"))})
-    st.markdown(f"<div class='ml-meta'>Success: successful passes, received runs. {glossary.term('xThreat')} values the "
-                "option a pass or run aimed at; it is not expected goals (xG).</div>", unsafe_allow_html=True)
+    st.dataframe(
+        as_text(summary(ev), {"count": "{:.0f}", "success": "{:.0%}", "xthreat": "{:.3f}"}).rename(
+            columns={"xthreat": "xThreat (mean)"}
+        ),
+        width="stretch",
+        column_config={"xThreat (mean)": st.column_config.TextColumn(help=glossary.help("xThreat"))},
+    )
+    st.markdown(
+        f"<div class='ml-meta'>Success: successful passes, received runs. {glossary.term('xThreat')} values the "
+        "option a pass or run aimed at; it is not expected goals (xG).</div>",
+        unsafe_allow_html=True,
+    )
     st.markdown("**Head-to-head** on the same filters")
     everyone = dict(zip(events.player_id, events.player_short_name, strict=False))
     ids = sorted(everyone, key=everyone.get)
@@ -141,27 +187,63 @@ with table_col:
     for pid in dict.fromkeys((a, b)):
         mine = base[base.player_id == pid]
         passes = mine[mine.type == "pass"]
-        duel[everyone[pid]] = {"events": len(mine), "passes": len(passes),
-                               "pass success": (passes.outcome == "successful").mean() if len(passes) else np.nan,
-                               "in the final third": int((mine.third == "final").sum()),
-                               "mean xThreat": mine.xthreat.mean()}
-    st.dataframe(as_text(pd.DataFrame(duel).T, {"events": "{:.0f}", "passes": "{:.0f}", "pass success": "{:.0%}",
-                                              "in the final third": "{:.0f}", "mean xThreat": "{:.3f}"}).T,
-                 width="stretch")
+        duel[everyone[pid]] = {
+            "events": len(mine),
+            "passes": len(passes),
+            "pass success": (passes.outcome == "successful").mean() if len(passes) else np.nan,
+            "in the final third": int((mine.third == "final").sum()),
+            "mean xThreat": mine.xthreat.mean(),
+        }
+    st.dataframe(
+        as_text(
+            pd.DataFrame(duel).T,
+            {
+                "events": "{:.0f}",
+                "passes": "{:.0f}",
+                "pass success": "{:.0%}",
+                "in the final third": "{:.0f}",
+                "mean xThreat": "{:.3f}",
+            },
+        ).T,
+        width="stretch",
+    )
 with st.expander(f"The {len(ev)} events"):
-    st.dataframe(ev[["minute", "type", "player_short_name", "outcome", "third", "lane", "phase", "xthreat"]]
-                 .rename(columns={"player_short_name": "player", "xthreat": "SkillCorner xThreat"}),
-                 hide_index=True, width="stretch")
+    st.dataframe(
+        ev[["minute", "type", "player_short_name", "outcome", "third", "lane", "phase", "xthreat"]].rename(
+            columns={"player_short_name": "player", "xthreat": "SkillCorner xThreat"}
+        ),
+        hide_index=True,
+        width="stretch",
+    )
 
 # ---------------------------------------------------------------- momentum (E2)
 st.subheader("Momentum")
 goal_rows = events[events.type == "goal"]
-goals = pd.DataFrame({"minute": goal_rows.ts / 60, "team": goal_rows.team_id, "team_name": goal_rows.team_id.map(short),
-                      "label": goal_rows.minute + " " + goal_rows.player_short_name})
+goals = pd.DataFrame(
+    {
+        "minute": goal_rows.ts / 60,
+        "team": goal_rows.team_id,
+        "team_name": goal_rows.team_id.map(short),
+        "label": goal_rows.minute + " " + goal_rows.player_short_name,
+    }
+)
 end = int(timeline.window_end_ts.max())
-st.altair_chart(charts.finish(charts.momentum(timeline, goals, colors, short, end / 60,
-                                             clock.axis_ticks(*bounds, end_ts=end),
-                                             bounds[1] / 60 if bounds[1] is not None else None)), width="stretch")
-st.caption("SkillCorner xThreat of the successful passes per 5 minutes, home minus away; above the line "
-           f"{short['HOME']} was more dangerous. Not expected goals (xG).")
+st.altair_chart(
+    charts.finish(
+        charts.momentum(
+            timeline,
+            goals,
+            colors,
+            short,
+            end / 60,
+            clock.axis_ticks(*bounds, end_ts=end),
+            bounds[1] / 60 if bounds[1] is not None else None,
+        )
+    ),
+    width="stretch",
+)
+st.caption(
+    "SkillCorner xThreat of the successful passes per 5 minutes, home minus away; above the line "
+    f"{short['HOME']} was more dangerous. Not expected goals (xG)."
+)
 st.caption(CAVEAT)

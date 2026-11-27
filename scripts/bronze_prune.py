@@ -7,6 +7,7 @@ replay_id=none folder and the files written before Bronze had one folder per rep
 
 A replay is complete when its tracking reaches the match's last second (matches.p2_end_ts), the rule Silver uses.
 Silver only ever reads the latest complete replay, so nothing it reads is deleted. Run from the repository root."""
+
 import argparse
 import io
 import os
@@ -65,14 +66,16 @@ def complete_fn(s3, objects: dict[str, int]):
         return s3.get_object(Bucket=BRONZE_BUCKET, Key=key)["Body"].read()
 
     def is_complete(match: str, replay: str) -> bool:
-        if replay_ids.is_partial(replay):          # started after kick-off: never a whole match
+        if replay_ids.is_partial(replay):  # started after kick-off: never a whole match
             return False
         if (match, replay) not in cache:
             prefix = f"/match_id={match}/replay_id={replay}/"
             matches = [k for k in objects if k.startswith("matches" + prefix)]
             tracking = [k for k in objects if k.startswith("tracking" + prefix)]
-            end = max((pq.read_table(io.BytesIO(body(k)), columns=["p2_end_ts"]).column(0).to_pylist()[0]
-                       for k in matches), default=None)
+            end = max(
+                (pq.read_table(io.BytesIO(body(k)), columns=["p2_end_ts"]).column(0).to_pylist()[0] for k in matches),
+                default=None,
+            )
             last = None
             for k in tracking:
                 meta = pq.ParquetFile(io.BytesIO(body(k))).metadata
@@ -83,6 +86,7 @@ def complete_fn(s3, objects: dict[str, int]):
                         last = stats.max if last is None else max(last, stats.max)
             cache[(match, replay)] = end is not None and last is not None and last >= end
         return cache[(match, replay)]
+
     return is_complete
 
 
@@ -93,9 +97,13 @@ def main() -> None:
     a = ap.parse_args()
     if a.keep < 1:
         ap.error("--keep must be at least 1: Silver needs the latest complete replay")
-    s3 = boto3.client("s3", endpoint_url=S3_ENDPOINT, region_name="us-east-1",
-                      aws_access_key_id=os.environ["MINIO_ROOT_USER"],
-                      aws_secret_access_key=os.environ["MINIO_ROOT_PASSWORD"])
+    s3 = boto3.client(
+        "s3",
+        endpoint_url=S3_ENDPOINT,
+        region_name="us-east-1",
+        aws_access_key_id=os.environ["MINIO_ROOT_USER"],
+        aws_secret_access_key=os.environ["MINIO_ROOT_PASSWORD"],
+    )
     objects = {}
     for table in TOPICS:
         for page in s3.get_paginator("list_objects_v2").paginate(Bucket=BRONZE_BUCKET, Prefix=f"{table}/"):
@@ -106,14 +114,18 @@ def main() -> None:
         table, match, replay = parse(key) or (key.split("/")[0], "?", None)
         groups[(match, replay or "old layout (no replay folder)")].append(objects[key])
     for (match, replay), sizes in sorted(groups.items()):
-        print(f"{'delete' if a.delete else 'would delete'}  {match}  {replay:<42} {len(sizes):>6} files "
-              f"{sum(sizes) / 2**20:>9.1f} MiB")
+        print(
+            f"{'delete' if a.delete else 'would delete'}  {match}  {replay:<42} {len(sizes):>6} files "
+            f"{sum(sizes) / 2**20:>9.1f} MiB"
+        )
     freed = sum(objects[k] for k in result["delete"])
-    print(f"\n{len(result['delete'])} of {len(objects)} files, {freed / 2**20:,.1f} MiB of "
-          f"{sum(objects.values()) / 2**20:,.1f} MiB; kept: {len(result['keep'])} files")
+    print(
+        f"\n{len(result['delete'])} of {len(objects)} files, {freed / 2**20:,.1f} MiB of "
+        f"{sum(objects.values()) / 2**20:,.1f} MiB; kept: {len(result['keep'])} files"
+    )
     if a.delete:
         for i in range(0, len(result["delete"]), 1000):
-            batch = [{"Key": k} for k in result["delete"][i:i + 1000]]
+            batch = [{"Key": k} for k in result["delete"][i : i + 1000]]
             s3.delete_objects(Bucket=BRONZE_BUCKET, Delete={"Objects": batch, "Quiet": True})
         print(f"deleted: {freed / 2**20:,.1f} MiB freed")
     else:

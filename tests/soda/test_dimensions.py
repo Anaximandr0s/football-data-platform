@@ -1,5 +1,6 @@
 """soda/dimensions.yml gives every Soda check one data-quality dimension and a plain-English name (Data quality
 page). Read from the check files, not from a run: a new check without a dimension fails here, before any run."""
+
 from pathlib import Path
 
 import pytest
@@ -21,7 +22,7 @@ def checks_in_files() -> set[tuple[str, str]]:
                 if isinstance(item, str):
                     out.add((table, item))
                 else:
-                    (check, config), = item.items()
+                    ((check, config),) = item.items()
                     out.add((table, (config or {}).get("name", check)))
     return out
 

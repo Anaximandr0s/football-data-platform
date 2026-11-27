@@ -1,4 +1,5 @@
 """Tests of the pure helpers of producer_foot.py (no Kafka needed)."""
+
 import pandas as pd
 
 from ingestion import replay_ids
@@ -15,6 +16,7 @@ def test_read_records_turns_nan_into_null(tmp_path):
     pd.DataFrame({"ts": [1], "speed_kmh": [float("nan")]}).to_parquet(path)
     assert read_records(path) == [{"ts": 1, "speed_kmh": None}]
 
+
 def test_read_records_sends_missing_booleans_as_null(tmp_path):
     path = tmp_path / "t.parquet"
     pd.DataFrame({"ts": [1, 2], "targeted": pd.array([True, None], dtype="boolean")}).to_parquet(path)
@@ -23,7 +25,8 @@ def test_read_records_sends_missing_booleans_as_null(tmp_path):
 
 def test_a_replay_id_names_the_match_and_its_utc_start():
     import datetime as dt
-    started = dt.datetime(2026, 11, 16, 11, 15, 3, tzinfo=dt.timezone(dt.timedelta(hours=1)))   # 10:15:03 UTC
+
+    started = dt.datetime(2026, 11, 16, 11, 15, 3, tzinfo=dt.timezone(dt.timedelta(hours=1)))  # 10:15:03 UTC
     assert replay_ids.make("m001", started) == "m001-20261116T101503Z"
     partial = replay_ids.make("m001", started, partial=True)
     assert partial == "m001-20261116T101503Z-partial" and replay_ids.is_partial(partial)

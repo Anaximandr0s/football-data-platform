@@ -13,6 +13,7 @@ fixed column types of schemas.py. A file is written every 10 s or 5,000 rows, pe
 Offsets are committed after the upload, so delivery is at-least-once: Silver must deduplicate.
 On SIGTERM (docker stop) or Ctrl+C it writes what it holds, commits and exits, instead of being killed 10 s later.
 """
+
 import argparse
 import io
 import json
@@ -55,6 +56,7 @@ def object_key(table: str, match_id: str, replay_id: str | None, day: str, ms: i
 
 class Stop:
     """Set by SIGTERM: the loop ends after its current poll, then writes and commits what it holds."""
+
     def __init__(self):
         self.requested = False
 
@@ -74,8 +76,9 @@ def run(c, s3, exit_when_idle: float = 0, stop: Stop | None = None) -> None:
         nonlocal buf, n_buf, last_flush, part
         for (table, match_id, replay_id), rows in buf.items():
             part += 1
-            key = object_key(table, match_id, replay_id, time.strftime("%Y-%m-%d", time.gmtime()),
-                             int(time.time() * 1000), part)
+            key = object_key(
+                table, match_id, replay_id, time.strftime("%Y-%m-%d", time.gmtime()), int(time.time() * 1000), part
+            )
             s3.put_object(Bucket=BRONZE_BUCKET, Key=key, Body=to_parquet_bytes(table, rows))
             print(f"wrote {len(rows):>5} rows -> s3://{BRONZE_BUCKET}/{key}", flush=True)
         if n_buf:
@@ -90,9 +93,13 @@ def run(c, s3, exit_when_idle: float = 0, stop: Stop | None = None) -> None:
                     print(f"kafka error: {msg.error()}", file=sys.stderr)
                 else:
                     row = json.loads(msg.value())
-                    row.update(kafka_partition=msg.partition(), kafka_offset=msg.offset(),
-                               kafka_ts=msg.timestamp()[1], ingested_at=int(time.time() * 1000),
-                               kafka_replay_id=replay_id_of(msg.headers()))
+                    row.update(
+                        kafka_partition=msg.partition(),
+                        kafka_offset=msg.offset(),
+                        kafka_ts=msg.timestamp()[1],
+                        ingested_at=int(time.time() * 1000),
+                        kafka_replay_id=replay_id_of(msg.headers()),
+                    )
                     buf[(TABLE_OF[msg.topic()], row["match_id"], row["kafka_replay_id"])].append(row)
                     n_buf += 1
                     got_any, last_msg = True, time.time()
@@ -110,16 +117,30 @@ def run(c, s3, exit_when_idle: float = 0, stop: Stop | None = None) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
-    ap.add_argument("--exit-when-idle", type=float, default=0, metavar="SECONDS",
-                    help="stop after this many seconds without message (0 = never)")
+    ap.add_argument(
+        "--exit-when-idle",
+        type=float,
+        default=0,
+        metavar="SECONDS",
+        help="stop after this many seconds without message (0 = never)",
+    )
     a = ap.parse_args()
 
-    s3 = boto3.client("s3", endpoint_url=S3_ENDPOINT, region_name="us-east-1",
-                      aws_access_key_id=os.environ["MINIO_ROOT_USER"],
-                      aws_secret_access_key=os.environ["MINIO_ROOT_PASSWORD"])
-    c = Consumer({"bootstrap.servers": KAFKA_BOOTSTRAP,
-                  "group.id": os.getenv("BRONZE_GROUP", "bronze-writer"),
-                  "auto.offset.reset": "earliest", "enable.auto.commit": False})
+    s3 = boto3.client(
+        "s3",
+        endpoint_url=S3_ENDPOINT,
+        region_name="us-east-1",
+        aws_access_key_id=os.environ["MINIO_ROOT_USER"],
+        aws_secret_access_key=os.environ["MINIO_ROOT_PASSWORD"],
+    )
+    c = Consumer(
+        {
+            "bootstrap.servers": KAFKA_BOOTSTRAP,
+            "group.id": os.getenv("BRONZE_GROUP", "bronze-writer"),
+            "auto.offset.reset": "earliest",
+            "enable.auto.commit": False,
+        }
+    )
     c.subscribe(list(TOPICS.values()))
     stop = Stop()
     signal.signal(signal.SIGTERM, stop)

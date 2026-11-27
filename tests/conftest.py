@@ -1,4 +1,5 @@
 """Fixtures shared by several test folders: the tiny hand-made match, raw then prepared."""
+
 import json
 import sys
 
@@ -34,6 +35,5 @@ def raw_dir(tmp_path, info):
 @pytest.fixture
 def prepared(tmp_path, raw_dir, monkeypatch):
     out = tmp_path / "prepared"
-    run(ingest_foot, monkeypatch, "--match", "t1", "--sc-id", str(SC_ID), "--raw-dir", str(raw_dir),
-        "--out", str(out))
+    run(ingest_foot, monkeypatch, "--match", "t1", "--sc-id", str(SC_ID), "--raw-dir", str(raw_dir), "--out", str(out))
     return out

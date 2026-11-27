@@ -1,4 +1,5 @@
 """The Control Center imports the app's clock and quality code, as in its container (PYTHONPATH)."""
+
 import sys
 from pathlib import Path
 

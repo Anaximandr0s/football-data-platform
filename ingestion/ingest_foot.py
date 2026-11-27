@@ -17,6 +17,7 @@ Done here (structure only)             Never done here (Silver's job)
 The SkillCorner format knowledge lives in skillcorner.py; the table schemas in schemas.py.
 Names, teams, league and kit colours are copied from match.json as they are.
 """
+
 import argparse
 import json
 import sys
@@ -36,18 +37,21 @@ def main() -> None:
     a = ap.parse_args()
 
     src = a.raw_dir / str(a.sc_id)
-    paths = {"info": src / f"{a.sc_id}_match.json",
-             "events": src / f"{a.sc_id}_dynamic_events.csv",
-             "tracking": src / f"{a.sc_id}_tracking_extrapolated.jsonl"}
+    paths = {
+        "info": src / f"{a.sc_id}_match.json",
+        "events": src / f"{a.sc_id}_dynamic_events.csv",
+        "tracking": src / f"{a.sc_id}_tracking_extrapolated.jsonl",
+    }
     missing = [p.name for p in paths.values() if not p.exists()]
     if missing:
-        sys.exit(f"missing in {src}: {', '.join(missing)}\n"
-                 f"run: python -m ingestion.download_foot {a.sc_id}")
+        sys.exit(f"missing in {src}: {', '.join(missing)}\nrun: python -m ingestion.download_foot {a.sc_id}")
 
     info = json.loads(paths["info"].read_text(encoding="utf-8"))
     if (info["pitch_length"], info["pitch_width"]) != (PITCH_L, PITCH_W):
-        sys.exit(f"pitch is {info['pitch_length']}x{info['pitch_width']}, the platform expects "
-                 f"{PITCH_L}x{PITCH_W}: pick another match")
+        sys.exit(
+            f"pitch is {info['pitch_length']}x{info['pitch_width']}, the platform expects "
+            f"{PITCH_L}x{PITCH_W}: pick another match"
+        )
 
     players, idmap, spans = build_players(info, a.match)
     with open(paths["tracking"], encoding="utf-8") as fh:
@@ -57,19 +61,28 @@ def main() -> None:
 
     out = a.out / a.match
     out.mkdir(parents=True, exist_ok=True)
-    for name, df in (("players", players), ("tracking", tracking), ("events", events),
-                     ("ball", ball), ("matches", match)):
+    for name, df in (
+        ("players", players),
+        ("tracking", tracking),
+        ("events", events),
+        ("ball", ball),
+        ("matches", match),
+    ):
         write_parquet(df, name, out / f"{name}.parquet")
 
     per_second = tracking.groupby("ts").size()
     goals = events.loc[events["type"] == "goal", "team_id"].value_counts()
-    outside = ((tracking["x"] < 0) | (tracking["x"] > PITCH_L)
-               | (tracking["y"] < 0) | (tracking["y"] > PITCH_W))
+    outside = (tracking["x"] < 0) | (tracking["x"] > PITCH_L) | (tracking["y"] < 0) | (tracking["y"] > PITCH_W)
     manifest = {
-        "match_id": a.match, "source": "skillcorner", "source_match_id": a.sc_id,
+        "match_id": a.match,
+        "source": "skillcorner",
+        "source_match_id": a.sc_id,
         "teams": [info["home_team"]["name"], info["away_team"]["name"]],
-        "players": len(players), "tracking_rows": len(tracking), "events": len(events),
-        "ball_rows": len(ball), "max_ts": int(tracking["ts"].max()),
+        "players": len(players),
+        "tracking_rows": len(tracking),
+        "events": len(events),
+        "ball_rows": len(ball),
+        "max_ts": int(tracking["ts"].max()),
         "seconds_with_data": int(per_second.size),
         "players_per_second_min": int(per_second.min()),
         "players_per_second_max": int(per_second.max()),
@@ -78,8 +91,10 @@ def main() -> None:
         "rows_speed_null": int(tracking["speed_kmh"].isna().sum()),
         "rows_detected": int(tracking["is_detected"].eq(True).sum()),
         "ball_rows_with_possession": int(ball["possession"].notna().sum()),
-        "possession_seconds_home_away": [int(ball["possession"].eq("HOME").sum()),
-                                         int(ball["possession"].eq("AWAY").sum())],
+        "possession_seconds_home_away": [
+            int(ball["possession"].eq("HOME").sum()),
+            int(ball["possession"].eq("AWAY").sum()),
+        ],
         "events_by_type": {k: int(v) for k, v in events["type"].value_counts().items()},
         "goals_derived_home_away": [int(goals.get("HOME", 0)), int(goals.get("AWAY", 0))],
         "score_real_home_away": [int(info["home_team_score"]), int(info["away_team_score"])],

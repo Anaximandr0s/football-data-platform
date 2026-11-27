@@ -1,5 +1,6 @@
 """The rules of the Dagster pipeline: when a replay is over, what a Soda result means, and the shape of the asset graph
 (order, blocking checks, the DuckDB pool, retries)."""
+
 import pytest
 
 pytest.importorskip("dagster")
@@ -11,23 +12,38 @@ M1, M1_LATER, M2 = "m001-20261116T101503Z", "m001-20261116T120000Z", "m002-20261
 
 
 def test_a_replay_is_over_when_its_tracking_reaches_the_last_second_of_its_match():
-    ends = replay_ends([(M1, {"match_id": "m001", "p2_end_ts": 6025}), (M2, {"match_id": "m002", "p2_end_ts": 6128}),
-                        (None, {"match_id": "m003", "p2_end_ts": 6000})])          # no header: ignored
+    ends = replay_ends(
+        [
+            (M1, {"match_id": "m001", "p2_end_ts": 6025}),
+            (M2, {"match_id": "m002", "p2_end_ts": 6128}),
+            (None, {"match_id": "m003", "p2_end_ts": 6000}),  # no header: ignored
+        ]
+    )
     assert ends == {M1: ("m001", 6025), M2: ("m002", 6128)}
-    tracking = [(M1, 6024), (M2, 6128), (None, 7000), (M1_LATER, 7000)]      # M1_LATER: no matches message seen
+    tracking = [(M1, 6024), (M2, 6128), (None, 7000), (M1_LATER, 7000)]  # M1_LATER: no matches message seen
     assert finished(ends, tracking) == {M2}
     assert finished(ends, tracking + [(M1, 6025)]) == {M1, M2}
     assert match_of(M1) == "m001"
 
 
 def summary(checks, errors=0):
-    return {"passed": sum(c[2] == "pass" for c in checks), "failed": sum(c[2] == "fail" for c in checks),
-            "errors": errors, "checks": [{"name": n, "table": t, "outcome": o} for n, t, o in checks]}
+    return {
+        "passed": sum(c[2] == "pass" for c in checks),
+        "failed": sum(c[2] == "fail" for c in checks),
+        "errors": errors,
+        "checks": [{"name": n, "table": t, "outcome": o} for n, t, o in checks],
+    }
 
 
 def test_a_soda_result_fails_its_table_and_never_hides_an_error():
-    s = summary([("goals = score", "gold_shots", "fail"), ("no duplicates", "gold_events", "pass"),
-                 ("thin window", "gold_pressing", "warn"), ("could not run", "gold_events", "unknown")])
+    s = summary(
+        [
+            ("goals = score", "gold_shots", "fail"),
+            ("no duplicates", "gold_events", "pass"),
+            ("thin window", "gold_pressing", "warn"),
+            ("could not run", "gold_events", "unknown"),
+        ]
+    )
     assert not passed(s, "gold_shots") and passed(s, "gold_pressing")
     assert failed_checks(s, "gold_events") == ["could not run"]
     assert not passed(summary([("ok", "gold_shots", "pass")], errors=1), "gold_shots")
@@ -76,15 +92,19 @@ def test_the_soda_checks_read_their_config_and_report_per_table(defs, monkeypatc
 
     def fake_soda(context, layer, damage):
         asked.append((layer, damage))
-        return summary([("goals = score", "gold_shots", "fail" if damage else "pass"),
-                        ("one row per key", "silver_tracking", "fail" if damage else "pass")])
+        return summary(
+            [
+                ("goals = score", "gold_shots", "fail" if damage else "pass"),
+                ("one row per key", "silver_tracking", "fail" if damage else "pass"),
+            ]
+        )
 
     monkeypatch.setattr(assets, "soda_run", fake_soda)
     config = {"config": {"inject_damage": inject_damage}}
     instance = dg.DagsterInstance.ephemeral()
     result = defs.resolve_job_def("nightly_quality").execute_in_process(
-        run_config={"ops": {"silver_soda_silver": config, "soda_gold": config}}, instance=instance,
-        raise_on_error=False)
+        run_config={"ops": {"silver_soda_silver": config, "soda_gold": config}}, instance=instance, raise_on_error=False
+    )
     verdict = {e.asset_key.path[-1]: e.passed for e in result.get_asset_check_evaluations()}
     assert sorted(asked) == [("gold", inject_damage), ("silver", inject_damage)]
     assert verdict["silver"] is not inject_damage and verdict["gold_shots"] is not inject_damage
@@ -99,28 +119,34 @@ def test_the_soda_checks_read_their_config_and_report_per_table(defs, monkeypatc
 
 def test_the_bronze_step_waits_for_its_replay_until_done_or_out_of_time():
     from football_platform.assets import wait_until
+
     now = [0.0]
     answers = iter([(False, "MISSING"), (False, "MISSING"), (True, "OK")])
-    done, report = wait_until(lambda: next(answers), 60, every_s=10, clock=lambda: now[0],
-                              sleep=lambda s: now.__setitem__(0, now[0] + s))
-    assert (done, report, now[0]) == (True, "OK", 20.0)                     # third check, 20 s later
+    done, report = wait_until(
+        lambda: next(answers), 60, every_s=10, clock=lambda: now[0], sleep=lambda s: now.__setitem__(0, now[0] + s)
+    )
+    assert (done, report, now[0]) == (True, "OK", 20.0)  # third check, 20 s later
 
     now[0] = 0.0
-    done, report = wait_until(lambda: (False, "MISSING"), 30, every_s=10, clock=lambda: now[0],
-                              sleep=lambda s: now.__setitem__(0, now[0] + s))
-    assert (done, report, now[0]) == (False, "MISSING", 30.0)               # gives up at the deadline
+    done, report = wait_until(
+        lambda: (False, "MISSING"), 30, every_s=10, clock=lambda: now[0], sleep=lambda s: now.__setitem__(0, now[0] + s)
+    )
+    assert (done, report, now[0]) == (False, "MISSING", 30.0)  # gives up at the deadline
 
 
 def test_the_bronze_step_no_longer_waits_for_the_writers_total_lag():
     import inspect
 
     from football_platform import assets
+
     assert not hasattr(assets, "bronze_lag")
     assert "check_bronze" in inspect.getsource(assets.bronze.op.compute_fn.decorated_fn)
 
 
 def test_a_partial_replay_reaching_the_final_whistle_starts_no_run():
     partial = "m001-20261118T120000Z-partial"
-    ends = replay_ends([(partial, {"match_id": "m001", "p2_end_ts": 6025}), (M1, {"match_id": "m001", "p2_end_ts": 6025})])
+    ends = replay_ends(
+        [(partial, {"match_id": "m001", "p2_end_ts": 6025}), (M1, {"match_id": "m001", "p2_end_ts": 6025})]
+    )
     assert finished(ends, [(partial, 6025), (M1, 6025)]) == {M1}
     assert match_of(partial) == "m001"

@@ -1,4 +1,5 @@
 """The Silver job on a bronze lake written to local disk from the tiny match: replay choice, checks, dry run."""
+
 import json
 import sys
 
@@ -30,7 +31,7 @@ def bronze(tmp_path, prepared, monkeypatch):
     lake = tmp_path / "bronze"
     write_replay(lake, prepared, OLDER)
     write_replay(lake, prepared, COMPLETE)
-    write_replay(lake, prepared, "t1-20261103T100000Z", last_ts=3)          # stopped at half-time
+    write_replay(lake, prepared, "t1-20261103T100000Z", last_ts=3)  # stopped at half-time
     write_replay(lake, prepared, "t1-20261104T100000Z-partial")
     return lake
 
@@ -63,8 +64,15 @@ def test_a_replay_with_a_missing_table_is_not_complete(spark, bronze):
 def test_the_command_line_runs_every_match_and_exits_with_the_result(spark, bronze, prepared, monkeypatch):
     monkeypatch.setattr(bronze_to_silver, "build_spark", lambda **_: spark)
     monkeypatch.setattr(spark, "stop", lambda: None)
-    argv = ["bronze_to_silver", "--all", "--dry-run", "--bronze-uri", f"file://{bronze}",
-            "--manifest-dir", str(prepared)]
+    argv = [
+        "bronze_to_silver",
+        "--all",
+        "--dry-run",
+        "--bronze-uri",
+        f"file://{bronze}",
+        "--manifest-dir",
+        str(prepared),
+    ]
     monkeypatch.setattr(sys, "argv", argv)
     with pytest.raises(SystemExit) as done:
         bronze_to_silver.main()

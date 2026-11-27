@@ -1,4 +1,5 @@
 """The monitoring files: every alert can be read by a person, every link leads somewhere, nothing drifts."""
+
 import importlib.util
 import json
 import re
@@ -7,8 +8,9 @@ from pathlib import Path
 import yaml
 
 MON = Path(__file__).resolve().parents[2] / "monitoring"
-ALERTS = [r for g in yaml.safe_load((MON / "prometheus" / "rules" / "alerts.yml").read_text())["groups"]
-          for r in g["rules"]]
+ALERTS = [
+    r for g in yaml.safe_load((MON / "prometheus" / "rules" / "alerts.yml").read_text())["groups"] for r in g["rules"]
+]
 
 
 def build():
@@ -50,6 +52,8 @@ def test_lag_and_streaming_alerts_are_muted_while_kafka_is_down():
     config = yaml.safe_load((MON / "alertmanager" / "alertmanager.yml.tmpl").read_text())
     rule = config["inhibit_rules"][0]
     assert rule["source_matchers"] == ['alertname="KafkaDown"'] and rule["target_matchers"] == ['area="streaming"']
-    assert {r["alert"] for r in ALERTS if r["labels"]["area"] == "streaming"} == {"ConsumerLagGrowing",
-                                                                               "SparkStreamingStalled"}
+    assert {r["alert"] for r in ALERTS if r["labels"]["area"] == "streaming"} == {
+        "ConsumerLagGrowing",
+        "SparkStreamingStalled",
+    }
     assert config["receivers"][0]["email_configs"][0]["send_resolved"] is True

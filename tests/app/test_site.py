@@ -1,4 +1,5 @@
 """The MatchLens site: the menu per view (pure), and the router run headless on the tiny Gold file."""
+
 from pathlib import Path
 
 import pytest
@@ -29,7 +30,7 @@ def test_every_page_has_a_file_and_every_unfinished_page_says_what_comes():
     for page in sitemap.PAGES:
         assert (APP / "sections" / f"{page.key}.py").exists(), page.key
         assert page.ready or page.key in sitemap.COMING
-    for view in (None, "fan", "coach"):              # one URL per page in any menu
+    for view in (None, "fan", "coach"):  # one URL per page in any menu
         keys = [p.key for pages in sitemap.menu(view).values() for p in pages]
         assert len(keys) == len(set(keys))
 
@@ -51,7 +52,7 @@ def test_home_offers_a_match_and_both_views(app_env):
     assert at.get("image"), "the MatchLens logo (assets/matchlens-logo.svg) is shown"
     labels = [b.label for b in at.button]
     assert "Open the fan view" in labels and "Open the coach view" in labels
-    assert at.session_state["match_id"] == "m1"                # the first match until one is chosen
+    assert at.session_state["match_id"] == "m1"  # the first match until one is chosen
 
 
 def test_choosing_a_view_opens_its_first_page_and_pages_keep_view_and_match(app_env):
@@ -59,7 +60,7 @@ def test_choosing_a_view_opens_its_first_page_and_pages_keep_view_and_match(app_
     next(b for b in at.button if b.label == "Open the coach view").click().run()
     assert not at.exception
     assert at.session_state["view"] == "coach" and "go_to" not in at.session_state
-    assert any("How does the team organise, press and attack?" in m.value for m in at.markdown)   # Team analysis
+    assert any("How does the team organise, press and attack?" in m.value for m in at.markdown)  # Team analysis
     at.switch_page("sections/physical_fatigue.py").run()
     assert not at.exception
     assert at.session_state["view"] == "coach" and at.session_state["match_id"] == "m1"
@@ -74,7 +75,6 @@ def test_unfinished_pages_say_coming_soon_with_their_question(key, app_env):
     assert not at.exception
     shown = " ".join(m.value for m in at.markdown)
     assert "Coming soon" in shown and sitemap.spec(key).question in shown
-
 
 
 def test_switching_view_on_the_player_page_stays_on_it(app_env):
@@ -93,6 +93,6 @@ def test_a_link_sets_the_view_and_the_match_once(app_env):
     at.run()
     assert not at.exception
     assert (at.session_state["view"], at.session_state["match_id"]) == ("coach", "m1")
-    at.session_state["view"] = "fan"                     # the visitor changes the view afterwards
+    at.session_state["view"] = "fan"  # the visitor changes the view afterwards
     at.run()
-    assert at.session_state["view"] == "fan"             # the same link does not undo it
+    assert at.session_state["view"] == "fan"  # the same link does not undo it

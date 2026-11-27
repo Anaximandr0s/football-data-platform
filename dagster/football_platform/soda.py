@@ -3,8 +3,11 @@
 
 def failed_checks(summary: dict, table: str | None = None) -> list[str]:
     """Names of the checks that failed or could not run, for one table or all of them."""
-    return [c["name"] for c in summary["checks"]
-            if c["outcome"] not in ("pass", "warn") and (table is None or c["table"] == table)]
+    return [
+        c["name"]
+        for c in summary["checks"]
+        if c["outcome"] not in ("pass", "warn") and (table is None or c["table"] == table)
+    ]
 
 
 def passed(summary: dict, table: str | None = None) -> bool:

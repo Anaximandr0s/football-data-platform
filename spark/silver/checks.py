@@ -4,6 +4,7 @@ anything is written. The job stops (exit code 1) and writes nothing if a hard ch
 These are the Silver job's own sanity gates. They are not the Soda checks (22 players per
 second, speed <= 40, event types...), which run later on the Silver tables.
 """
+
 import json
 from pathlib import Path
 
@@ -13,8 +14,15 @@ from pyspark.sql import functions as F
 from spark.silver.config import MAX_SPEED_KMH, PITCH_L, PITCH_W
 
 
-def measure(raw_counts: dict[str, int], tracking: DataFrame, events: DataFrame, ball: DataFrame,
-            players: DataFrame, matches: DataFrame, speed_over_max: int = 0) -> dict:
+def measure(
+    raw_counts: dict[str, int],
+    tracking: DataFrame,
+    events: DataFrame,
+    ball: DataFrame,
+    players: DataFrame,
+    matches: DataFrame,
+    speed_over_max: int = 0,
+) -> dict:
     """All metrics in a few Spark jobs. `raw_counts` = rows read from bronze, per table; `speed_over_max` = bronze
     tracking rows faster than MAX_SPEED_KMH, which Silver sets to null."""
     t = tracking.agg(
@@ -25,8 +33,9 @@ def measure(raw_counts: dict[str, int], tracking: DataFrame, events: DataFrame, 
         F.sum(F.col("is_sprint").cast("int")).alias("sprints"),
         F.sum(F.col("is_after_gap").cast("int")).alias("after_gap"),
         F.sum(F.col("team_id").isNull().cast("int")).alias("team_null"),
-        F.sum(((F.col("x") < 0) | (F.col("x") > PITCH_L) | (F.col("y") < 0)
-               | (F.col("y") > PITCH_W)).cast("int")).alias("outside_after"),
+        F.sum(
+            ((F.col("x") < 0) | (F.col("x") > PITCH_L) | (F.col("y") < 0) | (F.col("y") > PITCH_W)).cast("int")
+        ).alias("outside_after"),
         F.max("speed_kmh").alias("speed_max"),
         F.countDistinct("ts").alias("seconds"),
         F.sum(F.col("is_detected").cast("int")).alias("detected"),
@@ -34,30 +43,55 @@ def measure(raw_counts: dict[str, int], tracking: DataFrame, events: DataFrame, 
     ).first()
     e = events.agg(F.count("*").alias("rows"), F.countDistinct("event_id").alias("distinct_keys")).first()
     by_type = {r["type"]: r["n"] for r in events.groupBy("type").agg(F.count("*").alias("n")).collect()}
-    b = ball.agg(F.count("*").alias("rows"), F.countDistinct("ts").alias("distinct_keys"),
-                 F.count("possession").alias("with_possession")).first()
+    b = ball.agg(
+        F.count("*").alias("rows"),
+        F.countDistinct("ts").alias("distinct_keys"),
+        F.count("possession").alias("with_possession"),
+    ).first()
     p = players.agg(F.count("*").alias("rows"), F.countDistinct("match_id", "player_id").alias("distinct_keys")).first()
     m = matches.first()
-    shots = {r["team_id"]: [r["avg_x"], r["n"]] for r in
-             events.filter(F.col("type").isin("shot", "goal")).groupBy("team_id")
-             .agg(F.avg("x_start").alias("avg_x"), F.count("*").alias("n")).collect()}
-    goals = {r["team_id"]: r["n"] for r in
-             events.filter(F.col("type") == "goal").groupBy("team_id").agg(F.count("*").alias("n")).collect()}
+    shots = {
+        r["team_id"]: [r["avg_x"], r["n"]]
+        for r in events.filter(F.col("type").isin("shot", "goal"))
+        .groupBy("team_id")
+        .agg(F.avg("x_start").alias("avg_x"), F.count("*").alias("n"))
+        .collect()
+    }
+    goals = {
+        r["team_id"]: r["n"]
+        for r in events.filter(F.col("type") == "goal").groupBy("team_id").agg(F.count("*").alias("n")).collect()
+    }
     return {
         "bronze_rows": dict(raw_counts),
-        "rows": {"tracking": t["rows"], "events": e["rows"], "ball": b["rows"],
-                 "players": p["rows"], "matches": matches.count()},
-        "keys_unique": {"tracking": t["rows"] == t["distinct_keys"], "events": e["rows"] == e["distinct_keys"],
-                        "ball": b["rows"] == b["distinct_keys"], "players": p["rows"] == p["distinct_keys"]},
-        "tracking": {"was_corrected": t["corrected"] or 0, "speed_null": t["speed_null"] or 0,
-                     "sprints": t["sprints"] or 0, "after_gap": t["after_gap"] or 0,
-                     "team_null": t["team_null"] or 0, "outside_after_clip": t["outside_after"] or 0,
-                     "speed_max": t["speed_max"], "seconds_with_data": t["seconds"],
-                     "detected": t["detected"] or 0, "speed_over_max_bronze": speed_over_max,
-                     "speed_rejected": t["rejected"] or 0},
+        "rows": {
+            "tracking": t["rows"],
+            "events": e["rows"],
+            "ball": b["rows"],
+            "players": p["rows"],
+            "matches": matches.count(),
+        },
+        "keys_unique": {
+            "tracking": t["rows"] == t["distinct_keys"],
+            "events": e["rows"] == e["distinct_keys"],
+            "ball": b["rows"] == b["distinct_keys"],
+            "players": p["rows"] == p["distinct_keys"],
+        },
+        "tracking": {
+            "was_corrected": t["corrected"] or 0,
+            "speed_null": t["speed_null"] or 0,
+            "sprints": t["sprints"] or 0,
+            "after_gap": t["after_gap"] or 0,
+            "team_null": t["team_null"] or 0,
+            "outside_after_clip": t["outside_after"] or 0,
+            "speed_max": t["speed_max"],
+            "seconds_with_data": t["seconds"],
+            "detected": t["detected"] or 0,
+            "speed_over_max_bronze": speed_over_max,
+            "speed_rejected": t["rejected"] or 0,
+        },
         "events_by_type": by_type,
         "ball_with_possession": b["with_possession"],
-        "shot_avg_x": shots,      # {team: [mean x_start of its shots and goals, how many]}
+        "shot_avg_x": shots,  # {team: [mean x_start of its shots and goals, how many]}
         "goals_home_away": [int(goals.get("HOME", 0)), int(goals.get("AWAY", 0))],
         "score_home_away": [int(m["home_score"]), int(m["away_score"])] if m else None,
     }
@@ -74,12 +108,19 @@ def quality_report(match_id: str, metrics: dict, manifest: dict | None, ok: bool
     if manifest:
         prepared = {t: int(manifest[k]) for t, k in PREPARED_KEYS.items()} | {"matches": 1}
     bronze, silver = metrics["bronze_rows"], metrics["rows"]
-    return {"match_id": match_id, "written_at_utc": at, "checks_passed": ok, "written": written,
-            "prepared_rows": prepared, "bronze_rows": bronze, "silver_rows": silver,
-            "duplicates_removed": {t: bronze[t] - silver[t] for t in silver},
-            "positions_corrected": metrics["tracking"]["was_corrected"],
-            "speeds_rejected": metrics["tracking"]["speed_rejected"],
-            "tracking_rows": silver["tracking"]}
+    return {
+        "match_id": match_id,
+        "written_at_utc": at,
+        "checks_passed": ok,
+        "written": written,
+        "prepared_rows": prepared,
+        "bronze_rows": bronze,
+        "silver_rows": silver,
+        "duplicates_removed": {t: bronze[t] - silver[t] for t in silver},
+        "positions_corrected": metrics["tracking"]["was_corrected"],
+        "speeds_rejected": metrics["tracking"]["speed_rejected"],
+        "tracking_rows": silver["tracking"],
+    }
 
 
 def load_manifest(match_id: str, manifest_dir: Path) -> dict | None:
@@ -94,13 +135,23 @@ def evaluate(metrics: dict, manifest: dict | None) -> list[tuple[str, bool, str]
         out.append((f"{table}: one row per key", ok, ""))
     tr = metrics["tracking"]
     out.append(("tracking: every row has a team_id", tr["team_null"] == 0, f"{tr['team_null']} null"))
-    out.append(("tracking: all positions inside the pitch after clipping", tr["outside_after_clip"] == 0,
-                f"{tr['outside_after_clip']} outside"))
-    out.append(("tracking: no speed above 40 km/h", (tr.get("speed_max") or 0) <= MAX_SPEED_KMH,
-                f"max {tr.get('speed_max')}"))
-    out.append(("tracking: speed_rejected rows = bronze speeds above 40 km/h",
-                tr.get("speed_rejected", 0) == tr.get("speed_over_max_bronze", 0),
-                f"{tr.get('speed_rejected', 0)} vs {tr.get('speed_over_max_bronze', 0)}"))
+    out.append(
+        (
+            "tracking: all positions inside the pitch after clipping",
+            tr["outside_after_clip"] == 0,
+            f"{tr['outside_after_clip']} outside",
+        )
+    )
+    out.append(
+        ("tracking: no speed above 40 km/h", (tr.get("speed_max") or 0) <= MAX_SPEED_KMH, f"max {tr.get('speed_max')}")
+    )
+    out.append(
+        (
+            "tracking: speed_rejected rows = bronze speeds above 40 km/h",
+            tr.get("speed_rejected", 0) == tr.get("speed_over_max_bronze", 0),
+            f"{tr.get('speed_rejected', 0)} vs {tr.get('speed_over_max_bronze', 0)}",
+        )
+    )
     goals, score = metrics["goals_home_away"], metrics["score_home_away"]
     out.append(("events: goals equal the final score", goals == score, f"goals={goals} score={score}"))
 
@@ -109,31 +160,63 @@ def evaluate(metrics: dict, manifest: dict | None) -> list[tuple[str, bool, str]
     for team, ok_side in (("HOME", lambda x: x > 52.5), ("AWAY", lambda x: x < 52.5)):
         avg, n = metrics.get("shot_avg_x", {}).get(team, [None, 0])
         if avg is not None and n >= 3:
-            out.append((f"events: {team} shots are on the half it attacks (frame of Silver)", ok_side(avg),
-                        f"mean x = {avg:.1f} over {n} shots"))
+            out.append(
+                (
+                    f"events: {team} shots are on the half it attacks (frame of Silver)",
+                    ok_side(avg),
+                    f"mean x = {avg:.1f} over {n} shots",
+                )
+            )
 
     if manifest is None:
         return out
-    exp = {"tracking": manifest["tracking_rows"], "events": manifest["events"], "ball": manifest["ball_rows"],
-           "players": manifest["players"], "matches": 1}
+    exp = {
+        "tracking": manifest["tracking_rows"],
+        "events": manifest["events"],
+        "ball": manifest["ball_rows"],
+        "players": manifest["players"],
+        "matches": 1,
+    }
     for table, want in exp.items():
         got = metrics["rows"][table]
         out.append((f"{table}: rows after dedup = ingestion manifest", got == want, f"{got} vs {want}"))
-    out.append(("tracking: was_corrected rows = manifest rows_outside_pitch",
-                tr["was_corrected"] == manifest["rows_outside_pitch"],
-                f"{tr['was_corrected']} vs {manifest['rows_outside_pitch']}"))
+    out.append(
+        (
+            "tracking: was_corrected rows = manifest rows_outside_pitch",
+            tr["was_corrected"] == manifest["rows_outside_pitch"],
+            f"{tr['was_corrected']} vs {manifest['rows_outside_pitch']}",
+        )
+    )
     over = tr.get("speed_over_max_bronze", 0)
-    out.append(("tracking: null speeds = manifest nulls + bronze speeds above 40 km/h (set to null)",
-                tr["speed_null"] == manifest["rows_speed_null"] + over,
-                f"{tr['speed_null']} vs {manifest['rows_speed_null']} + {over}"))
-    out.append(("tracking: detected rows = manifest rows_detected",
-                tr["detected"] == manifest["rows_detected"], f"{tr['detected']} vs {manifest['rows_detected']}"))
-    out.append(("ball: seconds with possession = manifest",
-                metrics["ball_with_possession"] == manifest["ball_rows_with_possession"],
-                f"{metrics['ball_with_possession']} vs {manifest['ball_rows_with_possession']}"))
+    out.append(
+        (
+            "tracking: null speeds = manifest nulls + bronze speeds above 40 km/h (set to null)",
+            tr["speed_null"] == manifest["rows_speed_null"] + over,
+            f"{tr['speed_null']} vs {manifest['rows_speed_null']} + {over}",
+        )
+    )
+    out.append(
+        (
+            "tracking: detected rows = manifest rows_detected",
+            tr["detected"] == manifest["rows_detected"],
+            f"{tr['detected']} vs {manifest['rows_detected']}",
+        )
+    )
+    out.append(
+        (
+            "ball: seconds with possession = manifest",
+            metrics["ball_with_possession"] == manifest["ball_rows_with_possession"],
+            f"{metrics['ball_with_possession']} vs {manifest['ball_rows_with_possession']}",
+        )
+    )
     # per type, so a run can never hide inside an action count
-    out.append(("events: rows per type = manifest", metrics["events_by_type"] == manifest["events_by_type"],
-                f"{metrics['events_by_type']} vs {manifest['events_by_type']}"))
+    out.append(
+        (
+            "events: rows per type = manifest",
+            metrics["events_by_type"] == manifest["events_by_type"],
+            f"{metrics['events_by_type']} vs {manifest['events_by_type']}",
+        )
+    )
     return out
 
 

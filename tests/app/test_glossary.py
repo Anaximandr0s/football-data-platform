@@ -1,4 +1,5 @@
 """The glossary explains the words a visitor may not know: each one is shown on hover somewhere in the site."""
+
 import re
 from pathlib import Path
 
@@ -16,4 +17,4 @@ def test_every_glossary_word_is_used_by_a_page():
 def test_a_term_carries_its_explanation_escaped_for_html():
     span = glossary.term("xThreat")
     assert "class='ml-term'" in span and "not expected goals (xG)" in span and ">xThreat</span>" in span
-    assert "'" not in glossary.term("field tilt").split("title='")[1].split("'>")[0]     # quotes cannot break out
+    assert "'" not in glossary.term("field tilt").split("title='")[1].split("'>")[0]  # quotes cannot break out

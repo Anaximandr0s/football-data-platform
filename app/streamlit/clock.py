@@ -8,6 +8,7 @@ half-time pause. The football clock restarts the second half at 45:00 from its o
 p1_start_ts and p2_start_ts are the first second of each period in the data; for m001 and m002 they are exactly the
 kick-off frames of match.json (m001: frame 29000 = ts 2899).
 """
+
 HALF_MINUTES = 45
 
 
@@ -26,7 +27,7 @@ def minute(ts: int, period: int | None, p1_start_ts: int, p2_start_ts: int | Non
 
 
 def label(ts: int, period: int | None, p1_start_ts: int, p2_start_ts: int | None, mark: str = "'") -> str:
-    """"6'", "45+2'", "90+1'"."""
+    """ "6'", "45+2'", "90+1'"."""
     m, added = minute(ts, period, p1_start_ts, p2_start_ts)
     return f"{m}+{added}{mark}" if added else f"{m}{mark}"
 
@@ -53,11 +54,17 @@ def span(ts_start: int, ts_end: int, p1_start_ts: int, p2_start_ts: int | None) 
 def axis_ticks(p1_start_ts: int, p2_start_ts: int | None, end_ts: int) -> list[tuple[float, str]]:
     """Positions (minutes of ts) and labels of a timeline axis drawn in ts: 0', 15', 30', then 45' at the second
     kick-off, 60', 75', 90'. No 45' tick in the first half: it would sit a few minutes from the second one."""
-    ticks = [((p1_start_ts + 60 * m) / 60, f"{m}'") for m in (0, 15, 30)
-             if p2_start_ts is None or p1_start_ts + 60 * m < p2_start_ts]
+    ticks = [
+        ((p1_start_ts + 60 * m) / 60, f"{m}'")
+        for m in (0, 15, 30)
+        if p2_start_ts is None or p1_start_ts + 60 * m < p2_start_ts
+    ]
     if p2_start_ts is not None:
-        ticks += [((p2_start_ts + 60 * (m - 45)) / 60, f"{m}'") for m in (45, 60, 75, 90)
-                  if p2_start_ts + 60 * (m - 45) <= end_ts]
+        ticks += [
+            ((p2_start_ts + 60 * (m - 45)) / 60, f"{m}'")
+            for m in (45, 60, 75, 90)
+            if p2_start_ts + 60 * (m - 45) <= end_ts
+        ]
     return ticks
 
 
@@ -82,7 +89,7 @@ def window_index(ts: int, period: int | None, p1_start_ts: int, p2_start_ts: int
 
 
 def window_label(index: int, size: int = 300) -> str:
-    """"0-5", "40-45", "45+", "45-50", "90+" (15 minutes: "0-15", "45+", "75-90", "90+")."""
+    """ "0-5", "40-45", "45+", "45-50", "90+" (15 minutes: "0-15", "45+", "75-90", "90+")."""
     n = regular_windows(size)
     period, k = (2, index - n - 1) if index > n else (1, index)
     if k == n:
