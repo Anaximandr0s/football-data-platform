@@ -481,7 +481,7 @@ services:
   grafana:
     <<: *common
     profiles: ["monitoring"]
-    image: grafana/grafana:13.3.0
+    image: grafana/grafana:13.3.2
     # never start with the default admin/admin: an empty password stops the container
     entrypoint: ["/bin/sh", "-c", "test -n \"$$GF_SECURITY_ADMIN_PASSWORD\" || { echo 'set GRAFANA_ADMIN_PASSWORD in .env' >&2; exit 1; }; exec /run.sh"]
     environment:
