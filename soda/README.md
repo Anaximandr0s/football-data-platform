@@ -1,7 +1,7 @@
 # Soda (data quality on Silver and Gold)
 
-Soda Core runs SodaCL checks on both layers and stops the pipeline when the data is wrong (FOO-05). Rules come from
-section 5 of [`docs/silver-guide.md`](../docs/silver-guide.md), the column lists and types from
+Soda Core runs SodaCL checks on both layers and stops the pipeline when the data is wrong (FOO-05). The column lists
+and types come from
 [`docs/contrat_donnees.md`](../docs/contrat_donnees.md) (sections 9 and 10).
 
 ```mermaid

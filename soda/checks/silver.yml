@@ -1,5 +1,5 @@
 # Soda checks on the SILVER layer (FOO-05). Tables = views over the Iceberg tables lake.silver.* (see soda/run_checks.py).
-# Rules: docs/silver-guide.md section 5, columns and types: docs/contrat_donnees.md section 9.
+# Columns and types: docs/contrat_donnees.md section 9.
 # Every check here must pass on a healthy Silver; `make soda-demo` shows that they fail on damaged data.
 
 checks for silver_tracking:
@@ -297,7 +297,7 @@ checks for silver_matches:
   - failed rows:
       name: period 1 ends before period 2 starts
       fail condition: p1_start_ts > p1_end_ts or p1_end_ts >= p2_start_ts or p2_start_ts > p2_end_ts
-  # --- row counts after deduplication = the table of docs/silver-guide.md section 2 (matches listed there only) ---
+  # --- row counts after deduplication (known matches only) ---
   - failed rows:
       name: row counts after deduplication equal the silver guide (section 2)
       fail query: |

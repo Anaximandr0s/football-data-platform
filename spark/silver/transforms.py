@@ -3,7 +3,7 @@
 One match at a time (the job reads one match folder per run), but every function also works on
 several matches because all joins and windows use match_id.
 
-Order inside `clean_tracking` follows docs/silver-guide.md section 3:
+Order inside `clean_tracking`:
 dedup -> sort -> team -> flip -> clip (+ was_corrected) -> speed / sprint -> gap flag.
 """
 from pyspark.sql import DataFrame, Window
@@ -144,7 +144,7 @@ def clean_events(events: DataFrame, matches: DataFrame, direction: str = "per_te
     direction="per_team" (default, decided): mirror the AWAY events only, in every period. Measured on
         m001: the source gives event coordinates with the acting team already attacking toward x = 105,
         so this puts events in the same frame as Silver tracking (HOME toward 105, AWAY toward 0).
-    direction="guide": the literal rule of docs/silver-guide.md, same as tracking and ball (mirror every
+    direction="guide": the literal rule, same as tracking and ball (mirror every
         event of a period where HOME attacks toward x = 0). Kept for comparison; it leaves events
         54 to 58 m away from the player's tracking position in half of the team x period groups."""
     if direction not in EVENT_DIRECTIONS:

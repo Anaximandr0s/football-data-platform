@@ -99,7 +99,7 @@ Guide and limits: [`dagster/README.md`](../dagster/README.md).
 dbt-core + dbt-duckdb (`dbt/`), run by `make gold` in the `dbt` container: five staging tables (a copy of Silver, read with
 `iceberg_scan`) and 17 Gold tables, tested against Silver, kept in the DuckDB file `data/football.duckdb` and exported as
 Parquet to `s3://gold/<table>.parquet`. DuckDB is embedded (no server); `make gold-sql` queries the file read-only.
-Specification: [`gold-guide.md`](gold-guide.md). Guide of the code: [`dbt/README.md`](../dbt/README.md).
+Tables and definitions: [`dbt/README.md`](../dbt/README.md).
 
 `gold_player_match_stats` (player x match) · `gold_team_match_stats` (team x match) · `gold_zone_occupancy` (player x zone) ·
 `gold_pass_network` (passer x receiver x match) · `gold_shots` (one shot) · `gold_player_5min` (player x 5-minute window),

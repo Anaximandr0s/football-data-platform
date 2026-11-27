@@ -10,7 +10,7 @@ from ingestion.config import ROOT, S3_ENDPOINT, load_env  # read-only use of the
 
 load_env()
 
-# --- Football rules (docs/silver-guide.md, section 3) ---
+# --- Football rules ---
 PITCH_L, PITCH_W = 105.0, 68.0   # metres, origin bottom-left (ingestion already checked the size)
 SPRINT_KMH = 25.0                # is_sprint = speed_kmh > 25
 MAX_SPEED_KMH = 40.0             # above: impossible for a player, a jump from an estimated position; set to null
@@ -18,7 +18,7 @@ MAX_SPEED_KMH = 40.0             # plausibility limit (the Soda check of FOO-05 
 RIGHT_TO_LEFT = "right_to_left"  # value of matches.home_side_pN when HOME attacks toward x = 0
 DECIMALS = 2                     # coordinates keep 2 decimals, like bronze
 # How events are oriented: "per_team" = mirror AWAY events only (chosen: the source already gives events with the
-# acting team attacking toward x = 105, see spark/silver/README.md decision 1); "guide" = literal silver-guide rule.
+# acting team attacking toward x = 105, see spark/silver/README.md decision 1); "guide" = mirror every event like tracking.
 EVENTS_DIRECTION = os.getenv("SILVER_EVENTS_DIRECTION", "per_team")
 
 # --- Bronze (input) ---
@@ -27,7 +27,7 @@ BRONZE_TABLES = ("tracking", "events", "ball", "players", "matches")
 # columns added by bronze_writer; Silver drops them once deduplication is done
 KAFKA_COLUMNS = ("kafka_partition", "kafka_offset", "kafka_ts", "ingested_at", "kafka_replay_id")
 
-# Deduplication keys (docs/silver-guide.md section 2 and docs/contrat_donnees.md section 6)
+# Deduplication keys (docs/contrat_donnees.md section 6)
 KEYS = {
     "tracking": ["match_id", "player_id", "ts"],
     "events": ["event_id"],

@@ -1,8 +1,8 @@
 # Silver (Spark + Iceberg)
 
 Bronze is raw on purpose (duplicates, no team on tracking, positions outside the pitch, directions
-swapped at half-time). Silver cleans it and writes five Iceberg tables. The requirements are the table
-in section 3 of [`docs/silver-guide.md`](../../docs/silver-guide.md); this folder implements exactly that.
+swapped at half-time). Silver cleans it and writes five Iceberg tables. The rules are listed below in
+"What it does".
 
 ```mermaid
 flowchart LR
@@ -61,7 +61,7 @@ Options (`--help` lists them): `--all`, `--dry-run`, `--bronze-uri`, `--manifest
 Idempotent: tables are partitioned by `match_id` and each run replaces the partition of the matches it
 processes, so running again gives the same tables (no duplicates) and leaves other matches alone.
 
-## What it does (guide section 3 -> code)
+## What it does
 
 | # | Guide task | Where | Implementation |
 |---|---|---|---|

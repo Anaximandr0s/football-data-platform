@@ -165,7 +165,7 @@ def main() -> None:
     ap.add_argument("--manifest-dir", type=Path, default=config.MANIFEST_DIR,
                     help="ingestion manifests, to compare counts (skipped if absent)")
     ap.add_argument("--events-direction", choices=transforms.EVENT_DIRECTIONS, default=config.EVENTS_DIRECTION,
-                    help="per_team = mirror AWAY events only (default); guide = literal silver-guide rule")
+                    help="per_team = mirror AWAY events only (default); guide = mirror every event like tracking")
     ap.add_argument("--replay", help="the replay to read (one match only); default: the latest complete one")
     ap.add_argument("--dry-run", action="store_true", help="clean and check, write nothing (no Iceberg needed)")
     ap.add_argument("--packages", default=None,
