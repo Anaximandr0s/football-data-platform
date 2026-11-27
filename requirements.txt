@@ -8,7 +8,7 @@ confluent-kafka>=2.16,<3
 boto3>=1.43,<2
 
 # --- Silver: Spark job (needs Java 17+; the S3A and Iceberg jars are downloaded at the first run) ---
-pyspark>=4.0,<4.1
+pyspark>=4.0,<4.4
 
 # --- Gold: dbt + DuckDB (the Docker image of `make gold` pins its own copy, see dbt/Dockerfile) ---
 dbt-duckdb>=1.11,<1.12
@@ -17,7 +17,7 @@ duckdb>=2.0,<2.1   # same DuckDB as dbt/Dockerfile and soda/Dockerfile (one file
 # --- Orchestration: Dagster (the Docker image of `make dagster` pins its own copy, see dagster/Dockerfile) ---
 dagster>=1.13,<1.14
 dagster-dbt>=0.29,<0.30
-protobuf>=6,<7     # dbt needs < 7; without it pip takes a grpcio-health-checking that needs 7
+protobuf>=6,<8     # dbt needs < 7; without it pip takes a grpcio-health-checking that needs 7
 
 # --- Dashboard: Streamlit + mplsoccer (the Docker image of `make app` pins its own copy, see app/streamlit/requirements.txt) ---
 streamlit>=1.67,<2   # the pitch component (st.components.v2) was tested on 1.67
