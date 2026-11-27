@@ -238,6 +238,7 @@ make ci            # lint, tests with coverage, config checks
 | Monitoring | [`monitoring/README.md`](monitoring/README.md) |
 | Product: views, pages and statistics | [`docs/product.md`](docs/product.md) |
 | Data contract | [`docs/contrat_donnees.md`](docs/contrat_donnees.md) |
+| Architecture and decisions | [`docs/architecture.md`](docs/architecture.md), [`docs/adr/`](docs/adr/README.md) |
 | Contributing, security | [`CONTRIBUTING.md`](CONTRIBUTING.md), [`SECURITY.md`](SECURITY.md) |
 
 ## Licence
