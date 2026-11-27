@@ -205,7 +205,7 @@ class Stop(BaseModel):
 def replay_start(body: Start) -> dict:
     m = services.gold_matches().get(body.match)
     try:
-        replay = replays.start(m, body.speed, body.start, prepared(body.match) if m else False)
+        replay = replays.start(m, body.speed, body.start, prepared(m.match_id) if m else False)
     except core.Refused as why:
         raise HTTPException(409, str(why)) from None
     return {"match": body.match, "replay_id": replay}
