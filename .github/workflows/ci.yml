@@ -33,7 +33,15 @@ jobs:
         run: ruff check .
 
       - name: Unit tests
-        run: python -m pytest -q
+        run: python -m pytest -q --cov --cov-report=
+        env:
+          COVERAGE_FILE: .coverage.main
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-main
+          path: .coverage.main*
+          include-hidden-files: true
 
       # the same Prometheus and Alertmanager images as docker-compose.yml check their own configs
       - name: Monitoring configs (promtool, amtool)
@@ -62,8 +70,38 @@ jobs:
 
       - name: Install Soda Core with DuckDB 2.0
         run: |
-          pip install "soda-core==3.5.6" "duckdb>=2.0,<2.1" pandas pyarrow pytest pyyaml
+          pip install "soda-core==3.5.6" "duckdb>=2.0,<2.1" pandas pyarrow pytest pytest-cov pyyaml
           pip install --no-deps "soda-core-duckdb==3.5.6"
 
       - name: Soda check tests
-        run: python -m pytest tests/soda -q
+        run: python -m pytest tests/soda -q --cov --cov-report=
+        env:
+          COVERAGE_FILE: .coverage.soda
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-soda
+          path: .coverage.soda*
+          include-hidden-files: true
+
+  # soda/run_checks.py is only exercised by the Soda job: the total is measured over both
+  coverage:
+    needs: [checks, soda]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: coverage-*
+          merge-multiple: true
+
+      - name: Combine and require 90 %
+        run: |
+          pip install "coverage>=7.10"
+          coverage combine
+          coverage report --fail-under=90

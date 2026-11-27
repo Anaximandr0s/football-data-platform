@@ -14,3 +14,21 @@ known-third-party = ["dagster"]   # the library, not the repository folder dagst
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+
+[tool.coverage.run]
+# the Soda tests and some Dagster steps run project code in a child Python process
+patch = ["subprocess"]
+source = ["ingestion", "spark", "dbt", "soda", "dagster", "app", "monitoring", "scripts"]
+# these scripts only run against the live Docker stack (load test, smoke test, screenshots)
+omit = [
+    "*/tests/*",
+    "*/scripts/benchmark.py",
+    "*/scripts/quality_evidence.py",
+    "*/scripts/smoke_test.py",
+    "*/scripts/control_center_thumbnails.py",
+]
+
+[tool.coverage.report]
+exclude_also = ['if __name__ == "__main__":']
+show_missing = true
+skip_covered = true
