@@ -70,7 +70,7 @@ def axis_ticks(p1_start_ts: int, p2_start_ts: int | None, end_ts: int) -> list[t
 
 # ---------------------------------------------------------------- football windows (docs/product.md, section 2)
 # 5- and 15-minute windows restart at each kick-off: 0-5' ... 40-45', then one stoppage window 45+ (as long as the
-# first-half stoppage time), 45-50' ... 85-90', then 90+. The dbt macro football_window and Spark Streaming (step 6)
+# first-half stoppage time), 45-50' ... 85-90', then 90+. The dbt macro football_window and Spark Streaming
 # use the same rule; tests/dbt checks that dbt and this function agree.
 REGULAR_SECONDS = HALF_MINUTES * 60
 

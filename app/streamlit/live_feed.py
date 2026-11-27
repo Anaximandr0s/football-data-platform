@@ -3,7 +3,7 @@
 The page only takes a snapshot of the states, so a redraw never waits for Kafka. The consumer reads every topic from
 the beginning with its own group (nothing is committed): live.route keeps only the latest replay of each match (by its
 replay_id header), so a page opened in the middle of a replay still gets the score from the kick-off. It also reads
-foot-live-stats, the 5-minute stats written by the streaming job (step 6), keeping the latest row per key.
+foot-live-stats, the 5-minute stats written by the streaming job, keeping the latest row per key.
 
 It also serves Prometheus metrics on METRICS_PORT: how far behind the end of each topic it is (no group offset is
 committed, so a Kafka exporter cannot see it), and the live delay from Kafka to the app. The lag is measured by its own
