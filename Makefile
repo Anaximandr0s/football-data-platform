@@ -12,6 +12,9 @@ SPEED ?= 60
 ARGS ?=
 ALL_PROFILES = --profile jobs --profile app --profile dagster --profile monitoring --profile demo
 AM_TMP = $(CURDIR)/.cache/alertmanager
+# the config checks use the images docker-compose.yml runs, so an image update is checked too
+PROMETHEUS_IMAGE = $(shell grep -oE 'prom/prometheus:[^" ]+' docker-compose.yml | head -1)
+ALERTMANAGER_IMAGE = $(shell grep -oE 'prom/alertmanager:[^" ]+' docker-compose.yml | head -1)
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  %-16s %s\n",$$1,$$2}'
@@ -55,14 +58,14 @@ check-config: ## Validate docker-compose.yml, Prometheus rules and tests, Alertm
 	@test -f .env || cp .env.example .env
 	$(COMPOSE) config -q
 	$(DOCKER) run --rm --entrypoint /bin/promtool -v $(CURDIR)/monitoring/prometheus:/etc/prometheus:ro \
-	  prom/prometheus:v3.15.1 check config /etc/prometheus/prometheus.yml
+	  $(PROMETHEUS_IMAGE) check config /etc/prometheus/prometheus.yml
 	$(DOCKER) run --rm --entrypoint /bin/promtool -v $(CURDIR)/monitoring/prometheus:/etc/prometheus:ro \
-	  -w /etc/prometheus/tests prom/prometheus:v3.15.1 test rules alerts_test.yml
+	  -w /etc/prometheus/tests $(PROMETHEUS_IMAGE) test rules alerts_test.yml
 	@rm -rf $(AM_TMP) && mkdir -p $(AM_TMP)
 	sed -e 's|__SMTP_PORT__|587|; s|__[A-Z_]*__|x|g; s|/tmp/alertmanager/|/tmp/am/|g' \
 	  monitoring/alertmanager/alertmanager.yml.tmpl > $(AM_TMP)/alertmanager.yml
 	cp monitoring/alertmanager/email.tmpl $(AM_TMP)/ && touch $(AM_TMP)/smtp_password
-	$(DOCKER) run --rm --entrypoint /bin/amtool -v $(AM_TMP):/tmp/am:ro prom/alertmanager:v0.34.2 \
+	$(DOCKER) run --rm --entrypoint /bin/amtool -v $(AM_TMP):/tmp/am:ro $(ALERTMANAGER_IMAGE) \
 	  check-config /tmp/am/alertmanager.yml
 
 build: ## Build every image of docker-compose.yml
