@@ -1,7 +1,7 @@
 # Shortcuts (Linux/macOS/WSL). Without make, run the plain commands from README.md.
 # Docker needs sudo on your machine?  make up DOCKER="sudo docker"
 .DEFAULT_GOAL := help
-.PHONY: help up down reset ps logs topics counts smoke lint test coverage check-config build ci data bronze replay check silver streaming streaming-stop gold gold-sql soda soda-silver soda-gold soda-demo app app-stop dagster dagster-stop evidence monitoring monitoring-stop benchmark benchmark-report bronze-prune demo demo-reset demo-stop
+.PHONY: help up down reset ps logs topics counts smoke lint test coverage check-config build ci data matches bronze replay check silver streaming streaming-stop gold gold-sql soda soda-silver soda-gold soda-demo app app-stop dagster dagster-stop evidence monitoring monitoring-stop benchmark benchmark-report bronze-prune demo demo-reset demo-stop
 
 DOCKER ?= docker
 COMPOSE = $(DOCKER) compose
@@ -76,6 +76,12 @@ ci: lint coverage check-config ## What CI runs, except the Soda tests and the im
 data: ## Download + convert one match: make data MATCH=m001 SC_ID=1874553
 	python -m ingestion.download_foot $(SC_ID)
 	python -m ingestion.ingest_foot --match $(MATCH) --sc-id $(SC_ID)
+
+matches: ## Download + convert the four demo matches m001-m004 (~400 MB, skips files already there)
+	$(MAKE) --no-print-directory data MATCH=m001 SC_ID=1874553
+	$(MAKE) --no-print-directory data MATCH=m002 SC_ID=1925299
+	$(MAKE) --no-print-directory data MATCH=m003 SC_ID=2007448
+	$(MAKE) --no-print-directory data MATCH=m004 SC_ID=1996435
 
 bronze: ## Kafka -> MinIO bronze writer in this terminal (`make up` already runs it: service bronze-writer)
 	python -m ingestion.bronze_writer
