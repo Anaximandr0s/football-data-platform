@@ -1,7 +1,7 @@
 # Shortcuts (Linux/macOS/WSL). Without make, run the plain commands from README.md.
 # Docker needs sudo on your machine?  make up DOCKER="sudo docker"
 .DEFAULT_GOAL := help
-.PHONY: help up down reset ps logs topics counts smoke lint test coverage check-config build ci data matches bronze replay check silver streaming streaming-stop gold gold-sql soda soda-silver soda-gold soda-demo app app-stop dagster dagster-stop evidence monitoring monitoring-stop benchmark benchmark-report bronze-prune demo demo-reset demo-stop
+.PHONY: help up down reset ps logs topics counts smoke lint format test coverage check-config build ci data matches bronze replay check silver streaming streaming-stop gold gold-sql soda soda-silver soda-gold soda-demo app app-stop dagster dagster-stop evidence monitoring monitoring-stop benchmark benchmark-report bronze-prune demo demo-reset demo-stop
 
 DOCKER ?= docker
 COMPOSE = $(DOCKER) compose
@@ -44,11 +44,15 @@ counts: ## Messages per topic (sum of its partitions)
 smoke: ## Check MinIO, buckets, Kafka, topics
 	python scripts/smoke_test.py
 
-lint: ## Ruff
+lint: ## Ruff: lint rules and formatting
 	ruff check .
+	ruff format --check .
 
 test: ## Unit tests (no Docker needed)
 	python -m pytest -q
+
+format: ## Format the code with ruff (CI fails on unformatted code)
+	ruff format .
 
 coverage: ## Unit tests with line coverage (CI adds the Soda tests and requires 90 %)
 	python -m pytest -q --cov
