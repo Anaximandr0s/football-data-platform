@@ -127,8 +127,12 @@ def test_the_kafka_watch_keeps_each_replays_last_second_and_its_rate(monkeypatch
 def test_a_producer_that_stops_before_sending_is_refused(monkeypatch, tmp_path):
     match = core.Match("m001", "label", 0, 2890, 2899, 6025, None)
     monkeypatch.setattr(services, "ROOT", tmp_path)                            # no ingestion package there: exit 1
+    started = []
+    real_popen = services.subprocess.Popen
+    monkeypatch.setattr(services.subprocess, "Popen", lambda *a, **k: started.append(real_popen(*a, **k)) or started[-1])
     with pytest.raises(core.Refused, match="stopped before sending"):
         services.Replays().start(match, 60, "kickoff", prepared=True)
+    assert started[0].stdout.closed
 
 
 def test_a_replay_that_ends_by_itself_is_finished_not_stopped(monkeypatch):

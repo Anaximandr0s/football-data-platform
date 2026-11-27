@@ -171,6 +171,7 @@ class Replays:
             replay = next((line.strip().removeprefix("replay_id=") for line in proc.stdout
                            if line.startswith("replay_id=")), None)
             if replay is None:
+                proc.stdout.close()
                 raise core.Refused(f"the producer of {m.match_id} stopped before sending (exit {proc.wait()})")
             threading.Thread(target=proc.stdout.read, daemon=True).start()   # a full pipe would block it
             self.items[m.match_id] = {"proc": proc, "replay_id": replay, "speed": speed, "start_ts": start_ts,
