@@ -1,7 +1,7 @@
 """checks.py: the numbers the guide asks us to get back, computed on the cleaned DataFrames BEFORE
 anything is written. The job stops (exit code 1) and writes nothing if a hard check fails.
 
-These are the Silver job's own sanity gates. They are not the Soda checks of FOO-05 (22 players per
+These are the Silver job's own sanity gates. They are not the Soda checks (22 players per
 second, speed <= 40, event types...), which run later on the Silver tables.
 """
 import json

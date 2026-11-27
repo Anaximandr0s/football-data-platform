@@ -1,4 +1,4 @@
-# Soda checks on the SILVER layer (FOO-05). Tables = views over the Iceberg tables lake.silver.* (see soda/run_checks.py).
+# Soda checks on the SILVER layer. Tables = views over the Iceberg tables lake.silver.* (see soda/run_checks.py).
 # Columns and types: docs/contrat_donnees.md section 9.
 # Every check here must pass on a healthy Silver; `make soda-demo` shows that they fail on damaged data.
 

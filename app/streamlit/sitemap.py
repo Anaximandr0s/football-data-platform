@@ -45,11 +45,11 @@ PAGES = (
     PageSpec("player", "Player page", ":material/person:", "COACH VIEW", "What exactly did this player do?",
              "coaches", True),
     PageSpec("data_quality", "Data quality", ":material/verified:", "BEHIND THE DATA", "Can I trust these numbers?",
-             "jury", True),
+             "everyone", True),
     PageSpec("pipeline_lineage", "Pipeline & lineage", ":material/account_tree:", "BEHIND THE DATA",
-             "How does a number get from the camera to the screen?", "jury", True),
+             "How does a number get from the camera to the screen?", "everyone", True),
     PageSpec("sources_limits", "Sources & limits", ":material/menu_book:", "BEHIND THE DATA",
-             "Where does the data come from, and what can it not tell?", "jury", True),
+             "Where does the data come from, and what can it not tell?", "everyone", True),
 )
 
 # what is still missing on a page that exists, and the build step of docs/product.md section 12 that adds it

@@ -73,11 +73,11 @@ leave a stale row. Move to `incremental` (`delete+insert` on `match_id`) if the 
 
 | Table | Grain | What it holds |
 |---|---|---|
-| `gold_player_match_stats` | player x match | minutes, tracked seconds, `distance_m / distance_km`, `sprint_seconds`, `sprint_count` (efforts), `max_speed_kmh`, `avg_speed_kmh`, `avg_x / avg_y`, passes (total, successful, received), shots, goals, tackles, fouls, pressures (FOO-04) |
+| `gold_player_match_stats` | player x match | minutes, tracked seconds, `distance_m / distance_km`, `sprint_seconds`, `sprint_count` (efforts), `max_speed_kmh`, `avg_speed_kmh`, `avg_x / avg_y`, passes (total, successful, received), shots, goals, tackles, fouls, pressures |
 | `gold_team_match_stats` | team x match | names, colours, score, distance, sprints, passes and `pass_accuracy`, shots, goals, tackles, fouls, pressures, average position |
-| `gold_zone_occupancy` | player x zone x match | grid of 6 x 4 cells in the Silver frame: `zone_id`, cell bounds, `seconds`, `share_of_tracked_seconds` (heatmaps, FOO-07) |
+| `gold_zone_occupancy` | player x zone x match | grid of 6 x 4 cells in the Silver frame: `zone_id`, cell bounds, `seconds`, `share_of_tracked_seconds` (heatmaps) |
 | `gold_pass_network` | passer x receiver x match | `passes`, `passes_successful`, average start and end points, player names (nodes: `avg_x / avg_y` of the player table) |
-| `gold_shots` | one shot or goal | position, `is_goal`, `attacking_goal_x`, `distance_to_goal_m`, running score `score_home_after / score_away_after` (shot map, FOO-07) |
+| `gold_shots` | one shot or goal | position, `is_goal`, `attacking_goal_x`, `distance_to_goal_m`, running score `score_home_after / score_away_after` (shot map) |
 | `gold_player_5min` | player x 5-minute window x match | tracked seconds, `coverage`, distance, sprint seconds, max speed, actions (batch twin of the streaming job) |
 
 The MatchLens tables answer the questions of [`docs/product.md`](../docs/product.md) (section 7); their formulas are

@@ -1,6 +1,6 @@
 -- Grain: one row per player per 5-minute football window per match (int_football_windows: 0-5' ... 40-45', 45+,
 -- 45-50' ... 85-90', 90+). `coverage` = tracked seconds / length of the window (a stoppage window can be short or
--- long): a low value means the numbers of that window are incomplete. Batch twin of the streaming job (FOO-08).
+-- long): a low value means the numbers of that window are incomplete. Batch twin of the streaming job.
 with trk as (
     select t.match_id, t.player_id,
            {{ football_window('t.ts', 't.period', 'm.p1_start_ts', 'm.p2_start_ts', 300) }} as window_index,

@@ -126,7 +126,7 @@ Substitutes who never played are not listed.
 | foot-ball | match_id | 1 | ball | total |
 | foot-players | player_id | 1 | players | |
 | foot-matches | match_id | 1 | matches | |
-| foot-live-stats | see 5.1 | 1, compacted | live stats of the streaming job (FOO-08) | per key |
+| foot-live-stats | see 5.1 | 1, compacted | live stats of the streaming job | per key |
 
 Messages are JSON, one row each, with the column names above. `matches` and `players` are sent at the start of each
 replay, then the live tables second by second. Replay speed x1 to x60 (x60: a match lasts about 100 s).

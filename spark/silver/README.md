@@ -81,7 +81,7 @@ Names are settable with `SILVER_CATALOG`, `SILVER_NAMESPACE`, `SILVER_WAREHOUSE`
 
 | Table | Grain | Columns |
 |---|---|---|
-| `silver.tracking` | player x second (FOO-03) | `match_id, player_id, team_id, period, ts, x, y, speed_kmh, is_sprint, was_corrected, is_after_gap, is_detected` |
+| `silver.tracking` | player x second | `match_id, player_id, team_id, period, ts, x, y, speed_kmh, is_sprint, was_corrected, is_after_gap, is_detected` |
 | `silver.events` | one action | the bronze columns without Kafka metadata: `match_id, event_id, ts, period, player_id, receiver_id, team_id, type, x_start, y_start, x_end, y_end, outcome` |
 | `silver.ball` | second | `match_id, ts, period, x, y, z, possession` |
 | `silver.players` | player of a match | bronze columns without Kafka metadata |
@@ -126,7 +126,7 @@ The job prints a report (including the line `events direction used for <match>: 
 | goals in events = final score (5 in m001, 2-3) | `matches` |
 | **frame of events**: the mean `x_start` of HOME's shots and goals is above 52.5 and AWAY's below (judged with 3 shots or more). It blocks events written with the wrong rule, for example `--events-direction guide` | computed |
 
-These are the job's gates, not the Soda checks of FOO-05 (22 players per second, speed <= 40, event types).
+These are the job's gates, not the Soda checks (22 players per second, speed <= 40, event types).
 
 ## Measured on m001 (SkillCorner 1874553, re-converted from the raw files)
 

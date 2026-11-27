@@ -1,5 +1,5 @@
 # =============================================================================
-# Football data platform, Phase 0: object storage (MinIO) + event streaming (Kafka)
+# MatchLens: object storage (MinIO), event streaming (Kafka) and the services built on them
 #   Start:  docker compose up -d        Stop:  docker compose down
 # Later phases (Spark, Dagster, Streamlit...) are added HERE when someone starts them.
 # =============================================================================
@@ -63,7 +63,7 @@ services:
         for b in $$(echo "$$BUCKETS" | tr ',' ' '); do
           mc mb --ignore-existing "local/$$b"
         done
-        mc mb --ignore-existing local/checkpoints   # Spark Structured Streaming checkpoints (FOO-08)
+        mc mb --ignore-existing local/checkpoints   # Spark Structured Streaming checkpoints
         echo "buckets ready"
     mem_limit: 128m
 
@@ -122,7 +122,7 @@ services:
           /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists \
             --topic "$$name" --partitions "$$parts" --replication-factor 1
         done
-        # FOO-08 output: one row per window, the latest value per key kept (log compaction)
+        # streaming output: one row per window, the latest value per key kept (log compaction)
         /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists \
           --topic foot-live-stats --partitions 1 --replication-factor 1 --config cleanup.policy=compact
         echo "topics ready"
@@ -239,7 +239,7 @@ services:
     command: ["--match", "m001"]
     mem_limit: 1536m
 
-  # --- Streaming: Spark Structured Streaming, FOO-08 (profile "jobs": `make streaming`, runs until stopped) ---
+  # --- Streaming: Spark Structured Streaming (profile "jobs": `make streaming`, runs until stopped) ---
   # Reads the replay topics, writes the 5- and 15-minute live stats to the compacted topic foot-live-stats.
   # One core of the worker, so a `make silver` can run beside it. Checkpoints: s3a://checkpoints/streaming-5min.
   streaming:

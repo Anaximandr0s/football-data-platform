@@ -1,4 +1,4 @@
-# Soda checks on the GOLD layer (FOO-05): the Gold tables of the DuckDB file written by dbt (`make gold`): the six
+# Soda checks on the GOLD layer: the Gold tables of the DuckDB file written by dbt (`make gold`): the six
 # first tables and the MatchLens tables of docs/product.md, section 7.
 # Columns and types: docs/contrat_donnees.md section 10. dbt already reconciles Gold with Silver (dbt/tests/assert_*.sql);
 # these checks guard the published tables themselves: contract, ranges, and consistency between Gold tables.

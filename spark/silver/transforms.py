@@ -83,7 +83,7 @@ def clean_matches(matches: DataFrame) -> DataFrame:
 
 
 def clean_tracking(tracking: DataFrame, players: DataFrame, matches: DataFrame) -> DataFrame:
-    """silver.tracking: grain player x second (FOO-03). Columns: match_id, player_id, team_id,
+    """silver.tracking: grain player x second. Columns: match_id, player_id, team_id,
     period, ts, x, y, speed_kmh, speed_rejected, is_sprint, was_corrected, is_after_gap, is_detected.
     `players` and `matches` are the Silver (already deduplicated) tables."""
     t = dedup(tracking, KEYS["tracking"])
