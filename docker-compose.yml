@@ -446,7 +446,7 @@ services:
   prometheus:
     <<: *common
     profiles: ["monitoring"]
-    image: prom/prometheus:v3.15.1
+    image: prom/prometheus:v3.16.0
     command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.path=/prometheus",
               "--storage.tsdb.retention.time=7d", "--web.external-url=http://localhost:${PROMETHEUS_PORT:-9090}"]
     volumes:
