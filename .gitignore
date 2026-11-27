@@ -28,4 +28,4 @@ dbt/logs/
 dbt/.user.yml
 .idea/
 .vscode/
-.DS_Store
+.DS_Store.cache/
