@@ -1,0 +1,30 @@
+name: Bug report
+description: Something does not work as the docs say.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The commands you ran, for example `make demo` then a replay of m001 at x60.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Output of `make logs s=<service>` or the failing command.
+      render: text
+  - type: input
+    id: env
+    attributes:
+      label: Environment
+      description: OS, Docker version, MatchLens version or commit.
+    validations:
+      required: true

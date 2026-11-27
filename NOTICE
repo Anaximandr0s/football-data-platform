@@ -1,8 +1,6 @@
 Third-party data
 ----------------
-Optional real-match source: SkillCorner Open Data (https://github.com/SkillCorner/opendata),
-MIT licence, 2024/25 A-League broadcast tracking. Credit: SkillCorner.
-Tracking and event data: SkillCorner open data (MIT licence), https://github.com/SkillCorner/opendata. Names of players, teams and league are kept as in the source.
+Tracking and event data: SkillCorner open data, 2024/25 A-League (MIT licence), https://github.com/SkillCorner/opendata. Names of players, teams and league are kept as in the source.
 Raw files are downloaded locally and are NOT redistributed in this repository.
 
 Third-party code
