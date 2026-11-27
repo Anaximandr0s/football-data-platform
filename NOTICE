@@ -2,7 +2,7 @@ Third-party data
 ----------------
 Optional real-match source: SkillCorner Open Data (https://github.com/SkillCorner/opendata),
 MIT licence, 2024/25 A-League broadcast tracking. Credit: SkillCorner.
-Tracking and event data: SkillCorner open data (MIT licence), https://github.com/SkillCorner/opendata. Names of players, teams and league are kept as in the source (school project).
+Tracking and event data: SkillCorner open data (MIT licence), https://github.com/SkillCorner/opendata. Names of players, teams and league are kept as in the source.
 Raw files are downloaded locally and are NOT redistributed in this repository.
 
 Third-party code
@@ -25,4 +25,4 @@ Technology logos (Control Center diagram, app/api/static/logos/), used unmodifie
 - Soda and SkillCorner have no logo here (none found in Simple Icons or their repositories): their names only.
 The licences above cover the image files, not the trademarks. Every name and logo is a trademark of its owner: Apache
 Kafka, Apache Spark and Apache Iceberg of the Apache Software Foundation, the others of their respective owners. They
-are shown only to say which tool does which job in this school project; no endorsement is implied.
+are shown only to say which tool does which job in this project; no endorsement is implied.

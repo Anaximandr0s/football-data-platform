@@ -1,9 +1,8 @@
 # Data sources
 
 All data comes from **SkillCorner open data** (MIT licence, <https://github.com/SkillCorner/opendata>):
-real broadcast-tracking data of A-League matches (season 2024/2025). Credit SkillCorner in the app and the report.
-The brief says "generate"; we use open data instead and convert it with `ingestion/ingest_foot.py`
-(confirm with the professor, and say it in the report).
+real broadcast-tracking data of A-League matches (season 2024/2025). Credit SkillCorner wherever the data is shown.
+`ingestion/ingest_foot.py` converts it to our tables.
 
 | Our id | SkillCorner id | Match | Role |
 |---|---|---|---|

@@ -1,4 +1,4 @@
-"""The Replay page run headless on the tiny Gold file (the playing itself is in the browser: see docs/notes-fr.md)."""
+"""The Replay page run headless on the tiny Gold file (the playing itself runs in the browser)."""
 from pathlib import Path
 
 import pytest
