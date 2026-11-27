@@ -1,70 +1,67 @@
 name: CI
 on:
   push:
+    branches: [main]
   pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+# a new push to the same branch cancels the run it makes obsolete
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  checks:
+  lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - run: pip install "ruff>=0.17,<0.18"
+      - run: ruff check --output-format=github .
 
-      - name: Validate docker-compose.yml
-        run: |
-          cp .env.example .env
-          docker compose config -q
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
           cache: pip
           cache-dependency-path: requirements.txt
 
       # same Java as the Spark image; Hadoop 3.4 in pyspark 4.0 calls Subject.getSubject, which JDK 24+ rejects
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "17"
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-
-      - name: Lint (ruff)
-        run: ruff check .
+      - run: pip install -r requirements.txt
 
       - name: Unit tests
         run: python -m pytest -q --cov --cov-report=
         env:
           COVERAGE_FILE: .coverage.main
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: coverage-main
           path: .coverage.main*
           include-hidden-files: true
 
-      # the same Prometheus and Alertmanager images as docker-compose.yml check their own configs
-      - name: Monitoring configs (promtool, amtool)
-        run: |
-          docker run --rm --entrypoint /bin/promtool -v $PWD/monitoring/prometheus:/etc/prometheus:ro \
-            prom/prometheus:v3.15.1 check config /etc/prometheus/prometheus.yml
-          docker run --rm --entrypoint /bin/promtool -v $PWD/monitoring/prometheus:/etc/prometheus:ro -w /etc/prometheus/tests \
-            prom/prometheus:v3.15.1 test rules alerts_test.yml
-          mkdir -p /tmp/am
-          sed -e 's|__SMTP_PORT__|587|; s|__[A-Z_]*__|x|g; s|/tmp/alertmanager/|/tmp/am/|g' \
-            monitoring/alertmanager/alertmanager.yml.tmpl > /tmp/am/alertmanager.yml
-          cp monitoring/alertmanager/email.tmpl /tmp/am/ && touch /tmp/am/smtp_password
-          docker run --rm --entrypoint /bin/amtool -v /tmp/am:/tmp/am:ro prom/alertmanager:v0.34.2 \
-            check-config /tmp/am/alertmanager.yml
-
   # Soda Core 3.5 pins duckdb==1.0.0, which cannot open the Gold file (DuckDB 2.0): it gets its own job and the same
-  # install as soda/Dockerfile (connector WITHOUT its dependencies). The main job skips tests/soda: Soda is not installed there.
+  # install as soda/Dockerfile (connector WITHOUT its dependencies). The test job skips tests/soda: Soda is not installed there.
   soda:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
 
@@ -78,7 +75,7 @@ jobs:
         env:
           COVERAGE_FILE: .coverage.soda
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: coverage-soda
           path: .coverage.soda*
@@ -86,16 +83,16 @@ jobs:
 
   # soda/run_checks.py is only exercised by the Soda job: the total is measured over both
   coverage:
-    needs: [checks, soda]
+    needs: [test, soda]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: coverage-*
           merge-multiple: true
@@ -104,4 +101,18 @@ jobs:
         run: |
           pip install "coverage>=7.10"
           coverage combine
-          coverage report --fail-under=90
+          coverage report --fail-under=90 | tee -a "$GITHUB_STEP_SUMMARY"
+
+  config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: make check-config
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: cp .env.example .env
+      - name: Build every image of docker-compose.yml
+        run: make build

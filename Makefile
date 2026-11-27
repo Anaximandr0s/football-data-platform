@@ -1,7 +1,7 @@
 # Shortcuts (Linux/macOS/WSL). Without make, run the plain commands from README.md.
 # Docker needs sudo on your machine?  make up DOCKER="sudo docker"
 .DEFAULT_GOAL := help
-.PHONY: help up down reset ps logs topics counts smoke lint test data bronze replay check silver gold gold-sql soda soda-silver soda-gold soda-demo app app-stop dagster dagster-stop evidence monitoring monitoring-stop benchmark benchmark-report bronze-prune demo demo-reset demo-stop
+.PHONY: help up down reset ps logs topics counts smoke lint test coverage check-config build ci data bronze replay check silver streaming streaming-stop gold gold-sql soda soda-silver soda-gold soda-demo app app-stop dagster dagster-stop evidence monitoring monitoring-stop benchmark benchmark-report bronze-prune demo demo-reset demo-stop
 
 DOCKER ?= docker
 COMPOSE = $(DOCKER) compose
@@ -10,9 +10,11 @@ MATCH ?= m001
 SC_ID ?= 1874553
 SPEED ?= 60
 ARGS ?=
+ALL_PROFILES = --profile jobs --profile app --profile dagster --profile monitoring --profile demo
+AM_TMP = $(CURDIR)/.cache/alertmanager
 
 help: ## Show this help
-	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  %-8s %s\n",$$1,$$2}'
+	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  %-16s %s\n",$$1,$$2}'
 
 up: ## Start MinIO, Kafka, Kafka UI, Spark and the Bronze writer (creates .env if missing)
 	@test -f .env || cp .env.example .env
@@ -21,8 +23,8 @@ up: ## Start MinIO, Kafka, Kafka UI, Spark and the Bronze writer (creates .env i
 down: ## Stop (data kept), dashboard, Dagster, monitoring and the Control Center included
 	$(COMPOSE) --profile app --profile dagster --profile monitoring --profile demo down
 
-reset: ## Stop and DELETE all data (topics, buckets, Dagster history)
-	$(COMPOSE) --profile app --profile dagster down -v
+reset: ## Stop and DELETE all data (topics, buckets, Dagster history, metrics)
+	$(COMPOSE) $(ALL_PROFILES) down -v
 
 ps: ## Container status
 	$(COMPOSE) ps -a
@@ -45,6 +47,29 @@ lint: ## Ruff
 test: ## Unit tests (no Docker needed)
 	python -m pytest -q
 
+coverage: ## Unit tests with line coverage (CI adds the Soda tests and requires 90 %)
+	python -m pytest -q --cov
+
+# the same Prometheus and Alertmanager images as docker-compose.yml check their own configs
+check-config: ## Validate docker-compose.yml, Prometheus rules and tests, Alertmanager config
+	@test -f .env || cp .env.example .env
+	$(COMPOSE) config -q
+	$(DOCKER) run --rm --entrypoint /bin/promtool -v $(CURDIR)/monitoring/prometheus:/etc/prometheus:ro \
+	  prom/prometheus:v3.15.1 check config /etc/prometheus/prometheus.yml
+	$(DOCKER) run --rm --entrypoint /bin/promtool -v $(CURDIR)/monitoring/prometheus:/etc/prometheus:ro \
+	  -w /etc/prometheus/tests prom/prometheus:v3.15.1 test rules alerts_test.yml
+	@rm -rf $(AM_TMP) && mkdir -p $(AM_TMP)
+	sed -e 's|__SMTP_PORT__|587|; s|__[A-Z_]*__|x|g; s|/tmp/alertmanager/|/tmp/am/|g' \
+	  monitoring/alertmanager/alertmanager.yml.tmpl > $(AM_TMP)/alertmanager.yml
+	cp monitoring/alertmanager/email.tmpl $(AM_TMP)/ && touch $(AM_TMP)/smtp_password
+	$(DOCKER) run --rm --entrypoint /bin/amtool -v $(AM_TMP):/tmp/am:ro prom/alertmanager:v0.34.2 \
+	  check-config /tmp/am/alertmanager.yml
+
+build: ## Build every image of docker-compose.yml
+	$(COMPOSE) $(ALL_PROFILES) build
+
+ci: lint coverage check-config ## What CI runs, except the Soda tests and the image builds
+
 data: ## Download + convert one match: make data MATCH=m001 SC_ID=1874553
 	python -m ingestion.download_foot $(SC_ID)
 	python -m ingestion.ingest_foot --match $(MATCH) --sc-id $(SC_ID)
@@ -61,7 +86,7 @@ check: ## Compare bronze row counts with the prepared match
 silver: ## Bronze -> Silver on the Spark cluster: make silver MATCH="m001 m002" [ARGS=--dry-run]
 	$(COMPOSE) --profile jobs run --rm silver --match $(MATCH) $(ARGS)
 
-streaming: ## Spark Structured Streaming (FOO-08): Kafka -> 5/15-minute live stats -> foot-live-stats (start BEFORE a replay)
+streaming: ## Spark Structured Streaming: Kafka -> 5/15-minute live stats -> foot-live-stats (start BEFORE a replay)
 	$(COMPOSE) --profile jobs run --rm -d -p 127.0.0.1:4040:4040 --name streaming-5min streaming
 
 streaming-stop: ## Stop the streaming job (its checkpoint keeps the state for the next start)
