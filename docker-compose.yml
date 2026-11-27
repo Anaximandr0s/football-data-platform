@@ -521,7 +521,7 @@ services:
   cadvisor:          # every container: CPU, memory against its limit, restarts
     <<: *common
     profiles: ["monitoring"]
-    image: ghcr.io/google/cadvisor:v0.60.6
+    image: ghcr.io/google/cadvisor:v0.61.1
     command: ["--docker_only=true", "--housekeeping_interval=15s", "--store_container_labels=false",
               "--disable_metrics=percpu,sched,tcp,udp,advtcp,process,hugetlb,referenced_memory,cpu_topology,resctrl"]
     privileged: true   # reads the cgroups of the other containers
