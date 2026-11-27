@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -26,7 +26,7 @@ jobs:
       - run: ruff format --check .
 
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
 
@@ -58,7 +58,7 @@ jobs:
   # Soda Core 3.5 pins duckdb==1.0.0, which cannot open the Gold file (DuckDB 2.0): it gets its own job and the same
   # install as soda/Dockerfile (connector WITHOUT its dependencies). The test job skips tests/soda: Soda is not installed there.
   soda:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
 
@@ -85,7 +85,7 @@ jobs:
   # soda/run_checks.py is only exercised by the Soda job: the total is measured over both
   coverage:
     needs: [test, soda]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
 
@@ -105,13 +105,13 @@ jobs:
           coverage report --fail-under=90 | tee -a "$GITHUB_STEP_SUMMARY"
 
   config:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
       - run: make check-config
 
   docker:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
       - run: cp .env.example .env
