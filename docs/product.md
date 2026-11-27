@@ -277,7 +277,7 @@ Rule: one pitch component, reused by Live, Replay and the Player page, with clic
 
 Technology (approved): a **Streamlit custom component v2** (`st.components.v2.component`,
 available in our Streamlit 1.67): our own HTML, CSS and JavaScript passed as strings, drawn on a `<canvas>`, no npm
-build, libraries vendored as files in `app/web3d`. It sends a click back to Python (`setTriggerValue("player", id)`),
+build, libraries vendored as files in `app/pitch`. It sends a click back to Python (`setTriggerValue("player", id)`),
 and it animates in the browser between two data updates. Layers, each switched on by the page: players and ball,
 trails, Voronoi cells, heatmap grid, shots, pass arrows, detected-only toggle.
 
@@ -335,8 +335,8 @@ Decisions (review of 2026-11-15):
 
 | Option | How it plays | Verdict |
 |---|---|---|
-| Pitch component (custom component v2, canvas, our JavaScript in `app/web3d`) | the page sends the match once; the browser animates, interpolating between seconds, and sends clicks back | chosen (section 8.2) |
-| Streamlit HTML component (`st.components.v1.html`) with our JavaScript in `app/web3d` | the same animation, but one-way: a click cannot reach Python, so no stats panel on click | first choice, replaced |
+| Pitch component (custom component v2, canvas, our JavaScript in `app/pitch`) | the page sends the match once; the browser animates, interpolating between seconds, and sends clicks back | chosen (section 8.2) |
+| Streamlit HTML component (`st.components.v1.html`) with our JavaScript in `app/pitch` | the same animation, but one-way: a click cannot reach Python, so no stats panel on click | first choice, replaced |
 | Streamlit loop redrawing an mplsoccer figure | one server render per frame, no interpolation between seconds | too slow for 0.25x to 8x |
 | Plotly animation frames | built-in play button, but every frame and every Voronoi polygon lives in the figure | too heavy with Voronoi and trails |
 | Two-way custom Streamlit component (React + npm) | same rendering, plus messages back to Python | a build step we do not need: component v2 does it without one |
@@ -346,8 +346,8 @@ The design: the Replay page reads one match from `gold_replay_frames`, serialise
 decimetres as integers, one array per second), and passes it to the pitch component. Play/pause, playback speed,
 trails, labels, highlight, the Voronoi layer and the detected-only toggle are handled in the browser, so playing never
 reruns the Python page; a click on a player sends his id and the replay time to Python, which fills the stats panel.
-Voronoi cells come from d3-delaunay, kept as a file in `app/web3d` so the demo works offline. No npm build: every
-library is vendored as a file in `app/web3d`. The Replay takes its ideas from SkillCorner's tracking viewer (section
+Voronoi cells come from d3-delaunay, kept as a file in `app/pitch` so the demo works offline. No npm build: every
+library is vendored as a file in `app/pitch`. The Replay takes its ideas from SkillCorner's tracking viewer (section
 11); the code and the design are ours.
 
 Size, measured on m001 at 1 Hz (4,428 tracked seconds, 32 player slots plus the ball, 101,844 positions): 1.12 MB of

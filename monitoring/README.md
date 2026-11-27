@@ -25,7 +25,7 @@ is empty. Grafana takes the admin password from `.env` only the first time it st
 | cAdvisor | every container: CPU, memory against its `mem_limit`, restarts | |
 | kafka-exporter | topic offsets, lag of the `bronze-writer` consumer group | |
 | MinIO | its own metrics (`/minio/v2/metrics/cluster`) | |
-| Spark | its own Prometheus endpoint on master, worker and the streaming driver (`spark/metrics.properties`) | |
+| Spark | its own Prometheus endpoint on master, worker and the streaming driver (`monitoring/spark/metrics.properties`) | |
 | blackbox | do the app, Dagster and MinIO answer HTTP, does Kafka accept connections | `blackbox/blackbox.yml` |
 | pipeline-exporter (ours) | Dagster runs and steps (GraphQL), dbt test results, Soda results per dimension, the Spark progress file, Gold freshness per match | `exporter/pipeline_exporter.py` |
 | the app | its own Kafka consumer: lag and live delay (port 9108, not published) | `app/streamlit/live_feed.py` |

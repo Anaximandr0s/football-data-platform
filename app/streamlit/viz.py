@@ -7,15 +7,12 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
-import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
-from matplotlib.patches import Rectangle  # noqa: E402
 from mplsoccer import Pitch  # noqa: E402
 
 import theme  # noqa: E402
 
 PITCH_L, PITCH_W = 105.0, 68.0
-ZONES_X, ZONES_Y = 6, 4
 DEFAULT_COLORS = dict(theme.TEAM)
 BG = "#0b1410"  # the app background (.streamlit/config.toml)
 
@@ -75,42 +72,6 @@ def _attack_arrows(ax, home_color: str, away_color: str) -> None:
         annotation_clip=False,
         arrowprops={"arrowstyle": "->", "color": away_color, "lw": 2},
     )
-
-
-def zone_heatmap(zones: pd.DataFrame, color: str) -> plt.Figure:
-    """Share of the tracked seconds spent in each cell of the 6 x 4 grid (cells never visited show 0 %)."""
-    grid = np.zeros((ZONES_Y, ZONES_X))
-    for r in zones.itertuples():
-        grid[int(r.zone_y), int(r.zone_x)] = r.share_of_tracked_seconds
-    _, fig, ax = draw_pitch((8, 5.4))
-    peak = grid.max() or 1.0
-    cell_w, cell_h = PITCH_L / ZONES_X, PITCH_W / ZONES_Y
-    for zy in range(ZONES_Y):
-        for zx in range(ZONES_X):
-            share = grid[zy, zx]
-            ax.add_patch(
-                Rectangle(
-                    (zx * cell_w, zy * cell_h),
-                    cell_w,
-                    cell_h,
-                    facecolor=color,
-                    alpha=0.08 + 0.80 * share / peak,
-                    edgecolor="none",
-                    zorder=1,
-                )
-            )
-            ax.text(
-                (zx + 0.5) * cell_w,
-                (zy + 0.5) * cell_h,
-                f"{share:.0%}",
-                ha="center",
-                va="center",
-                color="white",
-                fontsize=10,
-                zorder=3,
-                alpha=0.95 if share else 0.35,
-            )
-    return fig
 
 
 def shot_map(shots: pd.DataFrame, colors: dict[str, str]) -> plt.Figure:

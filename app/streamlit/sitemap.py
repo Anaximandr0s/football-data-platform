@@ -1,5 +1,5 @@
 """The MatchLens site map (docs/product.md, section 8): every page, the question it answers, and the menu a visitor
-sees for the view chosen on Home. Pure data and functions, except `header`, `coming_soon` and `style`, which draw."""
+sees for the view chosen on Home. Pure data and functions, except `header` and `style`, which draw."""
 
 from dataclasses import dataclass
 
@@ -19,20 +19,16 @@ class PageSpec:
     icon: str
     section: str
     question: str
-    persona: str
-    ready: bool  # False: the page says "coming soon" and the step that builds it
 
 
 PAGES = (
-    PageSpec("home", "Home", ":material/sports_soccer:", "", "Who am I, and which match do I look at?", "both", True),
+    PageSpec("home", "Home", ":material/sports_soccer:", "", "Who am I, and which match do I look at?"),
     PageSpec(
         "live_match",
         "Live match",
         ":material/sensors:",
         "LIVE",
         "What is happening right now, and how is this player doing so far?",
-        "both",
-        True,
     ),
     PageSpec(
         "match_library",
@@ -40,26 +36,14 @@ PAGES = (
         ":material/video_library:",
         "MATCHES",
         "Which matches are stored, and how did they end?",
-        "both",
-        True,
     ),
-    PageSpec(
-        "replay",
-        "Replay",
-        ":material/replay:",
-        "MATCHES",
-        "What did a stored match look like at any moment?",
-        "both",
-        True,
-    ),
+    PageSpec("replay", "Replay", ":material/replay:", "MATCHES", "What did a stored match look like at any moment?"),
     PageSpec(
         "compare_matches",
         "Compare matches",
         ":material/compare_arrows:",
         "MATCHES",
         "Is this how a team usually plays?",
-        "both",
-        True,
     ),
     PageSpec(
         "match_story",
@@ -67,19 +51,15 @@ PAGES = (
         ":material/auto_stories:",
         "FAN VIEW",
         "How did the match go, and why did it end this way?",
-        "fans",
-        True,
     ),
-    PageSpec("squad", "Squad", ":material/groups:", "FAN VIEW", "Who played?", "fans", True),
-    PageSpec("player", "Player page", ":material/person:", "FAN VIEW", "How did this player play?", "fans", True),
+    PageSpec("squad", "Squad", ":material/groups:", "FAN VIEW", "Who played?"),
+    PageSpec("player", "Player page", ":material/person:", "FAN VIEW", "How did this player play?"),
     PageSpec(
         "team_analysis",
         "Team analysis",
         ":material/strategy:",
         "COACH VIEW",
         "How does the team organise, press and attack?",
-        "coaches",
-        True,
     ),
     PageSpec(
         "physical_fatigue",
@@ -87,8 +67,6 @@ PAGES = (
         ":material/directions_run:",
         "COACH VIEW",
         "Who ran how much, and who faded?",
-        "coaches",
-        True,
     ),
     PageSpec(
         "event_explorer",
@@ -96,29 +74,15 @@ PAGES = (
         ":material/scatter_plot:",
         "COACH VIEW",
         "Which actions happened where, by whom, and how dangerous were they?",
-        "coaches",
-        True,
     ),
-    PageSpec(
-        "player", "Player page", ":material/person:", "COACH VIEW", "What exactly did this player do?", "coaches", True
-    ),
-    PageSpec(
-        "data_quality",
-        "Data quality",
-        ":material/verified:",
-        "BEHIND THE DATA",
-        "Can I trust these numbers?",
-        "everyone",
-        True,
-    ),
+    PageSpec("player", "Player page", ":material/person:", "COACH VIEW", "What exactly did this player do?"),
+    PageSpec("data_quality", "Data quality", ":material/verified:", "BEHIND THE DATA", "Can I trust these numbers?"),
     PageSpec(
         "pipeline_lineage",
         "Pipeline & lineage",
         ":material/account_tree:",
         "BEHIND THE DATA",
         "How does a number get from the camera to the screen?",
-        "everyone",
-        True,
     ),
     PageSpec(
         "sources_limits",
@@ -126,13 +90,8 @@ PAGES = (
         ":material/menu_book:",
         "BEHIND THE DATA",
         "Where does the data come from, and what can it not tell?",
-        "everyone",
-        True,
     ),
 )
-
-# what is still missing on a page that exists, and the build step of docs/product.md section 12 that adds it
-COMING = {}
 
 
 def menu(view: str | None) -> dict[str, list[PageSpec]]:
@@ -156,22 +115,6 @@ def header(key: str) -> PageSpec:
     return page
 
 
-def coming_soon(key: str) -> None:
-    """A page that is not built yet: its question, what it will show and when."""
-    what, step = COMING[key]
-    st.markdown(
-        f"<div class='ml-soon'><span class='ml-badge'>Coming soon</span><p>It will show {what}.</p>"
-        f"<p class='ml-step'>Build step {step} of docs/product.md, section 12.</p></div>",
-        unsafe_allow_html=True,
-    )
-
-
-def still_to_come(key: str) -> None:
-    """What a page that already shows something will add later."""
-    what, step = COMING[key]
-    st.caption(f"Still to come (build step {step}): {what}.")
-
-
 def style() -> None:
     """One look for every page, light or dark (.streamlit/config.toml): text keeps the theme's colour, lines and
     backgrounds are grey tints, fills come from theme.py. Glossary terms (glossary.term) are underlined with dots."""
@@ -180,8 +123,6 @@ def style() -> None:
         f"""<style>
     .ml-kicker {{font-size:.8rem; letter-spacing:.16em; font-weight:800; opacity:{theme.MUTED_OPACITY};}}
     .ml-question {{font-size:1.2rem; opacity:{theme.MUTED_OPACITY}; margin-top:-.6rem;}}
-    .ml-soon {{border:1px dashed {line}; border-radius:12px; padding:1.1rem 1.3rem; background:{soft};}}
-    .ml-soon p {{margin:.4rem 0 0 0;}} .ml-step {{opacity:{theme.MUTED_OPACITY}; font-size:.9rem;}}
     .ml-badge {{background:{theme.GOLD}; color:{theme.ON_FILL}; font-weight:800; font-size:.8rem; letter-spacing:.08em;
                padding:.15rem .55rem; border-radius:999px; text-transform:uppercase;}}
     .ml-tagline {{opacity:{theme.MUTED_OPACITY}; font-size:1.2rem; margin:.5rem 0 1.6rem 0;}}

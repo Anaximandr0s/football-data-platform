@@ -4,8 +4,7 @@
 const ICONS = ["video", "send", "topology-star-3", "bolt", "broadcast", "bucket", "database", "database-star",
   "chart-bar", "route", "checklist", "heart-rate-monitor", "box", "download", "player-play", "player-stop",
   "info-circle", "alert-triangle", "stack-2", "clock-hour-4", "shield-check", "ball-football", "gauge", "chevron-down",
-  "external-link"];
-const FADE_AFTER_S = 30;              // a replay stored in Gold leaves the panel 30 s after its run
+  "external-link", "x"];
 const $ = (sel) => document.querySelector(sel);
 const el = (tag, attrs = {}, ...kids) => {
   const e = document.createElement(tag);
@@ -67,7 +66,7 @@ async function refreshStatus() {
   arch.classList.toggle("moving", s.live_moving);
   arch.classList.toggle("moving-stored", s.stored_moving);
   showWarnings(s.warnings);
-  renderReplays(s.replays, s.at);
+  renderReplays(s.replays, s.card_stays_s);
 }
 
 function showWarnings(list) {
@@ -85,14 +84,13 @@ function replayState(p) {
     || "Dagster is building the match";
 }
 
-function renderReplays(plays, now) {
+function renderReplays(plays, staysS) {
   const cards = [];
   for (const p of plays) {
     const run = p.pipeline;
-    const age = run && run.status === "SUCCESS" && run.ended_at ? now - run.ended_at : null;
-    if (age !== null && age >= FADE_AFTER_S) continue;                  // stored: its card has gone
+    const fading = p.age !== null && p.age >= staysS - 5;               // the server drops it at staysS
     const share = p.progress ? p.progress.share : 0;
-    const card = el("div", { class: `replay${p.running ? "" : " done"}${p.partial ? " partial" : ""}${age !== null && age >= FADE_AFTER_S - 5 ? " fade" : ""}`, "data-match": p.match_id },
+    const card = el("div", { class: `replay${p.running ? "" : " done"}${p.partial ? " partial" : ""}${fading ? " fade" : ""}`, "data-match": p.match_id },
       el("div", { class: "row" },
         el("strong", {}, p.label),
         p.partial ? el("span", { class: "tag", title: "started after kick-off: live only" }, "partial") : null,
@@ -117,6 +115,7 @@ function renderReplays(plays, now) {
     cards.push(card);
   }
   $("#replays").replaceChildren(...cards);
+  $("#clear").hidden = !plays.some((p) => !p.running);
 }
 
 // ---------------------------------------------------------------- play
@@ -152,6 +151,10 @@ $("#play-form").addEventListener("submit", (ev) => {
   const form = new FormData(ev.target);
   const start = form.get("start");
   play({ match: $("#match").value, speed: Number(form.get("speed")), start: start === "clock" ? $("#clock").value : start }, $("#play-btn"));
+});
+$("#clear").addEventListener("click", async () => {
+  try { await post("/api/replay/clear", {}); } catch (e) { showError(e.message); }
+  refreshStatus();
 });
 $("#play-full").addEventListener("click", () => play({ match: $("#match").value, speed: 60, start: "kickoff" }, $("#play-full")));
 
@@ -215,10 +218,11 @@ async function loadPerformance() {
     el("div", { class: "big" }, h.value),
     el("div", { class: "line" }, h.line),
     el("div", { class: "src" }, `Source: ${h.source}`))));
-  $("#details-source").textContent = p.source ? `(${p.source})` : "(no benchmark yet: make benchmark)";
   $("#slo-details").replaceChildren(...p.details.map((d) => el("div", { class: `tile${"pass" in d ? (d.pass ? " pass" : " fail") : ""}` },
-    el("div", { class: "t" }, d.title), el("div", { class: "v" }, d.value), el("div", { class: "l" }, d.line))));
-  $("#now").replaceChildren(...p.now.map((t) => el("div", { class: "tile" }, el("div", { class: "v" }, t.value), el("div", { class: "l" }, t.title))));
+    el("div", { class: "t" }, d.title), el("div", { class: "v" }, d.value), el("div", { class: "l" }, d.line),
+    el("div", { class: "src" }, d.period))));
+  $("#now").replaceChildren(...p.now.map((t) => el("div", { class: "tile" }, el("div", { class: "v" }, t.value),
+    el("div", { class: "l" }, t.title), el("div", { class: "src" }, t.period))));
 }
 
 // ---------------------------------------------------------------- export the diagram for slides

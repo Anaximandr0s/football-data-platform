@@ -31,7 +31,7 @@ pages say what to run instead of crashing.
 
 Home asks for a match and a view; the menu then shows that view's section, and the sidebar keeps a view switch and the
 match picker. The view and the match are plain session keys (`view`, `match_id`), so they follow the visitor from page
-to page. A page marked "coming soon" states its question and the build step (product.md, section 12) that will add it.
+to page.
 
 | Section | Page | Reads | Now |
 |---|---|---|---|
@@ -45,12 +45,13 @@ to page. A page marked "coming soon" states its question and the build step (pro
 | FAN VIEW, COACH VIEW | Player page | `gold_player_card`, `gold_zone_occupancy`, `gold_shots`, `gold_events`; coach mode adds `gold_player_fatigue`, `gold_player_5min`, `gold_player_match_stats` | fan mode: card with badges, the 5 scores (F3, greyed when not ranked), top speed from detected positions (F5), heatmap, shots and passes on the pitch component, the same player in other matches (F8). Coach mode: raw values and rates, thresholds, fatigue (C6), distance per 5 minutes, the player's events (E1), ranking of the match |
 | COACH VIEW | Team analysis | `gold_shots`, `gold_pass_network`, `gold_player_match_stats` | shot map of both teams with filters and a shot table; pass network of one team |
 | COACH VIEW | Physical & fatigue | `gold_player_5min` | distance and sprint seconds per 5 minutes of one player, with the coverage of each window |
-| COACH VIEW | Event explorer | | coming soon (step 5) |
+| COACH VIEW | Event explorer | `gold_events`, `gold_match_timeline` | every action and run of the match, filtered by team, type, player, phase, period and minutes; arrows or a heatmap, a summary, a head-to-head of two players and the momentum of the match |
 | BEHIND THE DATA | Data quality | `data/soda/*.json`, `soda/dimensions.yml`, `data/quality/silver_*.json`, `data/pipeline/runs.json`, `docs/external_checks.yml`, `docs/quality_evidence.yml`, Gold | A verdict banner, then six cards, one per data-quality dimension (completeness, uniqueness, validity, consistency, accuracy, freshness; English and French): a simple question, one number, what it is made of. A match x dimension grid, the camera coverage per 5 minutes, the last Dagster runs, what our checks caught (with the fix commits), the official sources, and every check with a plain-English name and filters (`quality.py`) |
-| BEHIND THE DATA | Pipeline & lineage, Sources & limits | | coming soon (step 8) |
+| BEHIND THE DATA | Pipeline & lineage | `data/pipeline/*.json`, `dbt/target/manifest.json` | the Dagster asset graph coloured by one run, the latest runs, and the dbt lineage of a Gold table |
+| BEHIND THE DATA | Sources & limits | `docs/external_checks.yml`, `gold_events`, `gold_team_profile` | where the data comes from, what it cannot tell, and how it was checked against official match reports |
 
 One pitch component (docs/product.md, section 8.2) draws every pitch of Live and the Player page: `pitch.py` shapes the
-data, `app/web3d/pitch.js` draws it on a canvas (a Streamlit custom component v2, no build step) and sends a clicked
+data, `app/pitch/pitch.js` draws it on a canvas (a Streamlit custom component v2, no build step) and sends a clicked
 player back to Python. Measured on 2026-11-15 with m001 inside a 1 s refresh fragment for 160 s (headless Chrome,
 this machine): one frame per refresh (the Live pattern, all 4,428 tracked seconds shown): 2-3 ms of server time per
 refresh, 13 % of one CPU for the whole Streamlit server, 220 MB resident, 12.5 kB/s over the websocket, 60 frames per
@@ -85,9 +86,9 @@ use translucent greys, so they work on both. Chart text is 14 px (`charts.finish
 |---|---|
 | `app.py` | the router: `st.navigation` menu for the chosen view, the sidebar (view switch, match picker), the move to a view's first page |
 | `lineage.py` | the Graphviz graphs of Pipeline & lineage (the simple overview, the Dagster assets, the dbt lineage) and the column meanings read from the data contract |
-| `sitemap.py` | every page with its section, question and persona; the menu per view; the page header and the "coming soon" box. Pure data, tested without Streamlit |
+| `sitemap.py` | every page with its section and question; the menu per view; the page header. Pure data, tested without Streamlit |
 | `sections/*.py` | the pages (not `pages/`, see Tests) |
-| `pitch.py`, `../web3d/pitch.js` | the pitch component: layers (players and ball, a whole match played in the browser, heatmap, shots, passes, attack arrows, a message), the selected player ringed, clicks sent back |
+| `pitch.py`, `../pitch/pitch.js` | the pitch component: layers (players and ball, a whole match played in the browser, heatmap, shots, passes, attack arrows, a message), the selected player ringed, clicks sent back |
 | `playerstats.py` | the per-player formulas shared by Live and Replay: Silver frame, distance, sprint efforts, top speed from detected positions, 6 x 4 heatmap. Pure, tested against Gold |
 | `cards.py` | the shirt and the badges of the player cards |
 | `clock.py` | the football clock fans see on TV, from the replay second and its period: 6', 45+2', 46' at the second kick-off, 90+1'. Every time shown in the app goes through it |
@@ -124,10 +125,6 @@ legacy multipage mode until the router has run once, which showed a bare page li
 m001 data and looked at: the shot map shows HOME's 2 goals at the right goal and AWAY's 3 at the left one (final score 2-3),
 and the pass network puts AWAY's goalkeeper near x = 100, as expected for a team attacking to the left.
 
-## Not built (yet)
+## Not built
 
-- The 5-minute live stats of the Live match page: a placeholder box until the streaming job writes `foot-live-stats`.
-- The bonus 3D page and the FastAPI gateway are the other folders of `app/`.
 - Clustering of player profiles: only the team-level comparison exists.
-- The `app` container and the browser rendering were not run here (no Docker, no browser in the development sandbox): the
-  pages were run headless and the figures rendered to images.

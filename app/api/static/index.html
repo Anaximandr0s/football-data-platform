@@ -255,7 +255,9 @@
     show Dagster at work.</p>
   <p id="play-error" class="error" role="alert" hidden></p>
   <div id="replays"></div>
-  <p class="note">At most 2 replays at once, one per match.</p>
+  <div class="row-end"><p class="note">At most 2 replays at once, one per match. A card leaves 30 s after its replay
+    ends (stopped, partial, or stored in Gold).</p>
+    <button type="button" class="ghost" id="clear" hidden><svg class="ico"><use href="#i-x"/></svg> Clear</button></div>
 </section>
 
 <section class="card perf" aria-labelledby="perf-title">
@@ -264,9 +266,9 @@
   <div id="hero" class="hero"></div>
   <details id="details">
     <summary><svg class="ico"><use href="#i-chevron-down"/></svg> Details: service levels, the other measures</summary>
-    <h3>Service levels <span class="small" id="details-source"></span></h3>
+    <h3>Service levels</h3>
     <div id="slo-details" class="tiles"></div>
-    <h3>Right now <span class="small">(Prometheus, last 7 days: a different period from the benchmark)</span></h3>
+    <h3>Right now <span class="small">(a different period from the benchmark: see under each value)</span></h3>
     <div id="now" class="tiles"></div>
   </details>
 </section>

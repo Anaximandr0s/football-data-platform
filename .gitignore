@@ -21,6 +21,7 @@ data/benchmark/current.json
 *.parquet
 *.jsonl
 *.duckdb
+*.duckdb.wal
 
 # tools and editors
 dbt/target/
@@ -30,3 +31,6 @@ dbt/.user.yml
 .vscode/
 .DS_Store
 .cache/
+
+# spark 4 creates artifacts/spark-<id> in its working directory (the repo, mounted by make streaming and make silver)
+artifacts/

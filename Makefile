@@ -10,7 +10,7 @@ MATCH ?= m001
 SC_ID ?= 1874553
 SPEED ?= 60
 ARGS ?=
-ALL_PROFILES = --profile jobs --profile app --profile dagster --profile monitoring --profile demo
+ALL_PROFILES = --profile jobs --profile app --profile dagster --profile monitoring --profile demo --profile streaming
 AM_TMP = $(CURDIR)/.cache/alertmanager
 # the config checks use the images docker-compose.yml runs, so an image update is checked too
 PROMETHEUS_IMAGE = $(shell grep -oE 'prom/prometheus:[^" ]+' docker-compose.yml | head -1)
@@ -24,7 +24,7 @@ up: ## Start MinIO, Kafka, Kafka UI, Spark and the Bronze writer (creates .env i
 	$(COMPOSE) up -d
 
 down: ## Stop (data kept), dashboard, Dagster, monitoring and the Control Center included
-	$(COMPOSE) --profile app --profile dagster --profile monitoring --profile demo down
+	$(COMPOSE) --profile app --profile dagster --profile monitoring --profile demo --profile streaming down
 
 reset: ## Stop and DELETE all data (topics, buckets, Dagster history, metrics)
 	$(COMPOSE) $(ALL_PROFILES) down -v
@@ -100,10 +100,10 @@ silver: ## Bronze -> Silver on the Spark cluster: make silver MATCH="m001 m002" 
 	$(COMPOSE) --profile jobs run --rm silver --match $(MATCH) $(ARGS)
 
 streaming: ## Spark Structured Streaming: Kafka -> 5/15-minute live stats -> foot-live-stats (start BEFORE a replay)
-	$(COMPOSE) --profile jobs run --rm -d -p 127.0.0.1:4040:4040 --name streaming-5min streaming
+	$(COMPOSE) --profile streaming up -d streaming
 
 streaming-stop: ## Stop the streaming job (its checkpoint keeps the state for the next start)
-	docker stop streaming-5min
+	$(COMPOSE) --profile streaming stop streaming
 
 gold: ## Silver -> Gold with dbt + DuckDB in Docker (models, tests, export to s3://gold): make gold [ARGS="--select gold_shots"]
 	$(COMPOSE) --profile jobs run --rm dbt build --vars '{export_gold: true}' $(ARGS)

@@ -128,3 +128,18 @@ def test_a_playing_replay_shows_its_progress_from_what_kafka_received(client, mo
     monkeypatch.setattr(main.watch, "last_ts", {replay: 10 + 600})
     play = client.get("/api/status").json()["replays"][0]
     assert play["progress"]["clock"] == "10:00" and play["running"] and play["live_url"].endswith("?match=m001")
+
+
+def test_a_stopped_card_leaves_after_30_s_and_clear_removes_it_at_once(client, monkeypatch):
+    client.post("/api/replay/start", json={"match": "m001", "speed": 1})
+    client.post("/api/replay/start", json={"match": "m002", "speed": 1})
+    client.post("/api/replay/stop", json={"match": "m001"})
+    now = 1_000_000.0
+    monkeypatch.setattr(main.time, "time", lambda: now)
+    assert {p["match_id"] for p in client.get("/api/status").json()["replays"]} == {"m001", "m002"}
+    now += core.CARD_STAYS_S
+    assert [p["match_id"] for p in client.get("/api/status").json()["replays"]] == ["m002"]
+
+    client.post("/api/replay/stop", json={"match": "m002"})
+    assert client.post("/api/replay/clear").json() == {"cleared": 2}
+    assert client.get("/api/status").json()["replays"] == []

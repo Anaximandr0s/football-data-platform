@@ -195,14 +195,6 @@ def doc_text(doc: str) -> str:
     return (ROOT / "docs" / doc).read_text(encoding="utf-8")
 
 
-def doc_section(doc: str, heading: str) -> str:
-    """The text of one `## heading` section of docs/<doc>, so a page and its document never disagree."""
-    text = (ROOT / "docs" / doc).read_text(encoding="utf-8")
-    start = text.index(f"## {heading}\n") + len(heading) + 4
-    end = text.find("\n## ", start)
-    return text[start : end if end >= 0 else None].strip()
-
-
 def _yaml(path: Path):
     import yaml
 

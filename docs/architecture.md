@@ -1,5 +1,7 @@
 # Architecture
 
+Design decisions, with the options weighed and their costs: [`adr/`](adr/README.md).
+
 ![MatchLens architecture](img/control-center/matchlens-architecture@2x.png)
 
 ## Two paths
@@ -93,7 +95,7 @@ Guide and limits: [`dagster/README.md`](../dagster/README.md).
 
 ## Design principles
 
-- **Bronze is raw**: ingestion changes the shape, never the values; Silver cleans.
+- **Bronze is raw**: ingestion changes the shape, never the values; Silver cleans ([ADR 0002](adr/0002-medallion-layers.md)).
 - **One contract**: `ingestion/schemas.py` (`SCHEMAS`) and [`contrat_donnees.md`](contrat_donnees.md) describe the same tables.
 - **Idempotent and checkable**: every stage prints counts; `make check` compares bronze with the source.
 - **Simple stack**: single-broker Kafka and single-node MinIO; sizes are set in `docker-compose.yml`.

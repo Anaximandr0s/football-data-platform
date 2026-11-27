@@ -176,7 +176,7 @@ def explain(con: duckdb.DuckDBPyConnection, check: dict, raw: dict, log_text: st
     return (detail or "")[:500]
 
 
-def run_layer(layer: str, con: duckdb.DuckDBPyConnection, out_dir: Path) -> tuple[Scan, dict]:
+def run_layer(layer: str, con: duckdb.DuckDBPyConnection) -> tuple[Scan, dict]:
     scan = Scan()
     scan.set_scan_definition_name(f"football_{layer}")
     scan.set_data_source_name("football")
@@ -249,7 +249,7 @@ def main() -> None:
         damage = corrupt(con, layer) if a.demo_failure or a.inject_damage else []
         for line in damage:
             print(f"DEMO: injected {line}")
-        scan, summary = run_layer(layer, con, a.out)
+        scan, summary = run_layer(layer, con)
         print(scan.get_logs_text())
         for c in summary["checks"]:
             if c["outcome"] in ("fail", "warn") and c["detail"]:

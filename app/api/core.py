@@ -6,7 +6,6 @@ from dataclasses import dataclass
 
 import clock  # app/streamlit/clock.py: the football clock fans see on TV
 
-PRESET_SPEEDS = (1, 5, 10)
 MAX_SPEED = 60
 MAX_RUNNING = 2  # replays at the same time, all matches together
 GOAL_LEAD_S = 30
@@ -329,22 +328,29 @@ def performance(
         rel = results["reliability"]
         normal = rel["runs"] - rel["on_purpose"]
         since = rel.get("since_fix") or {}
-        details = [
-            {
-                "title": v["slo"],
-                "value": "PASS" if v["pass"] else "FAIL",
-                "pass": v["pass"],
-                "line": f"Measured: {v['measured']}.",
-            }
-            for v in verdicts
-        ]
+        measured = {
+            "Live delay": (f"{delay:g} s", f"{bench}, x1"),
+            "Freshness": (f"{ready:.1f} min", f"{bench}, x60"),
+            "Run success": (f"{rel['success_slo']:.0%}", "Dagster runs, last 7 days"),
+        }
+        for v in verdicts:
+            value, period = next(m for k, m in measured.items() if v["slo"].startswith(k))
+            details.append(
+                {
+                    "title": v["slo"],
+                    "value": "PASS" if v["pass"] else "FAIL",
+                    "pass": v["pass"],
+                    "line": f"Measured: {value}.",
+                    "period": period,
+                }
+            )
         for d in details:
             if d["title"].startswith("Run success") and not d["pass"]:
                 d["line"] = (
-                    f"{rel['success_slo']:.1%} of the {normal} normal runs of the last 7 days succeeded: "
-                    f"below the 95 % goal ({round(normal * (1 - rel['success_slo']))} failed). Since the last "
-                    f"recorded fix ({since.get('commit')}), {since.get('success', 0):.1%} of "
-                    f"{since.get('runs', 0)} runs succeeded. Test runs (tag purpose) are left out."
+                    f"{rel['success_slo']:.0%} of the {normal} normal runs succeeded: below the 95 % goal "
+                    f"({round(normal * (1 - rel['success_slo']))} failed). Since the last recorded fix "
+                    f"({since.get('commit')}), {since.get('success', 0):.0%} of {since.get('runs', 0)} runs "
+                    "succeeded. Test runs (tag purpose) are left out."
                 )
         x60 = next(s for s in results["speeds"] if s["speed"] == 60)
         details += [
@@ -352,17 +358,20 @@ def performance(
                 "title": "Throughput at x60",
                 "value": f"{x60['kafka_msgs_per_s']['p50']:,.0f} msg/s",
                 "line": "Messages per second through Kafka (median), one match replayed 60 times faster.",
+                "period": bench,
             },
             {
                 "title": "Spark batch",
                 "value": f"{results['spark']['batch_s']['p50']:.1f} s",
                 "line": "Median time of one batch of the 5-minute statistics; a new one starts every 5 s.",
+                "period": bench,
             },
         ] + [
             {
                 "title": f"Back to normal after restarting {r['service']}",
                 "value": f"{r['back_to_normal_s']:.0f} s",
                 "line": "In the middle of a replay at x10.",
+                "period": bench,
             }
             for r in results["recovery"]
             if r["back_to_normal_s"]
@@ -524,10 +533,27 @@ def fmt(value: float | None, kind: str) -> str:
         "s": lambda v: f"{v:,.1f} s",
         "ms": lambda v: f"{v:,.0f} ms",
         "pct": lambda v: f"{v:.0%}",
+        "min": lambda v: f"{v / 60:,.1f} min",
         "int": lambda v: f"{v:,.0f}",
         "gib": lambda v: f"{v / 2**30:,.1f} GiB",
         "yesno": lambda v: "yes" if v >= 1 else "no",
     }[kind](value)
+
+
+# ---------------------------------------------------------------- how long a replay card stays
+
+CARD_STAYS_S = 30
+
+
+def card_age(play: dict, now: float) -> float | None:
+    """Seconds since a replay card's story ended: stopped, partial at its final whistle, or stored in Gold. None while
+    there is more to show (playing, waiting for Dagster, or a failed run, which stays until cleared)."""
+    if play["running"]:
+        return None
+    if play["stopped"] or play["partial"] or not play["finished"]:
+        return now - play["ended_at"] if play.get("ended_at") else None
+    run = play.get("pipeline")
+    return now - run["ended_at"] if run and run["status"] == "SUCCESS" and run.get("ended_at") else None
 
 
 # ---------------------------------------------------------------- the pipeline of a replay, as chips
