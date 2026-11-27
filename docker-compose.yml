@@ -459,7 +459,7 @@ services:
   alertmanager:
     <<: *common
     profiles: ["monitoring"]
-    image: prom/alertmanager:v0.34.2
+    image: prom/alertmanager:v0.35.0
     entrypoint: ["/bin/sh", "/etc/alertmanager/src/entrypoint.sh"]
     environment:     # empty values stop the container with the name of the missing variable (entrypoint.sh)
       SMTP_HOST: ${SMTP_HOST:-}
