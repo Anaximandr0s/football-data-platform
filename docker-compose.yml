@@ -511,7 +511,7 @@ services:
   node-exporter:     # the host machine
     <<: *common
     profiles: ["monitoring"]
-    image: prom/node-exporter:v1.12.1
+    image: prom/node-exporter:v1.13.1
     command: ["--path.rootfs=/host"]
     pid: host
     volumes:
