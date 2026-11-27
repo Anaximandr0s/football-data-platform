@@ -35,3 +35,67 @@ def test_a_partial_replay_is_never_kept_as_a_complete_one():
     assert fn("m001", "m001-20261117T100000Z-partial") is False            # decided by its id, no file read
     out = bp.plan(objects, lambda m, r: fn(m, r) if r.endswith("-partial") else complete(m, r), keep=1)
     assert {bp.parse(k)[2] for k in out["keep"]} == {"m001-20261117T100000Z-partial", "m001-20261117T090000Z"}
+
+
+class Bucket:
+    """The S3 calls of bronze_prune over an in-memory Bronze bucket."""
+
+    def __init__(self, objects: dict[str, bytes]):
+        self.objects = objects
+
+    def get_paginator(self, _name):
+        return self
+
+    def paginate(self, Bucket, Prefix):  # noqa: N803 - boto3's names
+        return [{"Contents": [{"Key": k, "Size": len(v)} for k, v in self.objects.items() if k.startswith(Prefix)]}]
+
+    def get_object(self, Bucket, Key):  # noqa: N803
+        import io
+        return {"Body": io.BytesIO(self.objects[Key])}
+
+    def delete_objects(self, Bucket, Delete):  # noqa: N803
+        for o in Delete["Objects"]:
+            del self.objects[o["Key"]]
+
+
+def replay(match: str, rid: str, last_ts: int) -> dict[str, bytes]:
+    import io
+
+    import pandas as pd
+
+    def parquet(df):
+        buf = io.BytesIO()
+        df.to_parquet(buf)
+        return buf.getvalue()
+    folder = f"match_id={match}/replay_id={rid}/ingest_date=2026-11-27/part-1.parquet"
+    return {f"matches/{folder}": parquet(pd.DataFrame({"p2_end_ts": [90]})),
+            f"tracking/{folder}": parquet(pd.DataFrame({"ts": range(last_ts + 1)}))}
+
+
+def prune(monkeypatch, bucket, *args):
+    import sys
+
+    monkeypatch.setenv("MINIO_ROOT_USER", "u")
+    monkeypatch.setenv("MINIO_ROOT_PASSWORD", "p")
+    monkeypatch.setattr(bp.boto3, "client", lambda *a, **k: bucket)
+    monkeypatch.setattr(sys, "argv", ["bronze_prune.py", *args])
+    bp.main()
+
+
+def test_the_command_shows_first_then_deletes_the_older_replays(monkeypatch, capsys):
+    bucket = Bucket({**replay("m1", "m1-20261101T100000Z", 90), **replay("m1", "m1-20261102T100000Z", 40),
+                     **replay("m1", "m1-20261103T100000Z", 90), **replay("m1", "m1-20261104T100000Z-partial", 90),
+                     "tracking/match_id=m1/ingest_date=2026-11-01/old.parquet": b"x"})
+    prune(monkeypatch, bucket, "--keep", "1")
+    out = capsys.readouterr().out
+    assert "would delete  m1  m1-20261101T100000Z" in out and "old layout" in out and "nothing deleted" in out
+    assert len(bucket.objects) == 9
+    prune(monkeypatch, bucket, "--keep", "1", "--delete")
+    assert sorted({k.split("/")[2] for k in bucket.objects}) == ["replay_id=m1-20261103T100000Z",
+                                                                  "replay_id=m1-20261104T100000Z-partial"]
+
+
+def test_the_command_never_deletes_the_replay_silver_reads(monkeypatch):
+    import pytest
+    with pytest.raises(SystemExit):
+        prune(monkeypatch, Bucket({}), "--keep", "0")

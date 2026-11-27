@@ -30,4 +30,5 @@ httpx>=0.27,<1               # FastAPI's test client
 # --- Dev tools: lint, tests, hooks ---
 ruff>=0.17
 pytest>=9.2
+pytest-cov>=7.1             # coverage, child processes included (pyproject.toml)
 pre-commit>=4.7

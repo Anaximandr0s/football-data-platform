@@ -152,3 +152,32 @@ def test_event_explorer_filters_summarises_and_compares(app_env):
     assert not at.exception and dict(at.dataframe[0].value["count"]) == {"run": "1"}
     at.segmented_control[2].set_value("Heatmap").run()
     assert not at.exception
+
+
+@pytest.fixture
+def two_matches(gold_env, tmp_path, monkeypatch):
+    """The tiny Gold file with a second match m2: the same teams, Home pressing harder and losing 0-2."""
+    import shutil
+
+    import duckdb
+
+    gold = tmp_path / "gold.duckdb"
+    shutil.copy(gold_env["GOLD_DUCKDB_PATH"], gold)
+    with duckdb.connect(str(gold)) as con:
+        for name in ("gold_team_profile", "gold_team_match_stats", "gold_match_library"):
+            con.execute(f"insert into {name} select * replace ('m2' as match_id) from {name}")
+        con.execute("update gold_team_profile set ppp = coalesce(ppp, 0) + 0.5 where match_id = 'm2' and team_id = 'HOME'")
+        con.execute("update gold_team_match_stats set score = case team_id when 'HOME' then 0 else 2 end, "
+                    "opponent_score = case team_id when 'HOME' then 2 else 0 end where match_id = 'm2'")
+    monkeypatch.setenv("GOLD_DUCKDB_PATH", str(gold))
+    monkeypatch.setenv("SODA_OUT_DIR", gold_env["SODA_OUT_DIR"])
+
+
+def test_compare_page_sets_two_matches_side_by_side(two_matches):
+    at = run("sections/compare_matches.py")
+    assert not at.exception
+    assert len(at.multiselect[0].value) == 2
+    assert [s.value for s in at.subheader] == ["With the ball", "Without the ball", "Shape", "Physical"]
+    assert any(o.startswith("W 2-0 · away at Home") for o in at.multiselect[0].options)   # the first team: Away
+    at.multiselect[0].set_value(["m1"]).run()
+    assert any("pick at least two" in i.value for i in at.info)
