@@ -7,9 +7,11 @@ real broadcast-tracking data of A-League matches (season 2024/2025). Credit Skil
 | Our id | SkillCorner id | Match | Role |
 |---|---|---|---|
 | `m001` | 1874553 | Brisbane Roar FC 2-3 Adelaide United Football Club | main match |
-| `m002` | 1925299 | Brisbane Roar FC 0-1 Perth Glory Football Club | second match for FOO-09 (same home club) |
+| `m002` | 1925299 | Brisbane Roar FC 0-1 Perth Glory Football Club | second match of the same home club |
+| `m003` | 2007448 | Perth Glory Football Club 1-3 Brisbane Roar FC | the same club away, against the same opponent as m002 |
+| `m004` | 1996435 | Sydney Football Club 4-1 Adelaide United Football Club | m001's winner in a second match |
 
-Why these two: the platform needs a 105 x 68 pitch (8 of the 20 matches have another size). m001 was the first one
+Why these four: the platform needs a 105 x 68 pitch (10 of the 20 matches have another size). m001 was the first one
 validated end to end, and its derived goals equal the real score. m002 has the best tracking coverage among the
 matches with a valid pitch (78.2%).
 
@@ -22,7 +24,7 @@ matches with a valid pitch (78.2%).
 
 The conversion to our tables is described in [`contrat_donnees.md`](contrat_donnees.md). Nothing is cleaned at ingestion.
 
-## Known limits (state them in the report)
+## Known limits
 
 - **Gaps.** In m001 only 73.4% of the seconds have data; the 20 matches range from 66% to 81%. In a gap second the frame keeps its clock
   and period but has no player and no ball. Only 55 of the 1,602 gap seconds of m001 have a team in possession, and the tracked time with
@@ -45,7 +47,7 @@ make data MATCH=m003 SC_ID=<id>                   # download + convert (the pitc
 make replay MATCH=m003
 make check MATCH=m003
 ```
-Pin the ids you use: never pick a match at random for a deliverable. Read `manifest.json` after converting:
+Pin the ids you use, so a result can be reproduced. Read `manifest.json` after converting:
 22 players per second, goals equal to the real score.
 
 ## Where files live

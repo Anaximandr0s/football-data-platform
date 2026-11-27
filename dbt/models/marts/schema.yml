@@ -5,7 +5,7 @@ version: 2
 models:
   - name: gold_player_match_stats
     description: >
-      GRAIN: one row per player per match (FOO-04). Distance, speed and sprints cover tracked seconds only and come
+      GRAIN: one row per player per match. Distance, speed and sprints cover tracked seconds only and come
       from 1 Hz positions: approximate. shots counts type 'shot' only; the shot map is shots + goals (see gold_shots).
     data_tests:
       - unique_combination:

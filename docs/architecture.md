@@ -1,5 +1,7 @@
 # Architecture
 
+![MatchLens architecture](img/control-center/matchlens-architecture@2x.png)
+
 ## Two paths
 
 - **Batch** (analysis after the match): Kafka -> bronze -> silver -> gold, orchestrated by Dagster.
@@ -16,6 +18,8 @@
 | Gold | MinIO bucket `gold` | dbt + DuckDB, Soda checks | statistics per player and team, zones, passes, shots |
 | Orchestration | `dagster/` | Dagster (webserver + daemon) | the chain of a match when its replay ends |
 | Presentation | `app/streamlit` | Streamlit + mplsoccer | live pitch, heatmaps, shot and pass maps |
+| Control | `app/api` | FastAPI | the Control Center: live status of every box, start and stop a replay |
+| Monitoring | `monitoring/` | Prometheus, Grafana, Alertmanager | metrics of every service, four dashboards, email alerts |
 
 ## Topics
 
@@ -29,7 +33,7 @@ Every replay message carries the header `replay_id` (`m001-20261116T101503Z`): t
 
 ## Bronze layout
 
-`s3://bronze/<table>/match_id=<id>/ingest_date=<day>/part-<epoch_ms>-<n>.parquet`. Partitioned by match, as the brief asks.
+`s3://bronze/<table>/match_id=<id>/ingest_date=<day>/part-<epoch_ms>-<n>.parquet`. Partitioned by match.
 The writer is the always-on service `bronze-writer` (`make up`, restarted if it stops). It buffers per (table, match) and writes a file every 10 s or 5,000 rows, so two matches replayed at the same time never mix.
 `ingest_date` (UTC day of writing) is the time partition. Delivery is at-least-once; Silver deduplicates.
 
@@ -43,7 +47,7 @@ and `is_after_gap` flags. Gaps are never filled. A run replaces the partition of
 nothing is written if the counts or goals do not match the ingestion manifest. Run with `make silver MATCH=m001` (a one-shot `silver` container submits to `spark://spark-master:7077`). Details, columns and decisions:
 [`spark/silver/README.md`](../spark/silver/README.md).
 
-## Streaming (FOO-08)
+## Streaming
 
 `spark/streaming/live_stats.py`, started by `make streaming` (container `streaming-5min`, one core of `spark-worker`, Spark UI
 on http://localhost:4040; `make streaming-stop`). It must run **before** a replay starts: it reads only new messages.
@@ -89,7 +93,7 @@ Guide and limits: [`dagster/README.md`](../dagster/README.md).
 
 ## Design principles
 
-- **Bronze is raw**: ingestion changes the shape, never the values; Silver cleans ([ADR 0003](adr/0003-real-data-skillcorner.md)).
+- **Bronze is raw**: ingestion changes the shape, never the values; Silver cleans.
 - **One contract**: `ingestion/schemas.py` (`SCHEMAS`) and [`contrat_donnees.md`](contrat_donnees.md) describe the same tables.
 - **Idempotent and checkable**: every stage prints counts; `make check` compares bronze with the source.
 - **Simple stack**: single-broker Kafka and single-node MinIO; sizes are set in `docker-compose.yml`.
@@ -128,5 +132,5 @@ live delay, and explains the failed Dagster runs, into `docs/quality_evidence.ym
 and view), LIVE, MATCHES (library, replay, compare), FAN VIEW or COACH VIEW, BEHIND THE DATA; a router (`app.py`) keeps the
 chosen view and match from page to page. It reads the Gold file and the Soda results **read-only** (the
 repository is mounted `:ro`, the DuckDB file is opened for one query at a time so it never blocks a `make gold`). The Live
-match page (FOO-06) reads Kafka instead: one background consumer in the `app` container keeps the state of each replayed
+match page reads Kafka instead: one background consumer in the `app` container keeps the state of each replayed
 match, and the page redraws it about once per second. See [`app/streamlit/README.md`](../app/streamlit/README.md).

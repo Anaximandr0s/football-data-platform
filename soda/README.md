@@ -1,6 +1,6 @@
 # Soda (data quality on Silver and Gold)
 
-Soda Core runs SodaCL checks on both layers and stops the pipeline when the data is wrong (FOO-05). The column lists
+Soda Core runs SodaCL checks on both layers and stops the pipeline when the data is wrong. The column lists
 and types come from
 [`docs/contrat_donnees.md`](../docs/contrat_donnees.md) (sections 9 and 10).
 
@@ -46,7 +46,7 @@ the match the guide describes.
 
 ## The failure demo (`make soda-demo`)
 
-The brief asks to demonstrate a failure on purpose. The runner damages the **views of its own run**, never the data:
+A failure can be shown on purpose. The runner damages the **views of its own run**, never the data:
 Silver gets a duplicated tracking row and a player at x = 131.5 m running 61 km/h; Gold loses a goal. It then runs the
 checks and succeeds only if they fail: on the test data, 6 Silver checks and 1 Gold check catch the damage.
 

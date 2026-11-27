@@ -1,4 +1,4 @@
-"""producer_foot.py (step 3): replay a prepared match into Kafka at an adjustable speed (FOO-02).
+"""producer_foot.py (step 3): replay a prepared match into Kafka at an adjustable speed.
 
     python -m ingestion.producer_foot --match m001 --speed 60
     python -m ingestion.producer_foot --match m001 --speed 60 --dry-run    # no Kafka

@@ -1,4 +1,4 @@
-# MatchLens: product definition
+# MatchLens: product design
 
 MatchLens is a match analysis app built on tracking and event data. It serves two kinds of users with the same Gold
 tables: fans, who want to understand a match, and coaches of clubs without an analysis team, who want to understand how
@@ -223,7 +223,7 @@ Not proposed: EPV, xLoss and xShot. They are model outputs no question uses.
 
 `gold_match_timeline` also gets `xthreat_successful_passes` per team and window, the input of E2.
 
-Live scope. Spark Structured Streaming (FOO-08) reads Kafka and computes only F2, F4, F5 and C3, per 5-min window, with
+Live scope. Spark Structured Streaming reads Kafka and computes only F2, F4, F5 and C3, per 5-min window, with
 the formulas of this document, and writes them to the Kafka topic `foot-live-stats`, which the Live match page reads (no
 other service is added). C1 on the live page is the current second only, computed in the page from the Kafka
 positions, without Spark. F1, C6 and every other question are post-match only, read from the Gold tables above.
@@ -232,25 +232,25 @@ positions, without Spark. F1, C6 and every other question are post-match only, r
 
 MatchLens is one website (one Streamlit app, `st.navigation` with sections). Home is the door; LIVE and MATCHES serve
 both personas; FAN VIEW and COACH VIEW answer the questions of sections 3 and 4 for the match chosen on Home;
-BEHIND THE DATA is for the jury. The ids point to sections 3, 4 and 8.1; FOO-xx are the requirements of the brief.
+BEHIND THE DATA shows how far the numbers can be trusted. The ids point to sections 3, 4 and 8.1.
 
 | Section | Page | Question it answers | Persona | Source | Metric ids |
 |---|---|---|---|---|---|
 | | Home | Who am I, and which match do I look at? | both | MatchLens logo, "I am a Fan / I am a Coach" (opens FAN VIEW or COACH VIEW), match picked from the Match library | |
-| LIVE | Live match | What is happening right now, and how is this player doing so far? | both | Kafka topics `foot-tracking`, `foot-ball`, `foot-events`, `foot-players`, `foot-matches`; `foot-live-stats` written by Spark Streaming | pitch, score, clock, possession (F2 now), C1 (current second); click a player: distance, top speed, sprints and heatmap so far (F4, F5, FOO-07); per 5 min: F2, F4, F5, C3 (FOO-08) |
+| LIVE | Live match | What is happening right now, and how is this player doing so far? | both | Kafka topics `foot-tracking`, `foot-ball`, `foot-events`, `foot-players`, `foot-matches`; `foot-live-stats` written by Spark Streaming | pitch, score, clock, possession (F2 now), C1 (current second); click a player: distance, top speed, sprints and heatmap so far (F4, F5); per 5 min: F2, F4, F5, C3 |
 | MATCHES | Match library | Which matches are stored, and how did they end? | both | `gold_match_library` | |
 | MATCHES | Replay | What did a stored match look like at any moment? | both | `gold_replay_frames`, `gold_space_control`; the stats panel reads `gold_player_5min`, `gold_match_timeline` up to the replay time | R1, S1; panel: the same as Live (F4, F5, sprints, heatmap so far, F2, C3 per 5 min) |
 | MATCHES | Compare matches | Is this how a team usually plays? (any matches) | both | `gold_team_profile` | C7, F7 gaps |
 | FAN VIEW | Match story | How did the match go, and why did it end this way? | fans | `gold_match_timeline`, `gold_shots`, `gold_team_profile` | F1 (goals on the timeline), E2 (momentum), F2, F7 (3 key differences) |
 | FAN VIEW | Squad | Who played? | fans | `gold_player_card` | players as cards: shirt colour, number, name; click -> Player page |
-| FAN VIEW | Player page | How did this player play? | fans | `gold_player_card`, `gold_zone_occupancy`, `gold_shots`, `gold_events` (passes) | F3 (5 scores), F4, F5 (top speed), F6 (hub badge), F8 (across matches), FOO-07 (heatmap, shots) |
+| FAN VIEW | Player page | How did this player play? | fans | `gold_player_card`, `gold_zone_occupancy`, `gold_shots`, `gold_events` (passes) | F3 (5 scores), F4, F5 (top speed), F6 (hub badge), F8 (across matches), heatmap and shots |
 | COACH VIEW | Team analysis | How does the team organise, press and attack? | coaches | `gold_team_shape`, `gold_pressing`, `gold_team_build_up`, `gold_space_control`, `gold_shots`, `gold_pass_network` | C1, C2 (shape), C3 (pressing), C4 (build-up), C5 (attack side), S1 by phase, F6 (pass network) |
 | COACH VIEW | Physical & fatigue | Who ran how much, and who faded? | coaches | `gold_player_5min`, `gold_player_fatigue` | F4 per 5 min, C6 |
 | COACH VIEW | Event explorer | Which actions happened where, by whom, and how dangerous were they? | coaches | `gold_events`, `gold_match_timeline` | E1, E2 |
 | COACH VIEW | Player page (detailed) | What exactly did this player do? | coaches | the fan sources plus `gold_player_fatigue`, `gold_player_5min`, `gold_events` | F3 with raw values and per-minute rates and the eligibility thresholds, C6, F4 per 5 min, E1 for this player |
-| BEHIND THE DATA | Data quality | Can I trust these numbers? | jury | `data/soda/*.json`; tracked and detected share per match from `gold_space_control` | FOO-05 |
-| BEHIND THE DATA | Pipeline & lineage | How does a number get from the camera to the screen? | jury | dbt docs (`dbt docs generate`: lineage of every Gold table) and the Dagster asset graph | |
-| BEHIND THE DATA | Sources & limits | Where does the data come from, and what can it not tell? | jury | sections 1 and 5 of this document, `contrat_donnees.md` known characteristics, credits | |
+| BEHIND THE DATA | Data quality | Can I trust these numbers? | both | `data/soda/*.json`; tracked and detected share per match from `gold_space_control` | Soda results |
+| BEHIND THE DATA | Pipeline & lineage | How does a number get from the camera to the screen? | both | dbt docs (`dbt docs generate`: lineage of every Gold table) and the Dagster asset graph | |
+| BEHIND THE DATA | Sources & limits | Where does the data come from, and what can it not tell? | both | sections 1 and 5 of this document, `contrat_donnees.md` known characteristics, credits | |
 
 The Player page is one page in two modes: the fan mode shows the card and the pitch layers; the coach mode adds the raw
 values, rates, thresholds, fatigue and the player's events. Both views reach it from a click on a player (Squad, Live,
@@ -307,7 +307,7 @@ inside a component).
 | Existing page | Goes to |
 |---|---|
 | Home (`app.py`: average position, team comparison) | Home becomes the door (logo, persona, library); the team comparison becomes F7 in Match story; the average-position chart is dropped (Team analysis shows the shape) |
-| Live match | LIVE / Live match: same page, the mplsoccer pitch replaced by the pitch component, plus the player click and the FOO-08 panel |
+| Live match | LIVE / Live match: same page, the mplsoccer pitch replaced by the pitch component, plus the player click and the 5-minute panel |
 | Players (key numbers, heatmap, intensity per 5 min, ranking) | key numbers, heatmap and ranking -> Player page and Squad; intensity per 5 min -> Physical & fatigue |
 | Shots and passes | team shot map and pass network -> Team analysis; a player's shots and passes -> Player page |
 | Compare matches | MATCHES / Compare matches, reading `gold_team_profile` instead of `gold_team_match_stats`, any number of matches |
@@ -325,7 +325,7 @@ Decisions (review of 2026-11-15):
 1. **Match library**: a new table `gold_match_library` (one row per match: teams, colours, score, kick-off date,
    competition, round, stadium, tracked share), built in step 2.
 2. **Live player stats "so far"** (distance, top speed, sprints, heatmap): computed in the page from the Kafka
-   positions, like C1, with the formulas of F4, F5 and FOO-07 (top speed with both positions detected). The formulas
+   positions, like C1, with the formulas of F4, F5 and the heatmap (top speed with both positions detected). The formulas
    live in one shared Python module used by the page, with a test that the live values at full time equal Gold. Spark
    computes only the 5-minute windows.
 3. **Player page**: one page with a fan mode and a coach mode.
@@ -385,30 +385,11 @@ In this order. Each step is one branch, merged before the next starts; "check" i
 | 3 | Player pages + pitch component | first, a full match (22 players and the ball, 4,428 s) in the pitch component inside the 1 s Live refresh; then the pitch component (section 8.2) on the Player page with heatmap, shots and passes layers; Squad as cards; a click on a card or a dot opens the Player page, fan or coach mode | Python tests of the data sent to each layer (counts equal Gold); one browser test (Playwright) that clicks a player and checks the page that opens; you click three players |
 | 4 | Fan pages | Match story (goals on the timeline, momentum, possession per 5 min with greyed windows, 3 key differences as sentences) and the finished Squad | page tests that read the numbers shown and compare them with Gold; screenshots of m001 and m002 |
 | 5 | Coach pages + Compare + 2 matches | Team analysis, Physical & fatigue, Event explorer, Player page coach mode; Compare matches with any matches; the Match library lists 2007448 and 1996435 (2011166 only if time allows) | `make data`, `make replay`, `make silver`, `make gold`, `make soda` green for every match; page tests; Compare shows Brisbane Roar in 3 matches |
-| 6 | Spark Streaming (FOO-08) | on Live, the 5-minute panel fills while the replay runs (F2, F4, F5, C3), and the player click shows his live stats so far | the streaming windows of a full replay compared with the batch twins (`gold_player_5min`, `gold_match_timeline`) of the same match, value by value; a test that the live stats so far at full time equal Gold (shared formula module); you watch a replay at x5 |
+| 6 | Spark Streaming | on Live, the 5-minute panel fills while the replay runs (F2, F4, F5, C3), and the player click shows his live stats so far | the streaming windows of a full replay compared with the batch twins (`gold_player_5min`, `gold_match_timeline`) of the same match, value by value; a test that the live stats so far at full time equal Gold (shared formula module); you watch a replay at x5 |
 | 7 | Replay | a stored match played at 0.25x to 8x with play/pause, trails, Voronoi, detected-only toggle, and the stats panel on click | frames sent = tracked seconds of the match; the panel at the last second equals the Gold totals; payload size measured; you play goal 5 of m001 at 4x |
 | 8 | Dagster + Behind the data | a Dagster asset graph (ingestion to Bronze, Silver, Gold, Soda checks) where a failing check blocks what follows; the Data quality, Pipeline & lineage and Sources & limits pages | one green Dagster run for a match; one run with a damaged table that stops at the check; the three pages in a browser |
 | 9 | Design and logo | MatchLens logo, colours and type, light and dark, cards and pitch in the same style | screenshots of every page in light and dark; no horizontal scroll at phone width (390 px) |
-| 10 | Demo preparation | the producer option "start at `mm:ss`" (so a replay can start 30 s before a goal), a command that empties the Kafka topics before a demo, and the demo script of section 13 | two timed dry runs of section 13 with a stopwatch, each under 10 minutes; a fresh start shows only the demo replay |
-
-## 13. Demo script (10 minutes)
-
-Before the jury arrives: stack up, Kafka topics emptied (step 10), Gold built for every match, the streaming job started
-(`make streaming`: it reads only new messages, so it must run before the replay starts), the app open on Home.
-
-| Time | Where | What happens | What we say |
-|---|---|---|---|
-| 0:00 - 0:30 | Home | the logo, "I am a Fan / I am a Coach", the Match library | one website, two personas, the same data |
-| 0:30 - 2:30 | LIVE / Live match | start `make replay` of m001 at x1 from 04:56; at 05:26 K. Jelacic scores, the score turns 1-0 within a second; click a Brisbane player: distance, top speed, sprints and heatmap so far; the 5-minute panel fills from Spark Streaming | Kafka at the speed of the real match; the live pitch and the streaming job read the same topics |
-| 2:30 - 4:00 | FAN VIEW | Match story of m001 (goals, momentum, possession, 3 key differences); Squad; open a player's page (scores, heatmap, top speed); his column in another match (F8) | every number answers a fan's question and says its limits |
-| 4:00 - 5:45 | COACH VIEW | Team analysis (shape with and without the ball, pressing by third, build-up, attack side); Physical & fatigue (who faded); Event explorer filtered on one player's runs | the same tables, read by a coach |
-| 5:45 - 6:45 | MATCHES / Compare matches | Brisbane Roar in three matches side by side, opponents named | "is this how the team usually plays?" |
-| 6:45 - 8:00 | MATCHES / Replay | m001 from 64:30, the 2-3 goal of A. Goodwin at 64:50, at 2x then 0.5x, Voronoi on, detected-only on; click the scorer: the stats panel | the replay of a stored match, our own viewer |
-| 8:00 - 9:30 | BEHIND THE DATA | Pipeline & lineage (Dagster graph, dbt lineage); Data quality: run the damaged-data demo and show the failing Soda check and the step it blocks | we trust a number because a check would stop it |
-| 9:30 - 10:00 | Sources & limits | SkillCorner open data, 1 Hz, estimated positions, no xG | what the data cannot say |
-
-The live clock is the replay clock (`ts`); the goal at 05:26 is `ts` 326 in Gold. The producer takes the start as `mm:ss`
-(step 10), so the replay starts at 04:56, 30 s before the goal.
+| 10 | Demo preparation | the producer option "start at `mm:ss`" (so a replay can start 30 s before a goal), a command that empties the Kafka topics before a demo | two timed dry runs with a stopwatch, each under 10 minutes; a fresh start shows only the demo replay |
 
 ## 14. More matches
 

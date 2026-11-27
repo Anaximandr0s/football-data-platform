@@ -1,4 +1,4 @@
-"""Live match (FOO-06): the match being replayed into Kafka (`make replay`), redrawn about once per second.
+"""Live match: the match being replayed into Kafka (`make replay`), redrawn about once per second.
 A click on a player shows his stats so far, with the formulas of Gold (playerstats.py)."""
 import time
 

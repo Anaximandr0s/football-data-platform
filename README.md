@@ -1,136 +1,250 @@
-# Football Data Platform
+<p align="center">
+  <img src="app/streamlit/assets/matchlens-logo.svg" alt="MatchLens" width="320">
+</p>
 
-A data platform for a club that follows a match live and analyses it afterwards. A real match
-(22 players tracked every second, about 1,800 game actions) is replayed into Kafka at speed x1 to x60,
-stored in a bronze / silver / gold lakehouse and shown in a Streamlit app.
+<p align="center">
+  Football tracking data, explained: live during the match, and in depth the day after.
+</p>
 
-> 100 % open source · data: [SkillCorner open data](https://github.com/SkillCorner/opendata) (MIT licence)
+<p align="center">
+  <a href="https://github.com/Anaximandr0s/football-data-platform/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Anaximandr0s/football-data-platform/actions/workflows/ci.yml/badge.svg"></a>
+  <img alt="Coverage gate" src="https://img.shields.io/badge/coverage-%E2%89%A590%25%20(CI%20gate)-146c34">
+  <a href="https://github.com/Anaximandr0s/football-data-platform/releases"><img alt="Release" src="https://img.shields.io/github/v/release/Anaximandr0s/football-data-platform?color=146c34"></a>
+  <a href="LICENSE"><img alt="Licence MIT" src="https://img.shields.io/badge/licence-MIT-146c34"></a>
+  <img alt="Python 3.11" src="https://img.shields.io/badge/python-3.11-3776AB?logo=python&logoColor=white">
+</p>
 
-## Architecture
+<p align="center">
+  <img alt="Apache Kafka" src="https://img.shields.io/badge/Apache%20Kafka-231F20?logo=apachekafka&logoColor=white">
+  <img alt="Apache Spark" src="https://img.shields.io/badge/Apache%20Spark-E25A1C?logo=apachespark&logoColor=white">
+  <img alt="Apache Iceberg" src="https://img.shields.io/badge/Apache%20Iceberg-2D5F8B">
+  <img alt="MinIO" src="https://img.shields.io/badge/MinIO-C72E49?logo=minio&logoColor=white">
+  <img alt="dbt" src="https://img.shields.io/badge/dbt-FF694B?logo=dbt&logoColor=white">
+  <img alt="DuckDB" src="https://img.shields.io/badge/DuckDB-FFF000?logo=duckdb&logoColor=black">
+  <img alt="Dagster" src="https://img.shields.io/badge/Dagster-4F43DD">
+  <img alt="Soda Core" src="https://img.shields.io/badge/Soda%20Core-2F2F2F">
+  <img alt="Streamlit" src="https://img.shields.io/badge/Streamlit-FF4B4B?logo=streamlit&logoColor=white">
+  <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white">
+  <img alt="Prometheus" src="https://img.shields.io/badge/Prometheus-E6522C?logo=prometheus&logoColor=white">
+  <img alt="Grafana" src="https://img.shields.io/badge/Grafana-F46800?logo=grafana&logoColor=white">
+  <img alt="Docker Compose" src="https://img.shields.io/badge/Docker%20Compose-2496ED?logo=docker&logoColor=white">
+</p>
 
-```mermaid
-flowchart LR
-    SC[SkillCorner open data] -->|download_foot| RAW[data/raw]
-    RAW -->|ingest_foot| PAR[data/prepared<br/>Parquet]
-    PAR -->|producer_foot x1..x60| K[(Kafka<br/>5 topics)]
-    K -->|bronze_writer| BR[(MinIO bronze)]
-    BR -->|Spark + Iceberg| SI[(Silver)]
-    SI -->|dbt + DuckDB| GO[(Gold)]
-    K -->|Spark Structured Streaming<br/>5-min windows| ST[Streamlit + mplsoccer]
-    GO --> ST
-    DAG[Dagster] -.-> SI & GO
-    SODA[Soda checks] -.-> SI & GO
-```
+<p align="center">
+  <img src="docs/img/readability/dark_live_match.png" alt="The Live match page: the pitch with every player, the score and the 5-minute statistics" width="860">
+</p>
 
-Two paths: **batch** (bronze → silver → gold, run by Dagster) and **stream** (live display).
-Details: [`docs/architecture.md`](docs/architecture.md). The ingestion part: [`ingestion/README.md`](ingestion/README.md).
+## Why MatchLens
 
-## Status
+One football match produces about 1.4 million positions: 22 players and the ball, 10 times a second, for about
+100 minutes. Nobody can read that. Professional analysis tools turn it into answers, but they are expensive and built
+for analysts, so a fan sees possession and shot counts with no story, and a small club has no analyst to ask.
 
-| Phase | Content | State |
+MatchLens replays real matches as a live feed, follows them second by second, and rebuilds every statistic once the
+final whistle blows. Every number on screen is checked and its definition is one click away.
+
+## Who it is for
+
+<table>
+  <tr>
+    <td width="96" align="center"><img src="docs/img/personas/fan.svg" width="56" alt=""></td>
+    <td>
+      <b>The fan</b>: "I want to understand my team."<br>
+      Who dominated the match? <b>Match story</b>: possession and danger, minute by minute.<br>
+      Who was the best player? <b>Player card</b>: five ratings out of 100, shots and passes.<br>
+      Why did we lose? <b>Three key differences</b>, in plain sentences.
+    </td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/img/personas/coach.svg" width="56" alt=""></td>
+    <td>
+      <b>The club coach</b>: "I want to understand how we play."<br>
+      Did our pressing work? <b>Team analysis</b>: pressing by quarter-hour and by zone.<br>
+      Who tires, and when? <b>Physical and fatigue</b>: the drop in intensity of each player.<br>
+      Home or away, the same team? <b>Compare matches</b>: the team's profile, match by match.
+    </td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/img/personas/head-coach.svg" width="56" alt=""></td>
+    <td>
+      <b>The national-team head coach</b>: the day after a match, they want fast, clear and reliable answers.<br>
+      Where did our pressing give way? Which players tired, and at what moment? How does the next opponent play in its
+      other matches? The match is in Gold 2.5 minutes after the final whistle, with the same pages as the club coach.
+    </td>
+  </tr>
+</table>
+
+| Match story (fan view) | Team analysis (coach view) | Player card (fan view) |
 |---|---|---|
-| Source | download and convert two real matches (m001, m002) | done |
-| Ingestion | replay into Kafka at x1..x60, 5 topics | done |
-| Bronze | MinIO, partitioned by match, counts verified | done |
-| Silver | Spark + Iceberg: cleaning, grain player x second | code and unit tests done, to run on the stack ([`spark/silver/README.md`](spark/silver/README.md)) |
-| Gold | dbt + DuckDB: 6 tables, tests, export to `s3://gold` | code and tests done, to run on the stack ([`dbt/README.md`](dbt/README.md)) |
-| Checks | Soda Core on Silver and Gold, 73 + 136 checks, failure demo | code and tests done, to run on the stack ([`soda/README.md`](soda/README.md)) |
-| Streaming stats (optional) | Spark Structured Streaming: 5- and 15-minute windows to the topic `foot-live-stats`, shown on Live; equal to Gold after a full replay ([`spark/streaming/live_stats.py`](spark/streaming/live_stats.py)) | done |
-| Orchestration | Dagster: the end of a replay runs bronze check -> Silver -> Soda -> Gold -> Soda -> report for its match; a failed check blocks what follows ([`dagster/README.md`](dagster/README.md)) | done |
-| Presentation | Streamlit + mplsoccer dashboard on Gold (live pitch page still to do) | code and tests done, to run on the stack ([`app/streamlit/README.md`](app/streamlit/README.md)) |
+| <img src="docs/img/match_story_m001.png" alt="Match story page" width="280"> | <img src="docs/img/team_analysis_m001.png" alt="Team analysis page" width="280"> | <img src="docs/img/player_fan_m001.png" alt="Player card page" width="280"> |
+
+More pages: [replay](docs/img/replay_goal_banner_m001.png) with the Voronoi space of each player,
+[player card for the coach](docs/img/player_coach_m001.png), [data quality](docs/img/data_quality_dimensions.png) and
+[pipeline lineage](docs/img/app_pipeline_lineage.png). Every page has a light and a dark theme and a palette that
+stays readable with [colour blindness](docs/img/readability/pitch_deuteranopia.png).
 
 ## Quick start
 
-Needs Docker with Compose, Python 3.11+, `make` (optional) and about 1 GB of disk.
-On Windows, read [`docs/windows.md`](docs/windows.md) first.
+Needs Docker with Compose, Python 3.11+, `make`, and about 1 GB of disk. On Windows, read
+[`docs/windows.md`](docs/windows.md) first.
 
 ```bash
 git clone https://github.com/Anaximandr0s/football-data-platform.git && cd football-data-platform
-cp .env.example .env                      # then change MINIO_ROOT_PASSWORD
-python -m venv .venv && source .venv/bin/activate    # or: uv venv .venv
-pip install -r requirements.txt           # or: uv pip install -r requirements.txt
-
-make up                                   # MinIO, Kafka, Kafka UI, Spark cluster, Bronze writer; buckets and topics created
-make ps
-make smoke                                # must end with ALL OK
-make lint
-make test
-make data MATCH=m001 SC_ID=1874553        # download (~100 MB) + convert match 1
-make data MATCH=m002 SC_ID=1925299        # same for match 2
-
-make replay MATCH=m001                    # replay at x60, about 100 seconds (the bronze-writer service stores it)
-make replay MATCH=m002
-make check MATCH=m001                     # bronze row counts must say OK
-make check MATCH=m002
-
-make silver MATCH="m001 m002"            # Silver on the Spark cluster (ARGS=--dry-run to only check)
-make gold                                # Gold: dbt + DuckDB, tests, export to s3://gold
-make gold-sql Q="select * from gold_shots limit 5"
-make soda                                # Soda checks on Silver then Gold (make soda-demo shows a failure on purpose)
-make app                                 # dashboard on http://localhost:8501
-make dagster                             # Dagster on http://localhost:3000: the next replay's end runs the chain
-make monitoring                          # Prometheus, alert emails, Grafana on http://localhost:3001 (monitoring/README.md)
-make demo                                # everything for the demo, then the Control Center on http://localhost:8000
-make benchmark                           # ~1 h, laptop busy: throughput, latency, load, recovery -> docs/performance.md
+python -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt
+make matches demo demo-reset     # download the 4 matches, start everything, replay each one at x60
 ```
 
-| Service | URL | Notes |
+Then open the Control Center on http://localhost:8000. `make up` creates `.env` from `.env.example`: change the
+passwords there before exposing any port.
+
+## Manage it from the Control Center
+
+<img src="docs/img/control-center/control_center.png" alt="The Control Center: the architecture with a status light on each box, a match to play and the performance numbers" width="860">
+
+One local page to run and watch the whole platform without typing a command:
+
+- **Architecture with live status**: a light on each box (Kafka, Spark, MinIO, Dagster, Soda, the apps) from
+  Prometheus. Click a box for its role, its live numbers and a link to its own tool.
+- **Play a match**: pick one of the four, a speed (x1, x5, x10) and a start (kick-off, 30 s before the first goal, or
+  a match clock such as 47:30). Its progress is what Kafka actually received. At most two replays at once.
+- **Pipeline runs**: the Dagster step each replay is on, from Bronze to the match report.
+- **Performance and quality**: live delay, freshness, check results and capacity, measured, with their date.
+
+Starting and stopping a replay are its only two actions; everything else is read-only. Details:
+[`app/api/README.md`](app/api/README.md).
+
+| Service | URL |
+|---|---|
+| Control Center | http://localhost:8000 |
+| Dashboard (Streamlit) | http://localhost:8501 |
+| Dagster | http://localhost:3000 |
+| Grafana | http://localhost:3001 |
+| Kafka UI | http://localhost:8081 |
+| MinIO console | http://localhost:9001 |
+| Spark master UI | http://localhost:8082 |
+
+Every port is bound to `127.0.0.1`. `make help` lists every command; `make down` stops the stack and keeps the data,
+`make reset` deletes it.
+
+## How it works
+
+<img src="docs/img/control-center/matchlens-architecture@2x.png" alt="MatchLens architecture: get the data, move it live, store and check, show it" width="860">
+
+1. **Get the data.** SkillCorner open data is downloaded and converted to five Parquet tables, one position per player
+   per second (`ingestion/`).
+2. **Move it live.** A producer replays a match into five Kafka topics at x1 to x60, every message tagged with its
+   replay. Spark Structured Streaming computes 5- and 15-minute statistics into a compacted topic, and the Live page
+   shows the pitch, the score and those statistics.
+3. **Store and check.** A writer stores the raw messages in MinIO (Bronze). At the final whistle a Dagster sensor runs
+   the match's chain: Bronze count check, Spark job to Iceberg tables (Silver), Soda checks, dbt models in DuckDB
+   (Gold, 17 tables), Soda checks again, match report. A failed check stops what follows.
+4. **Show it.** The Streamlit app reads Gold for the fan and coach views; the Control Center and Grafana show the
+   platform itself.
+
+Layers, topics, partitioning and design decisions: [`docs/architecture.md`](docs/architecture.md).
+
+## The dataset
+
+[SkillCorner open data](https://github.com/SkillCorner/opendata) (MIT licence): broadcast tracking of the Australian
+A-League, season 2024/25. Three files per match, about 100 MB: the match sheet (teams, lineups, score, pitch size), the
+tracking (x, y of the 22 players and x, y, z of the ball, 10 frames a second) and the events (passes, shots, pressing,
+runs; more than 300 columns).
+
+| Id | Match | Date |
 |---|---|---|
-| MinIO console | http://localhost:9001 | user and password from `.env` |
-| MinIO S3 API | http://localhost:9000 | buckets `bronze`, `silver`, `gold` |
-| Kafka UI | http://localhost:8081 | topics, messages, consumer groups |
-| Spark master UI | http://localhost:8082 | cluster for Silver (`spark://spark-master:7077` inside Docker) |
-| Dashboard | http://localhost:8501 | after `make app` (needs `make gold`) |
-| Dagster | http://localhost:3000 | after `make dagster` |
-| Control Center | http://localhost:8000 | after `make demo`: the architecture with live status, play a match, performance |
-| Grafana | http://localhost:3001 | after `make monitoring`; login from `.env`; Prometheus :9090, Alertmanager :9093 |
-| Kafka from your machine | `localhost:29092` | Python scripts and Spark outside Docker |
-| Kafka from containers | `kafka:9092` | |
+| m001 | Brisbane Roar 2-3 Adelaide United | 23 Nov 2024 |
+| m002 | Brisbane Roar 0-1 Perth Glory | 21 Dec 2024 |
+| m003 | Perth Glory 1-3 Brisbane Roar | 15 Mar 2025 |
+| m004 | Sydney FC 4-1 Adelaide United | 1 Feb 2025 |
 
-Other commands: `make silver` · `make gold` · `make soda` · `make app` · `make help` · `make down` (keep data) · `make reset` (**deletes all data**) ·
-`make counts` (messages per topic) · `make lint` · `make test`.
+What to know about it, measured on these matches:
 
-Troubleshooting:
-- Replaying the same match twice doubles its rows in Kafka and bronze. This is expected: Silver deduplicates.
-- Windows: see [`docs/windows.md`](docs/windows.md).
+- **Broadcast gaps.** Only the pitch the TV shows is tracked: 73 % of the seconds of m001 have positions, and the
+  longest gap lasts 2 min 23 s. Distances and sprints cover tracked time only.
+- **Estimated positions.** A player outside the TV frame is placed by SkillCorner's model (about 42 % of the rows);
+  MatchLens keeps these positions and flags them (`is_detected`).
+- **One position per second.** The 10 frames a second are reduced to 1 per player: 97,416 tracking rows for m001
+  instead of about 974,000.
+- **Derived values.** Speed comes from positions one second apart, and goals from the score. The derived goals match
+  the real score in all four matches.
 
-## Repository layout
+Raw files are downloaded to `data/raw` and never committed. Sources, limits and how to add a match:
+[`docs/data-sources.md`](docs/data-sources.md). Every table and column: [`docs/contrat_donnees.md`](docs/contrat_donnees.md).
 
-| Folder | Content | State |
+## Monitoring
+
+Prometheus scrapes every service every 15 s, Grafana shows four dashboards, and Alertmanager sends an email when a
+container stops, consumer lag grows, the streaming job stalls, or a pipeline run or a check fails.
+
+| Service levels | Pipeline |
+|---|---|
+| <img src="docs/img/monitoring/grafana_slo.png" alt="Grafana: service levels" width="420"> | <img src="docs/img/monitoring/grafana_pipeline.png" alt="Grafana: pipeline" width="420"> |
+| **Streaming during a replay** | **Infrastructure** |
+| <img src="docs/img/monitoring/grafana_streaming_during_replay.png" alt="Grafana: streaming during a replay" width="420"> | <img src="docs/img/monitoring/grafana_infrastructure.png" alt="Grafana: infrastructure" width="420"> |
+
+Measured on one laptop (Ryzen 5 7530U, 14 GiB, everything in Docker) by `make benchmark`:
+
+| Service level | Target | Measured |
 |---|---|---|
-| `ingestion/` | download, convert, replay into Kafka, bronze writer ([guide](ingestion/README.md)) | done |
-| `tests/<part>/` | Python tests, one folder per part (`tests/ingestion/`, `tests/spark/`, `tests/dbt/`, `tests/soda/`, `tests/app/`) | ingestion to dashboard done |
-| `scripts/` | `smoke_test.py`: health of the Docker stack | done |
-| `docs/` | contract, guides, ADRs | in progress |
-| `spark/` | Silver job (`spark/silver/`, [guide](spark/silver/README.md)); streaming job (`spark/streaming/`, `make streaming`) | done |
-| `dbt/` | Gold models, dbt tests, Dockerfile ([guide](dbt/README.md)) | Gold code done |
-| `soda/` | data-quality checks on Silver and Gold, runner, Dockerfile ([guide](soda/README.md)) | Soda code done |
-| `dagster/` | Dagster assets, sensor, schedule, image ([guide](dagster/README.md)) | done |
-| `app/` | Streamlit dashboard (`app/streamlit/`, [guide](app/streamlit/README.md)), optional 3D page (`app/web3d/`) and API | dashboard code done, live page and bonus to do |
+| Live delay, p95 at x1 | < 2 s | 0.49 s |
+| Final whistle to Gold ready | < 10 min | 2.5 min |
+| Pipeline run success over 7 days | ≥ 95 % | 90.9 % (96.2 % since the last fix) |
+
+Throughput, latency, load test and recovery: [`docs/performance.md`](docs/performance.md). Dashboards and alerts:
+[`monitoring/README.md`](monitoring/README.md).
+
+## Data quality
+
+Soda Core runs 73 checks on Silver and 136 on Gold, each mapped to a quality dimension (completeness, uniqueness,
+validity, consistency, accuracy). They run inside the Dagster chain and block it on failure, and again every night.
+`make soda-demo` damages a copy of the data to show the checks catching it. Silver also refuses a match whose row
+counts or goals differ from the source.
+
+<img src="docs/img/dagster_asset_graph.png" alt="Dagster asset graph: bronze, silver, soda checks, dbt models, match report" width="860">
+
+## Tests
+
+```bash
+make ci            # lint, tests with coverage, config checks
+```
+
+- 308 tests, no Docker needed: Kafka, S3 and HTTP are replaced by small fakes, while Spark, DuckDB, dbt and Dagster run
+  for real on a small hand-made match.
+- CI on every pull request: lint, unit tests, Soda tests in their own environment, combined coverage of at least
+  90 %, Prometheus and Alertmanager config checks, and a build of every Docker image.
+- Pushing a `vX.Y.Z` tag runs the same CI, then publishes a GitHub release.
+
+## Limits
+
+- Runs on one machine: single Kafka broker, single MinIO node, no login on the apps. It is a demonstration platform,
+  not a hosted service.
+- The data is broadcast tracking: about a quarter of each match has no positions, and some positions are estimated.
+- Matches are compared at team level; players are followed across matches on their page, but not grouped into
+  profiles.
+- Run success is under its 95 % target over 7 days; the failed runs and their causes are in
+  [`docs/performance.md`](docs/performance.md).
 
 ## Documentation
 
-- Silver job (what it does, tables, decisions, checks): [`spark/silver/README.md`](spark/silver/README.md)
-- Gold layer (tables, definitions, tests, how to run): [`dbt/README.md`](dbt/README.md)
-- Data quality (what is checked, the failure demo): [`soda/README.md`](soda/README.md)
-- Dashboard (pages, how to read the graphics): [`app/streamlit/README.md`](app/streamlit/README.md)
-- Ingestion guide (files, outputs, how to verify): [`ingestion/README.md`](ingestion/README.md)
-- Data contract (every table, column, rule): [`docs/contrat_donnees.md`](docs/contrat_donnees.md)
-- Where the data comes from and its limits: [`docs/data-sources.md`](docs/data-sources.md)
-- Architecture and decisions: [`docs/architecture.md`](docs/architecture.md), [`docs/adr/`](docs/adr/)
-- How we work: [`CONTRIBUTING.md`](CONTRIBUTING.md)
+| Part | Read |
+|---|---|
+| Ingestion: download, convert, replay, Bronze | [`ingestion/README.md`](ingestion/README.md) |
+| Silver: the Spark job | [`spark/silver/README.md`](spark/silver/README.md) |
+| Gold: dbt models and definitions | [`dbt/README.md`](dbt/README.md) |
+| Data quality: Soda checks | [`soda/README.md`](soda/README.md) |
+| Orchestration: Dagster | [`dagster/README.md`](dagster/README.md) |
+| Dashboard: pages and how to read them | [`app/streamlit/README.md`](app/streamlit/README.md) |
+| Control Center | [`app/api/README.md`](app/api/README.md) |
+| Monitoring | [`monitoring/README.md`](monitoring/README.md) |
+| Product: views, pages and statistics | [`docs/product.md`](docs/product.md) |
+| Data contract | [`docs/contrat_donnees.md`](docs/contrat_donnees.md) |
+| Contributing, security | [`CONTRIBUTING.md`](CONTRIBUTING.md), [`SECURITY.md`](SECURITY.md) |
 
-## Possible extensions (not started)
+## Licence
 
-- A live 3D page: positions, ball height and kit colours are already in the data.
-- Player-level comparison between matches (needs a persistent player id; today ids are match-local).
-
-## Open-source tools and data
-
-MinIO (AGPLv3) · Apache Kafka, Kafka UI (Apache-2.0) · Spark, Iceberg, Dagster, dbt-core, DuckDB,
-Soda Core, Streamlit, mplsoccer (Apache-2.0 / MIT). Verify licences when adding a tool.
-Tracking and event data: SkillCorner open data (MIT). Credit SkillCorner in the app and the report.
+Code under the [MIT licence](LICENSE). Data by SkillCorner (MIT), not redistributed here. Third-party code, icons and
+logos: [`NOTICE`](NOTICE).
 
 ---
 
-Made with love by [@Anaximandr0s](https://github.com/Anaximandr0s) and [@Et-taky](https://github.com/Et-taky).
+<p align="center">Made with love by <a href="https://github.com/Anaximandr0s">@Anaximandr0s</a> and <a href="https://github.com/Et-taky">@Et-taky</a>.</p>

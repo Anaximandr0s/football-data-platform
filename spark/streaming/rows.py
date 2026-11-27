@@ -1,4 +1,4 @@
-"""rows.py: the rows of foot-live-stats, built from the window counts of the streaming job (FOO-08). Pure Python: no
+"""rows.py: the rows of foot-live-stats, built from the window counts of the streaming job. Pure Python: no
 Spark, no Kafka, so the formulas and the completion rule are unit-tested (tests/spark/test_streaming_rows.py).
 
 Each row is the full current value of one window (never an increment): sending it again after a restart overwrites,

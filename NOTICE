@@ -11,6 +11,8 @@ Licence text: app/web3d/d3-delaunay.LICENSE. Used for the Voronoi cells of the R
 app/api/static/icons/*.svg: Tabler Icons 3.19.0 (https://github.com/tabler/tabler-icons), outline set. MIT licence,
 Copyright (c) 2020-2024 Paweł Kuna. Licence text: app/api/static/icons/LICENSE. Used in the Control Center's diagram;
 generic shapes only, no product logo.
+docs/img/personas/*.svg: Tabler Icons 3.19.0 (user-heart, clipboard-data, flag) on a green badge, same MIT licence
+(docs/img/personas/LICENSE-tabler). Used for the personas in README.md.
 
 Technology logos (Control Center diagram, app/api/static/logos/), used unmodified next to the tools' names
 -------------------------------------------------------------------------------------------------------------

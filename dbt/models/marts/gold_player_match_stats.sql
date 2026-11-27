@@ -1,4 +1,4 @@
--- Grain: one row per player per match (FOO-04). Distances, speeds and sprints cover TRACKED seconds only
+-- Grain: one row per player per match. Distances, speeds and sprints cover TRACKED seconds only
 -- (about 3/4 of the match) and come from 1 Hz positions: approximate by construction.
 with trk_flagged as (
     select match_id, player_id, ts, speed_kmh, is_sprint, x, y,

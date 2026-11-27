@@ -1,4 +1,4 @@
-"""live_stats.py: Spark Structured Streaming job of FOO-08. Reads the replay topics, computes per football window the
+"""live_stats.py: Spark Structured Streaming job. Reads the replay topics, computes per football window the
 live stats of docs/product.md (F2 possession, F4 distance and F5 top speed per player, C3 pressing) with the formulas
 of Gold, and writes them to the compacted Kafka topic foot-live-stats, which the Live page reads.
 
