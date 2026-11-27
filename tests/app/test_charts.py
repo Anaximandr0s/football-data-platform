@@ -1,4 +1,5 @@
 """charts.with_crossings: the possession and territory areas must follow their line where it crosses 50 %."""
+
 import pandas as pd
 
 import charts

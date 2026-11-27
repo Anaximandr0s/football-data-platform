@@ -9,20 +9,21 @@ They are the formulas of Silver and Gold, so the live values at full time equal 
   heatmap    seconds per cell of the 6 x 4 grid (gold_zone_occupancy)
 Pure functions: no Kafka, no Streamlit.
 """
+
 import math
 from dataclasses import dataclass
 
 PITCH_L, PITCH_W = 105.0, 68.0
 ZONES_X, ZONES_Y = 6, 4
 SPRINT_KMH = 25.0
-MAX_SPEED_KMH = 40.0       # Silver's rule: faster is a jump between positions, not a run (spark/silver/config.py)
+MAX_SPEED_KMH = 40.0  # Silver's rule: faster is a jump between positions, not a run (spark/silver/config.py)
 RIGHT_TO_LEFT = "right_to_left"
 
 
 @dataclass(frozen=True)
 class Second:
     ts: int
-    x: float          # Silver frame (see silver_xy)
+    x: float  # Silver frame (see silver_xy)
     y: float
     speed_kmh: float | None
     is_detected: bool
@@ -34,7 +35,7 @@ class PlayerStats:
     distance_m: float
     sprint_count: int
     top_speed_kmh: float | None
-    zones: dict          # zone_id -> seconds
+    zones: dict  # zone_id -> seconds
 
 
 def flip_xy(x: float, y: float, period: int, home_side_p1: str | None, home_side_p2: str | None) -> tuple:
@@ -62,7 +63,7 @@ def player_stats(seconds: list[Second]) -> PlayerStats:
     distance, sprints, top, zones = 0.0, 0, None, {}
     prev = before = None
     for s in sorted(seconds, key=lambda s: s.ts):
-        if s.speed_kmh is not None and s.speed_kmh > MAX_SPEED_KMH:     # Live gets bronze's raw speed
+        if s.speed_kmh is not None and s.speed_kmh > MAX_SPEED_KMH:  # Live gets bronze's raw speed
             s = Second(s.ts, s.x, s.y, None, s.is_detected)
         if s.speed_kmh is not None:
             distance += s.speed_kmh / 3.6
@@ -70,9 +71,17 @@ def player_stats(seconds: list[Second]) -> PlayerStats:
         prev_sprint = prev is not None and prev.speed_kmh is not None and prev.speed_kmh > SPRINT_KMH
         if sprint and not (prev_sprint and s.ts - prev.ts == 1):
             sprints += 1
-        held = (prev is not None and before is not None and s.ts - prev.ts == 1 and prev.ts - before.ts == 1
-                and s.is_detected and prev.is_detected and before.is_detected
-                and s.speed_kmh is not None and prev.speed_kmh is not None)
+        held = (
+            prev is not None
+            and before is not None
+            and s.ts - prev.ts == 1
+            and prev.ts - before.ts == 1
+            and s.is_detected
+            and prev.is_detected
+            and before.is_detected
+            and s.speed_kmh is not None
+            and prev.speed_kmh is not None
+        )
         if held:
             speed = min(s.speed_kmh, prev.speed_kmh)
             top = speed if top is None else max(top, speed)

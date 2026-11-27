@@ -1,4 +1,5 @@
 """The Dagster code location of the platform (dagster/workspace.yaml). Guide: dagster/README.md."""
+
 import dagster as dg
 from dagster_dbt import DbtCliResource
 

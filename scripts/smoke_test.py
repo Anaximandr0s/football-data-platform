@@ -1,8 +1,9 @@
 """Smoke test of the platform: MinIO, buckets, Kafka, topics, Kafka UI. Standard library only.
 
-    python scripts/smoke_test.py                        (Windows: python scripts\\smoke_test.py)
-    DOCKER="sudo docker" python scripts/smoke_test.py   (only if Docker needs sudo on your machine)
+python scripts/smoke_test.py                        (Windows: python scripts\\smoke_test.py)
+DOCKER="sudo docker" python scripts/smoke_test.py   (only if Docker needs sudo on your machine)
 """
+
 import os
 import re
 import shlex
@@ -28,8 +29,16 @@ def load_env() -> dict:
 def compose(*args: str, timeout: int = 60) -> str:
     cmd = [*DOCKER, "compose", *args]
     try:
-        r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, encoding="utf-8",
-                           errors="replace", stdin=subprocess.DEVNULL, timeout=timeout)
+        r = subprocess.run(
+            cmd,
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            stdin=subprocess.DEVNULL,
+            timeout=timeout,
+        )
     except subprocess.TimeoutExpired as e:
         raise RuntimeError(f"timeout after {timeout}s") from e
     except OSError as e:
@@ -69,9 +78,17 @@ def main() -> int:
 
     print("Kafka")
     try:
-        out = compose("exec", "-T", "-e", "KAFKA_HEAP_OPTS=-Xmx128m", "kafka",
-                      "/opt/kafka/bin/kafka-topics.sh", "--bootstrap-server", "localhost:9092",
-                      "--describe")
+        out = compose(
+            "exec",
+            "-T",
+            "-e",
+            "KAFKA_HEAP_OPTS=-Xmx128m",
+            "kafka",
+            "/opt/kafka/bin/kafka-topics.sh",
+            "--bootstrap-server",
+            "localhost:9092",
+            "--describe",
+        )
     except RuntimeError as e:
         out = ""
         check("Kafka reachable", False, str(e))

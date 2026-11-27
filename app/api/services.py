@@ -1,5 +1,6 @@
 """services.py: the Control Center's edges: Prometheus, Dagster, the Gold file, Kafka (what each replay has really
 sent) and the producer processes. Everything else is in core.py."""
+
 import json
 import os
 import subprocess
@@ -37,7 +38,7 @@ class Prometheus:
         q = urllib.parse.urlencode({"query": expr})
         try:
             return http_json(f"{self.url}/api/v1/query?{q}")["data"]["result"]
-        except OSError:                      # Prometheus stopped: the page shows grey lights, not an error
+        except OSError:  # Prometheus stopped: the page shows grey lights, not an error
             return []
 
     def value(self, expr: str) -> float | None:
@@ -50,8 +51,10 @@ class Prometheus:
 
 def running_pipeline_runs() -> list[dict]:
     """Dagster match_pipeline runs queued or running: the stored path of the diagram moves while there is one."""
-    q = ('{ runsOrError(filter: {statuses: [QUEUED, STARTING, STARTED], pipelineName: "match_pipeline"}) '
-         '{ ... on Runs { results { runId status tags { key value } stepStats { stepKey status } } } } }')
+    q = (
+        '{ runsOrError(filter: {statuses: [QUEUED, STARTING, STARTED], pipelineName: "match_pipeline"}) '
+        "{ ... on Runs { results { runId status tags { key value } stepStats { stepKey status } } } } }"
+    )
     try:
         runs = http_json(DAGSTER, {"query": q})["data"]["runsOrError"]["results"]
     except (OSError, KeyError):
@@ -60,15 +63,24 @@ def running_pipeline_runs() -> list[dict]:
     for r in runs:
         tags = {t["key"]: t["value"] for t in r["tags"]}
         step = next((s["stepKey"] for s in r["stepStats"] if s["status"] == "IN_PROGRESS"), None)
-        out.append({"run_id": r["runId"], "status": r["status"], "match_id": tags.get("dagster/partition"),
-                    "replay_id": tags.get("replay_id"), "step": step})
+        out.append(
+            {
+                "run_id": r["runId"],
+                "status": r["status"],
+                "match_id": tags.get("dagster/partition"),
+                "replay_id": tags.get("replay_id"),
+                "step": step,
+            }
+        )
     return out
 
 
 def replay_run(replay_id: str) -> dict | None:
     """The Dagster run the sensor started for a replay (its run key is the replay id), None before it exists."""
-    q = ('query ($rid: String!) { runsOrError(filter: {tags: [{key: "dagster/run_key", value: $rid}]}, limit: 1) '
-         '{ ... on Runs { results { runId status endTime stepStats { stepKey status } } } } }')
+    q = (
+        'query ($rid: String!) { runsOrError(filter: {tags: [{key: "dagster/run_key", value: $rid}]}, limit: 1) '
+        "{ ... on Runs { results { runId status endTime stepStats { stepKey status } } } } }"
+    )
     try:
         runs = http_json(DAGSTER, {"query": q, "variables": {"rid": replay_id}})["data"]["runsOrError"]["results"]
     except (OSError, KeyError):
@@ -76,8 +88,12 @@ def replay_run(replay_id: str) -> dict | None:
     if not runs:
         return None
     r = runs[0]
-    return {"run_id": r["runId"], "status": r["status"], "ended_at": r["endTime"],
-            "chips": core.chips({s["stepKey"]: s["status"] for s in r["stepStats"]}, r["status"])}
+    return {
+        "run_id": r["runId"],
+        "status": r["status"],
+        "ended_at": r["endTime"],
+        "chips": core.chips({s["stepKey"]: s["status"] for s in r["stepStats"]}, r["status"]),
+    }
 
 
 def gold_matches() -> dict[str, core.Match]:
@@ -93,8 +109,18 @@ def gold_matches() -> dict[str, core.Match]:
             order by l.match_date desc""").fetchall()
     finally:
         con.close()
-    return {r[0]: core.Match(r[0], f"{r[1]} {r[3]}-{r[4]} {r[2]} · {r[5]:%d %b %Y}", int(r[6]), int(r[7]), int(r[8]),
-                             int(r[9]), None if r[10] is None else int(r[10])) for r in rows}
+    return {
+        r[0]: core.Match(
+            r[0],
+            f"{r[1]} {r[3]}-{r[4]} {r[2]} · {r[5]:%d %b %Y}",
+            int(r[6]),
+            int(r[7]),
+            int(r[8]),
+            int(r[9]),
+            None if r[10] is None else int(r[10]),
+        )
+        for r in rows
+    }
 
 
 class KafkaWatch(threading.Thread):
@@ -111,11 +137,23 @@ class KafkaWatch(threading.Thread):
     def run(self) -> None:
         from confluent_kafka import Consumer, TopicPartition
 
-        c = Consumer({"bootstrap.servers": self.bootstrap, "group.id": f"control-center-{time.time_ns()}",
-                      "enable.auto.commit": False, "log_level": 3})
+        c = Consumer(
+            {
+                "bootstrap.servers": self.bootstrap,
+                "group.id": f"control-center-{time.time_ns()}",
+                "enable.auto.commit": False,
+                "log_level": 3,
+            }
+        )
         meta = c.list_topics(timeout=10).topics
-        c.assign([TopicPartition(t, p, c.get_watermark_offsets(TopicPartition(t, p), timeout=10)[1])
-                  for t in REPLAY_TOPICS if t in meta for p in meta[t].partitions])
+        c.assign(
+            [
+                TopicPartition(t, p, c.get_watermark_offsets(TopicPartition(t, p), timeout=10)[1])
+                for t in REPLAY_TOPICS
+                if t in meta
+                for p in meta[t].partitions
+            ]
+        )
         while True:
             msgs = c.consume(1000, 0.5)
             now = time.time()
@@ -150,7 +188,7 @@ class Replays:
 
     def __init__(self, bootstrap: str = BOOTSTRAP):
         self.bootstrap = bootstrap
-        self.items: dict[str, dict] = {}       # match_id -> its latest replay, running or not
+        self.items: dict[str, dict] = {}  # match_id -> its latest replay, running or not
         self.lock = threading.Lock()
 
     def running(self) -> dict[str, str]:
@@ -164,18 +202,41 @@ class Replays:
             running = {mid: r["replay_id"] for mid, r in self.items.items() if r["proc"].poll() is None}
             speed = core.check_start(m, speed, prepared, running)
             start_ts = core.start_second(m, start)
-            proc = subprocess.Popen([sys.executable, "-m", "ingestion.producer_foot", "--match", m.match_id,
-                                     "--speed", str(speed), "--start", str(start_ts), "--bootstrap", self.bootstrap],
-                                    cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
-                                    env={**os.environ, "PYTHONPATH": str(ROOT)})
-            replay = next((line.strip().removeprefix("replay_id=") for line in proc.stdout
-                           if line.startswith("replay_id=")), None)
+            proc = subprocess.Popen(
+                [
+                    sys.executable,
+                    "-m",
+                    "ingestion.producer_foot",
+                    "--match",
+                    m.match_id,
+                    "--speed",
+                    str(speed),
+                    "--start",
+                    str(start_ts),
+                    "--bootstrap",
+                    self.bootstrap,
+                ],
+                cwd=ROOT,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                env={**os.environ, "PYTHONPATH": str(ROOT)},
+            )
+            replay = next(
+                (line.strip().removeprefix("replay_id=") for line in proc.stdout if line.startswith("replay_id=")), None
+            )
             if replay is None:
                 proc.stdout.close()
                 raise core.Refused(f"the producer of {m.match_id} stopped before sending (exit {proc.wait()})")
-            threading.Thread(target=proc.stdout.read, daemon=True).start()   # a full pipe would block it
-            self.items[m.match_id] = {"proc": proc, "replay_id": replay, "speed": speed, "start_ts": start_ts,
-                                      "started_at": time.time(), "stopped": False}
+            threading.Thread(target=proc.stdout.read, daemon=True).start()  # a full pipe would block it
+            self.items[m.match_id] = {
+                "proc": proc,
+                "replay_id": replay,
+                "speed": speed,
+                "start_ts": start_ts,
+                "started_at": time.time(),
+                "stopped": False,
+            }
             return replay
 
     def stop(self, match_id: str) -> bool:
@@ -193,7 +254,13 @@ class Replays:
             out = {}
             for m, r in self.items.items():
                 code = r["proc"].poll()
-                out[m] = {"replay_id": r["replay_id"], "speed": r["speed"], "start_ts": r["start_ts"],
-                          "started_at": r["started_at"], "running": code is None,
-                          "finished": code == 0 and not r["stopped"], "stopped": r["stopped"]}
+                out[m] = {
+                    "replay_id": r["replay_id"],
+                    "speed": r["speed"],
+                    "start_ts": r["start_ts"],
+                    "started_at": r["started_at"],
+                    "running": code is None,
+                    "finished": code == 0 and not r["stopped"],
+                    "stopped": r["stopped"],
+                }
             return out

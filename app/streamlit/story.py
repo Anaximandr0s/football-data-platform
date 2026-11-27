@@ -4,6 +4,7 @@ Each function returns a Sentence: the text a fan reads and the Gold numbers it w
 can be checked against Gold (tests/app/test_story.py and the proof of step 4). Sentences state differences, never
 causes: "had more", never "won because". Pure functions: DataFrames in, sentences out.
 """
+
 from dataclasses import dataclass, field
 
 import pandas as pd
@@ -17,7 +18,7 @@ class Sentence:
     facts: dict = field(default_factory=dict)
 
 
-Bounds = tuple[int, int | None]   # (p1_start_ts, p2_start_ts): what the football clock needs
+Bounds = tuple[int, int | None]  # (p1_start_ts, p2_start_ts): what the football clock needs
 
 
 def _spell(timeline: pd.DataFrame, window_index: int) -> str:
@@ -46,10 +47,16 @@ def goals(shots: pd.DataFrame, short: dict, score: tuple[int, int], bounds: Boun
         return Sentence(f"No goal: the match ended {final}.", facts)
     first, last = g.iloc[0], g.iloc[-1]
     if len(g) == 1:
-        return Sentence(f"One goal: {short[first.team_id]} scored it in minute {minute(first)} "
-                        f"({first.player_short_name}), final score {final}.", facts)
-    return Sentence(f"{len(g)} goals. {short[first.team_id]} scored first (minute {minute(first)}), "
-                    f"{short[last.team_id]} scored the last one (minute {minute(last)}): final score {final}.", facts)
+        return Sentence(
+            f"One goal: {short[first.team_id]} scored it in minute {minute(first)} "
+            f"({first.player_short_name}), final score {final}.",
+            facts,
+        )
+    return Sentence(
+        f"{len(g)} goals. {short[first.team_id]} scored first (minute {minute(first)}), "
+        f"{short[last.team_id]} scored the last one (minute {minute(last)}): final score {final}.",
+        facts,
+    )
 
 
 def momentum(timeline: pd.DataFrame, short: dict) -> Sentence:
@@ -59,11 +66,19 @@ def momentum(timeline: pd.DataFrame, short: dict) -> Sentence:
     home_ahead, away_ahead = int((diff > 0).sum()), int((diff < 0).sum())
     leader = "HOME" if home_ahead >= away_ahead else "AWAY"
     best = diff.idxmax() if leader == "HOME" else diff.idxmin()
-    facts = {"windows": len(diff), "home_ahead": home_ahead, "away_ahead": away_ahead,
-             "best_window": int(best), "best_value": float(diff[best])}
+    facts = {
+        "windows": len(diff),
+        "home_ahead": home_ahead,
+        "away_ahead": away_ahead,
+        "best_window": int(best),
+        "best_value": float(diff[best]),
+    }
     ahead = home_ahead if leader == "HOME" else away_ahead
-    return Sentence(f"{short[leader]} created more danger with its passes in {ahead} of the {len(diff)} five-minute "
-                    f"spells; its strongest spell was minutes {_spell(timeline, best)}.", facts)
+    return Sentence(
+        f"{short[leader]} created more danger with its passes in {ahead} of the {len(diff)} five-minute "
+        f"spells; its strongest spell was minutes {_spell(timeline, best)}.",
+        facts,
+    )
 
 
 def possession(timeline: pd.DataFrame, profile: pd.DataFrame, short: dict) -> Sentence:
@@ -71,7 +86,9 @@ def possession(timeline: pd.DataFrame, profile: pd.DataFrame, short: dict) -> Se
     share = profile.set_index("team_id").possession_share
     greyed = int(timeline[timeline.team_id == "HOME"].possession_greyed.sum())
     if share.isna().all():
-        return Sentence("No second with a known owner of the ball: possession cannot be told.", {"greyed_windows": greyed})
+        return Sentence(
+            "No second with a known owner of the ball: possession cannot be told.", {"greyed_windows": greyed}
+        )
     leader = share.idxmax()
     mine = timeline[(timeline.team_id == leader) & ~timeline.possession_greyed]
     facts = {"leader": leader, "share": float(share[leader]), "greyed_windows": greyed}
@@ -81,8 +98,10 @@ def possession(timeline: pd.DataFrame, profile: pd.DataFrame, short: dict) -> Se
     else:
         best = mine.loc[mine.possession_share.idxmax()]
         facts |= {"best_window": int(best.window_index), "best_share": float(best.possession_share)}
-        text += (f"; its best spell was minutes {_spell(timeline, int(best.window_index))} with "
-                 f"{_pct(best.possession_share)}.")
+        text += (
+            f"; its best spell was minutes {_spell(timeline, int(best.window_index))} with "
+            f"{_pct(best.possession_share)}."
+        )
     if greyed:
         text += f" {greyed} spell{'s are' if greyed > 1 else ' is'} greyed: under 60 seconds with a known owner."
     return Sentence(text, facts)
@@ -97,24 +116,36 @@ def field_tilt(timeline: pd.DataFrame, profile: pd.DataFrame, short: dict) -> Se
     home_more, away_more = int((w["HOME"] > w["AWAY"]).sum()), int((w["AWAY"] > w["HOME"]).sum())
     leader = tilt.idxmax()
     more = home_more if leader == "HOME" else away_more
-    return Sentence(f"{short[leader]} played more passes from the final third than {short[_other(leader)]} in "
-                    f"{more} of the {len(w)} five-minute spells, {_pct(tilt[leader])} of them over the match.",
-                    {"leader": leader, "home": float(tilt["HOME"]), "away": float(tilt["AWAY"]),
-                     "home_more": home_more, "away_more": away_more, "windows": len(w)})
+    return Sentence(
+        f"{short[leader]} played more passes from the final third than {short[_other(leader)]} in "
+        f"{more} of the {len(w)} five-minute spells, {_pct(tilt[leader])} of them over the match.",
+        {
+            "leader": leader,
+            "home": float(tilt["HOME"]),
+            "away": float(tilt["AWAY"]),
+            "home_more": home_more,
+            "away_more": away_more,
+            "windows": len(w),
+        },
+    )
 
 
 # F7: one sentence per metric, the team with more first; units as a fan reads them
 _DIFFERENCES = {
     "possession_share": lambda a, b, A, B: f"{A} had more of the ball: {_pct(a)}, against {_pct(b)} for {B}.",
-    "field_tilt": lambda a, b, A, B: (f"{A} played more passes from the final third: {_pct(a)} of them, against "
-                                      f"{_pct(b)} for {B}."),
+    "field_tilt": lambda a, b, A, B: (
+        f"{A} played more passes from the final third: {_pct(a)} of them, against {_pct(b)} for {B}."
+    ),
     "shots_and_goals": lambda a, b, A, B: f"{A} had more shots: {a:.0f}, against {b:.0f} for {B} (goals included).",
-    "progressive_passes": lambda a, b, A, B: (f"{A} made more passes of 10 m or more toward goal: {a:.0f}, against "
-                                              f"{b:.0f} for {B}."),
-    "ppp": lambda a, b, A, B: (f"{A} pressed more: {a:.2f} pressures, tackles and fouls per opponent pass, against "
-                               f"{b:.2f} for {B}."),
-    "dpm_outfield": lambda a, b, A, B: (f"{A}'s outfield players covered more ground: {a:.0f} m per minute of tracked "
-                                        f"play, against {b:.0f} for {B}."),
+    "progressive_passes": lambda a, b, A, B: (
+        f"{A} made more passes of 10 m or more toward goal: {a:.0f}, against {b:.0f} for {B}."
+    ),
+    "ppp": lambda a, b, A, B: (
+        f"{A} pressed more: {a:.2f} pressures, tackles and fouls per opponent pass, against {b:.2f} for {B}."
+    ),
+    "dpm_outfield": lambda a, b, A, B: (
+        f"{A}'s outfield players covered more ground: {a:.0f} m per minute of tracked play, against {b:.0f} for {B}."
+    ),
 }
 
 
@@ -129,9 +160,15 @@ def key_differences(profile: pd.DataFrame, short: dict, n: int = 3) -> list[Sent
             continue
         lead = "HOME" if home > away else "AWAY"
         a, b = (home, away) if lead == "HOME" else (away, home)
-        gaps.append((abs(gap), Sentence(write(a, b, short[lead], short[_other(lead)]),
-                                        {"metric": metric, "home": float(home), "away": float(away),
-                                         "gap_home": float(gap)})))
+        gaps.append(
+            (
+                abs(gap),
+                Sentence(
+                    write(a, b, short[lead], short[_other(lead)]),
+                    {"metric": metric, "home": float(home), "away": float(away), "gap_home": float(gap)},
+                ),
+            )
+        )
     return [s for _, s in sorted(gaps, key=lambda x: -x[0])[:n]]
 
 
@@ -157,15 +194,25 @@ def hub(card: pd.DataFrame, team: str, short: dict) -> Sentence | None:
     hubs = card[(card.team_id == team) & card.is_hub].sort_values("short_name")
     if hubs.empty:
         return None
-    facts = {"players": [(h.player_id, int(h.passes_successful), int(h.passes_received_successful), float(h.involvement))
-                         for h in hubs.itertuples()]}
+    facts = {
+        "players": [
+            (h.player_id, int(h.passes_successful), int(h.passes_received_successful), float(h.involvement))
+            for h in hubs.itertuples()
+        ]
+    }
     if len(hubs) > 1:
-        return Sentence(f"{' and '.join(hubs.short_name)} shared the hub role of {short[team]}: equally involved in its "
-                        f"successful passes.", facts)
+        return Sentence(
+            f"{' and '.join(hubs.short_name)} shared the hub role of {short[team]}: equally involved in its "
+            f"successful passes.",
+            facts,
+        )
     h = hubs.iloc[0]
-    return Sentence(f"{h.short_name} was the hub of {short[team]}, the player most involved in its successful passes: "
-                    f"{_n(int(h.passes_successful), 'pass', 'passes')} made and {int(h.passes_received_successful)} "
-                    f"received.", facts)
+    return Sentence(
+        f"{h.short_name} was the hub of {short[team]}, the player most involved in its successful passes: "
+        f"{_n(int(h.passes_successful), 'pass', 'passes')} made and {int(h.passes_received_successful)} "
+        f"received.",
+        facts,
+    )
 
 
 def fastest(card: pd.DataFrame, short: dict) -> Sentence | None:
@@ -174,6 +221,8 @@ def fastest(card: pd.DataFrame, short: dict) -> Sentence | None:
     if c.empty:
         return None
     f = c.loc[c.top_speed_kmh.idxmax()]
-    return Sentence(f"Fastest player: {f.short_name} ({short[f.team_id]}), about {f.top_speed_kmh:.0f} km/h, held over "
-                    f"two seconds the camera saw.",
-                    {"player_id": f.player_id, "top_speed_kmh": float(f.top_speed_kmh)})
+    return Sentence(
+        f"Fastest player: {f.short_name} ({short[f.team_id]}), about {f.top_speed_kmh:.0f} km/h, held over "
+        f"two seconds the camera saw.",
+        {"player_id": f.player_id, "top_speed_kmh": float(f.top_speed_kmh)},
+    )

@@ -1,4 +1,5 @@
 """live_feed: the lag the live page reports to Prometheus, and when its delays start to count."""
+
 import pytest
 
 pytest.importorskip("prometheus_client")
@@ -9,12 +10,12 @@ import live_feed  # noqa: E402
 
 def test_the_lag_adds_the_partitions_of_a_topic_and_a_partition_never_read_counts_from_its_start():
     ends = {("foot-tracking", 0): (0, 100), ("foot-tracking", 1): (10, 50), ("foot-ball", 0): (0, 5)}
-    read = {("foot-tracking", 0): 90, ("foot-ball", 0): 5}                       # partition 1 not read yet
+    read = {("foot-tracking", 0): 90, ("foot-ball", 0): 5}  # partition 1 not read yet
     assert live_feed.lag_by_topic(ends, read) == {"foot-tracking": 10 + 40, "foot-ball": 0}
 
 
 def feed():
-    f = live_feed.Feed.__new__(live_feed.Feed)          # no threads, no HTTP server
+    f = live_feed.Feed.__new__(live_feed.Feed)  # no threads, no HTTP server
     registry = CollectorRegistry()
     f._lag_gauge = Gauge("lag", "lag", ["topic"], registry=registry)
     f.caught_up = False
@@ -31,6 +32,7 @@ def test_delays_start_to_count_once_every_topic_is_read_to_its_end():
 
 def test_the_reading_loop_never_asks_the_broker_for_the_lag():
     import inspect
+
     source = inspect.getsource(live_feed.Feed._run)
     assert "get_watermark_offsets" not in source and "position(" not in source
 
@@ -49,6 +51,7 @@ class Broker:
 
     def consume(self, num_messages, timeout):
         import time
+
         if not self.messages:
             time.sleep(timeout)
         out, self.messages = self.messages, []
@@ -56,6 +59,7 @@ class Broker:
 
     def list_topics(self, timeout):
         from types import SimpleNamespace
+
         return SimpleNamespace(topics={"foot-matches": SimpleNamespace(partitions={0: None})})
 
     def get_watermark_offsets(self, _tp, timeout):
@@ -68,9 +72,17 @@ class Broker:
 def message(topic, offset, value, key=None, error=None):
     import json
     from types import SimpleNamespace
-    return SimpleNamespace(error=lambda: error, topic=lambda: topic, partition=lambda: 0, offset=lambda: offset,
-                           timestamp=lambda: (1, 1_000), key=lambda: key, value=lambda: json.dumps(value).encode(),
-                           headers=lambda: [("replay_id", b"m1-20261127T100000Z")])
+
+    return SimpleNamespace(
+        error=lambda: error,
+        topic=lambda: topic,
+        partition=lambda: 0,
+        offset=lambda: offset,
+        timestamp=lambda: (1, 1_000),
+        key=lambda: key,
+        value=lambda: json.dumps(value).encode(),
+        headers=lambda: [("replay_id", b"m1-20261127T100000Z")],
+    )
 
 
 def test_the_feed_keeps_each_matchs_latest_replay_and_the_live_stats(monkeypatch):
@@ -78,9 +90,13 @@ def test_the_feed_keeps_each_matchs_latest_replay_and_the_live_stats(monkeypatch
 
     import confluent_kafka
 
-    broker = Broker([message("foot-matches", 0, {"match_id": "m1", "p1_start_ts": 0, "p2_end_ts": 90}),
-                     message("foot-ball", 0, None, error="partition EOF"),
-                     message("foot-live-stats", 4, {"replay_id": "m1-20261127T100000Z", "kind": "team"}, key=b"k1")])
+    broker = Broker(
+        [
+            message("foot-matches", 0, {"match_id": "m1", "p1_start_ts": 0, "p2_end_ts": 90}),
+            message("foot-ball", 0, None, error="partition EOF"),
+            message("foot-live-stats", 4, {"replay_id": "m1-20261127T100000Z", "kind": "team"}, key=b"k1"),
+        ]
+    )
     monkeypatch.setattr(confluent_kafka, "Consumer", broker)
     monkeypatch.setattr(live_feed, "METRICS_PORT", 0)
     monkeypatch.setattr(live_feed, "LAG_EVERY_S", 0.01)

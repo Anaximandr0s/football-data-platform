@@ -7,6 +7,7 @@ between the posts (ball_in_goal). The ball is extrapolated after many shots and 
 otherwise it is the second the ball was nearest the goal mouth (ball_nearest_goal), known once the window is over.
 Positions are in Silver's frame: HOME attacks toward x = 105.
 """
+
 import math
 
 GOAL_WINDOW_S = 10
@@ -14,7 +15,9 @@ PITCH_L, HALF_W = 105.0, 34.0
 POST_HALF_WIDTH = 3.66
 
 
-def goal_moment(team: str, event_ts: int, ball: list[tuple[int, float, float]], latest_ts: int) -> tuple[int, str] | None:
+def goal_moment(
+    team: str, event_ts: int, ball: list[tuple[int, float, float]], latest_ts: int
+) -> tuple[int, str] | None:
     """(second, method), or None while it cannot be known yet. ball: (ts, x, y) seconds of the ball around the goal;
     latest_ts: the latest second of the match received so far."""
     goal_x = PITCH_L if team == "HOME" else 0.0

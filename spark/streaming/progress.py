@@ -2,6 +2,7 @@
 
 Spark Structured Streaming keeps its Kafka offsets in its checkpoint, not in a Kafka consumer group, so a Kafka exporter
 cannot see how far behind it is. Spark knows it: each batch reports how many offsets it is behind the latest ones."""
+
 import json
 import os
 import time
@@ -16,25 +17,41 @@ def summary(progress: dict) -> dict:
     """The few numbers worth watching in one StreamingQueryProgress (its JSON form). end_offsets: what the batch read up
     to, per topic and partition; Kafka's latest offsets minus these are the messages still waiting for Spark (the
     source's own offsets-behind metric is measured when a batch is planned, before it reads: it stays near 0)."""
-    behind = [float(s["metrics"]["maxOffsetsBehindLatest"]) for s in progress.get("sources", [])
-              if "maxOffsetsBehindLatest" in (s.get("metrics") or {})]
+    behind = [
+        float(s["metrics"]["maxOffsetsBehindLatest"])
+        for s in progress.get("sources", [])
+        if "maxOffsetsBehindLatest" in (s.get("metrics") or {})
+    ]
     ends: dict[str, dict[str, int]] = {}
     for s in progress.get("sources", []):
         end = s.get("endOffset")
         for topic, parts in (json.loads(end) if isinstance(end, str) else end or {}).items():
             ends.setdefault(topic, {}).update({str(p): int(o) for p, o in parts.items()})
-    return {"batch_id": progress["batchId"],
-            "input_rows": progress.get("numInputRows", 0),
-            "input_rows_per_second": progress.get("inputRowsPerSecond") or 0.0,
-            "processed_rows_per_second": progress.get("processedRowsPerSecond") or 0.0,
-            "batch_duration_ms": (progress.get("durationMs") or {}).get("triggerExecution", 0),
-            "offsets_behind_latest": sum(behind) if behind else None,
-            "end_offsets": ends,
-            # where a batch's time goes (addBatch = the work, walCommit/commit = the checkpoint), and its state store
-            "duration_breakdown_ms": progress.get("durationMs") or {},
-            "state": [{k: op.get(k) for k in ("numRowsTotal", "memoryUsedBytes", "commitTimeMs", "numShufflePartitions",
-                                                "allUpdatesTimeMs", "allRemovalsTimeMs")}
-                      for op in progress.get("stateOperators", [])]}
+    return {
+        "batch_id": progress["batchId"],
+        "input_rows": progress.get("numInputRows", 0),
+        "input_rows_per_second": progress.get("inputRowsPerSecond") or 0.0,
+        "processed_rows_per_second": progress.get("processedRowsPerSecond") or 0.0,
+        "batch_duration_ms": (progress.get("durationMs") or {}).get("triggerExecution", 0),
+        "offsets_behind_latest": sum(behind) if behind else None,
+        "end_offsets": ends,
+        # where a batch's time goes (addBatch = the work, walCommit/commit = the checkpoint), and its state store
+        "duration_breakdown_ms": progress.get("durationMs") or {},
+        "state": [
+            {
+                k: op.get(k)
+                for k in (
+                    "numRowsTotal",
+                    "memoryUsedBytes",
+                    "commitTimeMs",
+                    "numShufflePartitions",
+                    "allUpdatesTimeMs",
+                    "allRemovalsTimeMs",
+                )
+            }
+            for op in progress.get("stateOperators", [])
+        ],
+    }
 
 
 class ProgressFile(StreamingQueryListener):
@@ -50,8 +67,12 @@ class ProgressFile(StreamingQueryListener):
 
     def onQueryProgress(self, event) -> None:  # noqa: N802
         progress = json.loads(event.progress.json)
-        self.queries[progress["name"]] = {**summary(progress), "id": progress["id"], "reported_at": time.time(),
-                                          "running": True}
+        self.queries[progress["name"]] = {
+            **summary(progress),
+            "id": progress["id"],
+            "reported_at": time.time(),
+            "running": True,
+        }
         self._write()
 
     def onQueryIdle(self, event) -> None:  # noqa: N802 - no new data: still alive, nothing behind
@@ -71,4 +92,4 @@ class ProgressFile(StreamingQueryListener):
         self.path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.path.with_suffix(".tmp")
         tmp.write_text(json.dumps(self.queries, indent=1), encoding="utf-8")
-        tmp.replace(self.path)          # the exporter never reads a half-written file
+        tmp.replace(self.path)  # the exporter never reads a half-written file

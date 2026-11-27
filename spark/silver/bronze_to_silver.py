@@ -14,6 +14,7 @@ Per match: read -> clean (spark/silver/transforms.py) -> check (spark/silver/che
 The write replaces the match's partition, so running the job again gives the same tables: no
 duplicates, other matches untouched. If a check fails the match is not written and the exit code is 1.
 """
+
 import argparse
 import json
 import os
@@ -63,7 +64,7 @@ def replay_complete(spark: SparkSession, bronze_uri: str, match_id: str, replay_
     try:
         end = read_bronze(spark, bronze_uri, "matches", match_id, replay_id).agg(F.max("p2_end_ts")).first()[0]
         last = read_bronze(spark, bronze_uri, "tracking", match_id, replay_id).agg(F.max("ts")).first()[0]
-    except AnalysisException as exc:      # a table's folder is missing: the replay is incomplete
+    except AnalysisException as exc:  # a table's folder is missing: the replay is incomplete
         print(f"{match_id} {replay_id}: unreadable ({type(exc).__name__}), not complete", file=sys.stderr)
         return False
     return end is not None and last is not None and last >= end
@@ -88,39 +89,62 @@ def write_table(spark: SparkSession, df: DataFrame, table: str) -> None:
                 spark.sql(f"ALTER TABLE {full} ADD COLUMN {field.name} {field.dataType.simpleString()}")
         df.writeTo(full).overwritePartitions()
     else:
-        (df.writeTo(full).using("iceberg").partitionedBy(F.col("match_id"))
-           .tableProperty("format-version", "2").create())
+        (
+            df.writeTo(full)
+            .using("iceberg")
+            .partitionedBy(F.col("match_id"))
+            .tableProperty("format-version", "2")
+            .create()
+        )
 
 
 def write_quality(match_id: str, metrics: dict, manifest: dict | None, ok: bool, written: bool, replay: dict) -> None:
     at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")  # noqa: UP017 - the Spark image runs Python 3.10
     config.QUALITY_DIR.mkdir(parents=True, exist_ok=True)
     path = config.QUALITY_DIR / f"silver_{match_id}.json"
-    path.write_text(json.dumps(checks.quality_report(match_id, metrics, manifest, ok, written, at) | replay, indent=1),
-                    encoding="utf-8")
+    path.write_text(
+        json.dumps(checks.quality_report(match_id, metrics, manifest, ok, written, at) | replay, indent=1),
+        encoding="utf-8",
+    )
     print(f"quality report: {path}")
 
 
-def process_match(spark: SparkSession, match_id: str, bronze_uri: str, manifest_dir: Path,
-                  dry_run: bool, events_direction: str = config.EVENTS_DIRECTION, replay_id: str | None = None) -> bool:
+def process_match(
+    spark: SparkSession,
+    match_id: str,
+    bronze_uri: str,
+    manifest_dir: Path,
+    dry_run: bool,
+    events_direction: str = config.EVENTS_DIRECTION,
+    replay_id: str | None = None,
+) -> bool:
     replays = replays_in_bronze(spark, bronze_uri, match_id)
     if replay_id is None:
         replay_id = choose_replay(replays, lambda r: replay_complete(spark, bronze_uri, match_id, r))
     if replay_id is not None and replay_ids.is_partial(replay_id):
-        print(f"{match_id}: {replay_id} started after kick-off: a partial replay is live only, Silver needs a whole "
-              f"match (replay it from kick-off)", file=sys.stderr)
+        print(
+            f"{match_id}: {replay_id} started after kick-off: a partial replay is live only, Silver needs a whole "
+            f"match (replay it from kick-off)",
+            file=sys.stderr,
+        )
         return False
     if replay_id is None or replay_id not in replays:
-        print(f"{match_id}: no complete replay in bronze's replay folders "
-              f"({len(replays)} replay(s) found{', not ' + replay_id if replay_id else ''}): replay the match once "
-              f"(make replay MATCH={match_id})", file=sys.stderr)
+        print(
+            f"{match_id}: no complete replay in bronze's replay folders "
+            f"({len(replays)} replay(s) found{', not ' + replay_id if replay_id else ''}): replay the match once "
+            f"(make replay MATCH={match_id})",
+            file=sys.stderr,
+        )
         return False
     print(f"{match_id}: reading replay {replay_id} ({len(replays)} replay(s) in bronze)")
     raw = {t: read_bronze(spark, bronze_uri, t, match_id, replay_id) for t in config.BRONZE_TABLES}
     raw_counts = {t: df.count() for t, df in raw.items()}
     if not all(raw_counts.values()):
-        print(f"{match_id}: bronze is empty for {[t for t, n in raw_counts.items() if not n]}: "
-              f"replay the match first (make replay MATCH={match_id})", file=sys.stderr)
+        print(
+            f"{match_id}: bronze is empty for {[t for t, n in raw_counts.items() if not n]}: "
+            f"replay the match first (make replay MATCH={match_id})",
+            file=sys.stderr,
+        )
         return False
 
     players = transforms.clean_players(raw["players"]).cache()
@@ -132,16 +156,23 @@ def process_match(spark: SparkSession, match_id: str, bronze_uri: str, manifest_
         "events": transforms.clean_events(raw["events"], matches, events_direction).cache(),
         "ball": transforms.clean_ball(raw["ball"], matches).cache(),
     }
-    silver = {t: df.withColumn("replay_id", F.lit(replay_id)) for t, df in silver.items()}   # where it comes from
+    silver = {t: df.withColumn("replay_id", F.lit(replay_id)) for t, df in silver.items()}  # where it comes from
 
     print(f"\nevents direction used for {match_id}: {events_direction}")
     over_max = transforms.speeds_over_max(raw["tracking"])
-    metrics = checks.measure(raw_counts, silver["tracking"], silver["events"], silver["ball"],
-                             players, matches, speed_over_max=over_max)
+    metrics = checks.measure(
+        raw_counts, silver["tracking"], silver["events"], silver["ball"], players, matches, speed_over_max=over_max
+    )
     manifest = checks.load_manifest(match_id, manifest_dir)
     ok = checks.report(match_id, metrics, checks.evaluate(metrics, manifest), manifest is not None)
-    write_quality(match_id, metrics, manifest, ok, written=ok and not dry_run,
-                  replay={"replay_id": replay_id, "replays_in_bronze": len(replays)})
+    write_quality(
+        match_id,
+        metrics,
+        manifest,
+        ok,
+        written=ok and not dry_run,
+        replay={"replay_id": replay_id, "replays_in_bronze": len(replays)},
+    )
     if not ok:
         print(f"{match_id}: a check failed, nothing written", file=sys.stderr)
     elif dry_run:
@@ -162,14 +193,23 @@ def main() -> None:
     ap.add_argument("--match", nargs="+", help="match ids, e.g. m001 m002")
     ap.add_argument("--all", action="store_true", help="every match found in bronze")
     ap.add_argument("--bronze-uri", default=config.BRONZE_URI, help="default %(default)s")
-    ap.add_argument("--manifest-dir", type=Path, default=config.MANIFEST_DIR,
-                    help="ingestion manifests, to compare counts (skipped if absent)")
-    ap.add_argument("--events-direction", choices=transforms.EVENT_DIRECTIONS, default=config.EVENTS_DIRECTION,
-                    help="per_team = mirror AWAY events only (default); guide = mirror every event like tracking")
+    ap.add_argument(
+        "--manifest-dir",
+        type=Path,
+        default=config.MANIFEST_DIR,
+        help="ingestion manifests, to compare counts (skipped if absent)",
+    )
+    ap.add_argument(
+        "--events-direction",
+        choices=transforms.EVENT_DIRECTIONS,
+        default=config.EVENTS_DIRECTION,
+        help="per_team = mirror AWAY events only (default); guide = mirror every event like tracking",
+    )
     ap.add_argument("--replay", help="the replay to read (one match only); default: the latest complete one")
     ap.add_argument("--dry-run", action="store_true", help="clean and check, write nothing (no Iceberg needed)")
-    ap.add_argument("--packages", default=None,
-                    help="Spark Maven packages; '' for none (default: hadoop-aws + Iceberg runtime)")
+    ap.add_argument(
+        "--packages", default=None, help="Spark Maven packages; '' for none (default: hadoop-aws + Iceberg runtime)"
+    )
     a = ap.parse_args()
     if bool(a.match) == a.all:
         ap.error("give --match ID [ID ...] or --all")
@@ -180,8 +220,10 @@ def main() -> None:
     matches = a.match or list_matches(spark, a.bronze_uri)
     if not matches:
         sys.exit("no match found in bronze")
-    results = {m: process_match(spark, m, a.bronze_uri, a.manifest_dir, a.dry_run, a.events_direction, a.replay)
-               for m in matches}
+    results = {
+        m: process_match(spark, m, a.bronze_uri, a.manifest_dir, a.dry_run, a.events_direction, a.replay)
+        for m in matches
+    }
     spark.stop()
     print("\nsummary:", {m: ("OK" if ok else "FAILED") for m, ok in results.items()})
     sys.exit(0 if all(results.values()) else 1)

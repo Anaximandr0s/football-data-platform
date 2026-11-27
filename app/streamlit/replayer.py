@@ -4,6 +4,7 @@ Pure functions: no Streamlit, no DuckDB.
 The match is sent once to the pitch component (pitch.js plays it, interpolating between consecutive seconds); the
 panel next to it is recomputed in Python for the second the visitor is watching, with only what happened up to then.
 """
+
 import math
 
 import numpy as np
@@ -12,8 +13,8 @@ import pandas as pd
 import clock
 import playerstats
 
-BALL = 3                    # x, y, z of the ball open each second of the payload; then x, y, detected per player
-KEY_EVENTS = {"goal": "Goal", "shot": "Shot", "tackle": "Tackle", "foul": "Foul"}     # as Live's event line
+BALL = 3  # x, y, z of the ball open each second of the payload; then x, y, detected per player
+KEY_EVENTS = {"goal": "Goal", "shot": "Shot", "tackle": "Tackle", "foul": "Foul"}  # as Live's event line
 
 
 def payload(frames: pd.DataFrame, key: str) -> dict:
@@ -56,24 +57,38 @@ def goals(events: pd.DataFrame, p1_start_ts: int, p2_start_ts: int | None) -> li
     """[goal second, team, "62' A. Goodwin", scorer] of every goal of one match, in order. The goal second is when the
     ball was in the goal (gold_events.goal_ts): the score changes then, not when the attack started (ts)."""
     g = events[events.type == "goal"].sort_values("goal_ts")
-    return [[int(r.goal_ts), r.team_id, f"{clock.label(r.ts, r.period, p1_start_ts, p2_start_ts)} {r.player_short_name}",
-             r.player_short_name] for r in g.itertuples()]
+    return [
+        [
+            int(r.goal_ts),
+            r.team_id,
+            f"{clock.label(r.ts, r.period, p1_start_ts, p2_start_ts)} {r.player_short_name}",
+            r.player_short_name,
+        ]
+        for r in g.itertuples()
+    ]
 
 
 def shots(events: pd.DataFrame, p1_start_ts: int, p2_start_ts: int | None) -> list[list]:
     """[ts, team, "51' S. Klein"] of every shot that was not a goal (timeline marks)."""
     s = events[events.type == "shot"].sort_values("ts")
-    return [[int(r.ts), r.team_id, f"{clock.label(r.ts, r.period, p1_start_ts, p2_start_ts)} {r.player_short_name}"]
-            for r in s.itertuples()]
+    return [
+        [int(r.ts), r.team_id, f"{clock.label(r.ts, r.period, p1_start_ts, p2_start_ts)} {r.player_short_name}"]
+        for r in s.itertuples()
+    ]
 
 
 def key_events(events: pd.DataFrame, names: dict, p1_start_ts: int, p2_start_ts: int | None) -> list[list]:
     """[ts, "Shot - S. Klein - 51'"] of every goal, shot, tackle and foul (the caption under the pitch, as Live's).
     A goal is captioned at its goal second."""
     k = events[events.type.isin(list(KEY_EVENTS))]
-    out = [[int(r.goal_ts if r.type == "goal" else r.ts),
+    out = [
+        [
+            int(r.goal_ts if r.type == "goal" else r.ts),
             f"{KEY_EVENTS[r.type]} - {r.player_short_name} ({names[r.team_id]}) - "
-            f"{clock.label(r.ts, r.period, p1_start_ts, p2_start_ts)}"] for r in k.itertuples()]
+            f"{clock.label(r.ts, r.period, p1_start_ts, p2_start_ts)}",
+        ]
+        for r in k.itertuples()
+    ]
     return sorted(out)
 
 
@@ -94,10 +109,18 @@ def windows_until(timeline: pd.DataFrame, ts: int) -> pd.DataFrame:
     done = timeline[timeline.window_end_ts <= ts + 1]
     home = done[done.team_id == "HOME"].set_index("window_index")
     away = done[done.team_id == "AWAY"].set_index("window_index")
-    out = pd.DataFrame({"window_label": home.window_label, "possession_greyed": home.possession_greyed,
-                        "home_possession": home.possession_share, "away_possession": away.possession_share,
-                        "home_passes": home.passes, "away_passes": away.passes,
-                        "home_xthreat": home.xthreat_successful_passes, "away_xthreat": away.xthreat_successful_passes})
+    out = pd.DataFrame(
+        {
+            "window_label": home.window_label,
+            "possession_greyed": home.possession_greyed,
+            "home_possession": home.possession_share,
+            "away_possession": away.possession_share,
+            "home_passes": home.passes,
+            "away_passes": away.passes,
+            "home_xthreat": home.xthreat_successful_passes,
+            "away_xthreat": away.xthreat_successful_passes,
+        }
+    )
     return out.sort_index(ascending=False)
 
 
@@ -105,9 +128,12 @@ def player_until(frames: pd.DataFrame, player_id: str, ts: int) -> playerstats.P
     """Distance, sprints, top speed and heatmap of one player up to second ts, with the formulas of Live and Gold."""
     rows = frames[(frames.object_id == player_id) & (frames.ts <= ts)]
     speed = rows.speed_kmh.astype(object).where(rows.speed_kmh.notna(), None)
-    return playerstats.player_stats([playerstats.Second(int(t), float(x), float(y), s, bool(d))
-                                     for t, x, y, s, d in zip(rows.ts, rows.x, rows.y, speed, rows.is_detected,
-                                                              strict=True)])
+    return playerstats.player_stats(
+        [
+            playerstats.Second(int(t), float(x), float(y), s, bool(d))
+            for t, x, y, s, d in zip(rows.ts, rows.x, rows.y, speed, rows.is_detected, strict=True)
+        ]
+    )
 
 
 def space_now(frames: pd.DataFrame, ts: int) -> float | None:

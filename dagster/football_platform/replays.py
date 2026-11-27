@@ -4,13 +4,14 @@ A replay is over when its tracking reaches the last second of the match (`p2_end
 message): `ts` is the second of the match, so this holds at any replay speed. A partial replay (started after kick-off,
 ingestion/replay_ids.py) is never over for the pipeline: it would build a match without its first minutes.
 """
+
 from collections.abc import Iterable
 
 from ingestion import replay_ids
 
 
 def match_of(replay_id: str) -> str:
-    """"m001-20261116T101503Z" -> "m001"."""
+    """ "m001-20261116T101503Z" -> "m001"."""
     return replay_ids.match_of(replay_id)
 
 

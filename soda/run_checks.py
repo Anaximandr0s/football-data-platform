@@ -15,6 +15,7 @@ How it reads the data: one in-memory DuckDB connection per layer, handed to Soda
 Nothing is ever written to Silver or Gold. Each run writes data/soda/<layer>.json (read by the dashboard) and
 exits 0 only if no check failed and no check could not run.
 """
+
 import argparse
 import datetime as dt
 import json
@@ -29,10 +30,25 @@ from soda.scan import Scan
 ROOT = Path(__file__).resolve().parents[1]
 CHECKS_DIR = Path(__file__).resolve().parent / "checks"
 SILVER_TABLES = ("tracking", "events", "ball", "players", "matches")
-GOLD_TABLES = ("gold_player_match_stats", "gold_team_match_stats", "gold_zone_occupancy",
-               "gold_pass_network", "gold_shots", "gold_player_5min", "gold_match_timeline", "gold_player_card",
-               "gold_team_shape", "gold_pressing", "gold_team_build_up", "gold_player_fatigue", "gold_space_control",
-               "gold_team_profile", "gold_events", "gold_match_library", "gold_replay_frames")
+GOLD_TABLES = (
+    "gold_player_match_stats",
+    "gold_team_match_stats",
+    "gold_zone_occupancy",
+    "gold_pass_network",
+    "gold_shots",
+    "gold_player_5min",
+    "gold_match_timeline",
+    "gold_player_card",
+    "gold_team_shape",
+    "gold_pressing",
+    "gold_team_build_up",
+    "gold_player_fatigue",
+    "gold_space_control",
+    "gold_team_profile",
+    "gold_events",
+    "gold_match_library",
+    "gold_replay_frames",
+)
 
 
 def _sql_str(value: str) -> str:
@@ -44,9 +60,13 @@ def _load_s3(con: duckdb.DuckDBPyConnection) -> None:
     for ext in ("httpfs", "iceberg"):
         con.execute(f"install {ext}")
         con.execute(f"load {ext}")
-    settings = {"s3_endpoint": os.getenv("GOLD_S3_ENDPOINT", "localhost:9000"), "s3_url_style": "path",
-                "s3_region": "us-east-1", "s3_access_key_id": os.getenv("MINIO_ROOT_USER", ""),
-                "s3_secret_access_key": os.getenv("MINIO_ROOT_PASSWORD", "")}
+    settings = {
+        "s3_endpoint": os.getenv("GOLD_S3_ENDPOINT", "localhost:9000"),
+        "s3_url_style": "path",
+        "s3_region": "us-east-1",
+        "s3_access_key_id": os.getenv("MINIO_ROOT_USER", ""),
+        "s3_secret_access_key": os.getenv("MINIO_ROOT_PASSWORD", ""),
+    }
     for key, value in settings.items():
         con.execute(f"set {key} = {_sql_str(value)}")
     con.execute("set s3_use_ssl = false")
@@ -85,8 +105,10 @@ def corrupt(con: duckdb.DuckDBPyConnection, layer: str) -> list[str]:
             union all (select * from silver_tracking_ok limit 1)                                  -- a duplicate row
             union all (select * replace (131.5 as x, 61.0 as speed_kmh) from silver_tracking_ok
                        offset 10 limit 1)                                                         -- off the pitch, too fast""")
-        return ["a duplicated tracking row (breaks: one row per key, 22 players per second, row counts)",
-                "a position at x = 131.5 m and a speed of 61 km/h (breaks: inside the pitch, speed <= 40)"]
+        return [
+            "a duplicated tracking row (breaks: one row per key, 22 players per second, row counts)",
+            "a position at x = 131.5 m and a speed of 61 km/h (breaks: inside the pitch, speed <= 40)",
+        ]
     con.execute("create table gold_shots_ok as select * from gold_shots")
     con.execute("""create or replace view gold_shots as
         select * from gold_shots_ok
@@ -129,9 +151,9 @@ def _schema_detail(log_text: str, name: str) -> str | None:
     for i, line in enumerate(lines):
         if line.rstrip().endswith("[FAILED]") and name in line:
             details = []
-            for nxt in lines[i + 1:]:
+            for nxt in lines[i + 1 :]:
                 body = nxt.split("INFO   |", 1)[-1]
-                if not body.startswith(" " * 9):      # the details are indented deeper than the check line
+                if not body.startswith(" " * 9):  # the details are indented deeper than the check line
                     break
                 text = body.strip()
                 if not text.startswith("schema_measured"):
@@ -165,32 +187,51 @@ def run_layer(layer: str, con: duckdb.DuckDBPyConnection, out_dir: Path) -> tupl
     checks = []
     log_text = scan.get_logs_text()
     for c in scan.get_scan_results().get("checks", []):
-        entry = {"name": c.get("name") or c.get("definition"), "table": c.get("table"),
-                 "outcome": c.get("outcome") or "unknown", "definition": c.get("definition"), "detail": ""}
+        entry = {
+            "name": c.get("name") or c.get("definition"),
+            "table": c.get("table"),
+            "outcome": c.get("outcome") or "unknown",
+            "definition": c.get("definition"),
+            "detail": "",
+        }
         if entry["outcome"] in ("fail", "warn"):
             entry["detail"] = explain(con, entry, c, log_text)
         checks.append(entry)
-    summary = {"layer": layer, "finished_at_utc": dt.datetime.now(dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
-               "passed": sum(c["outcome"] == "pass" for c in checks),
-               "failed": sum(c["outcome"] == "fail" for c in checks),
-               "warned": sum(c["outcome"] == "warn" for c in checks),
-               "errors": len(scan.get_error_logs()), "checks": checks}
+    summary = {
+        "layer": layer,
+        "finished_at_utc": dt.datetime.now(dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "passed": sum(c["outcome"] == "pass" for c in checks),
+        "failed": sum(c["outcome"] == "fail" for c in checks),
+        "warned": sum(c["outcome"] == "warn" for c in checks),
+        "errors": len(scan.get_error_logs()),
+        "checks": checks,
+    }
     return scan, summary
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     ap.add_argument("--layer", choices=["silver", "gold", "all"], required=True)
-    ap.add_argument("--silver-reader", choices=["iceberg", "parquet"], default=os.getenv("SODA_SILVER_READER", "iceberg"))
+    ap.add_argument(
+        "--silver-reader", choices=["iceberg", "parquet"], default=os.getenv("SODA_SILVER_READER", "iceberg")
+    )
     ap.add_argument("--silver-warehouse", default=os.getenv("SODA_SILVER_WAREHOUSE", "s3://silver/warehouse"))
     ap.add_argument("--silver-namespace", default=os.getenv("SODA_SILVER_NAMESPACE", "silver"))
     ap.add_argument("--silver-parquet-root", default=os.getenv("SODA_SILVER_PARQUET_ROOT", "s3://silver/export"))
-    ap.add_argument("--gold-db", type=Path, default=Path(os.getenv("GOLD_DUCKDB_PATH", ROOT / "data" / "football.duckdb")))
+    ap.add_argument(
+        "--gold-db", type=Path, default=Path(os.getenv("GOLD_DUCKDB_PATH", ROOT / "data" / "football.duckdb"))
+    )
     ap.add_argument("--out", type=Path, default=Path(os.getenv("SODA_OUT_DIR", ROOT / "data" / "soda")))
-    ap.add_argument("--demo-failure", action="store_true",
-                    help="corrupt this run's view on purpose and succeed only if the checks catch it")
-    ap.add_argument("--inject-damage", action="store_true",
-                    help="the damage of --demo-failure, reported like a real run (exit 1, <layer>-damaged.json)")
+    ap.add_argument(
+        "--demo-failure",
+        action="store_true",
+        help="corrupt this run's view on purpose and succeed only if the checks catch it",
+    )
+    ap.add_argument(
+        "--inject-damage",
+        action="store_true",
+        help="the damage of --demo-failure, reported like a real run (exit 1, <layer>-damaged.json)",
+    )
     a = ap.parse_args()
     if (a.demo_failure or a.inject_damage) and a.layer == "all":
         ap.error("--demo-failure and --inject-damage need one layer: --layer silver or --layer gold")
@@ -200,8 +241,11 @@ def main() -> None:
     a.out.mkdir(parents=True, exist_ok=True)
     ok = True
     for layer in ("silver", "gold") if a.layer == "all" else (a.layer,):
-        con = (silver_connection(a.silver_reader, a.silver_warehouse, a.silver_namespace, a.silver_parquet_root)
-               if layer == "silver" else gold_connection(a.gold_db))
+        con = (
+            silver_connection(a.silver_reader, a.silver_warehouse, a.silver_namespace, a.silver_parquet_root)
+            if layer == "silver"
+            else gold_connection(a.gold_db)
+        )
         damage = corrupt(con, layer) if a.demo_failure or a.inject_damage else []
         for line in damage:
             print(f"DEMO: injected {line}")
@@ -212,16 +256,20 @@ def main() -> None:
                 print(f"WHY  {c['name']}\n     {c['detail']}")
         if a.demo_failure:
             caught = summary["failed"] > 0
-            print(f"DEMO: {summary['failed']} check(s) failed on the corrupted data: "
-                  + ("the checks work." if caught else "NOTHING WAS CAUGHT, the checks are too weak."))
-            ok &= caught                      # the demo result is not stored: it must not replace a real run
+            print(
+                f"DEMO: {summary['failed']} check(s) failed on the corrupted data: "
+                + ("the checks work." if caught else "NOTHING WAS CAUGHT, the checks are too weak.")
+            )
+            ok &= caught  # the demo result is not stored: it must not replace a real run
             continue
         # a damaged run never replaces the result of a real run, which the dashboard shows
         name = f"{layer}-damaged.json" if a.inject_damage else f"{layer}.json"
         (a.out / name).write_text(json.dumps(summary, indent=2), encoding="utf-8")
         ok &= summary["failed"] == 0 and summary["errors"] == 0
-        print(f"{layer}: {summary['passed']} passed, {summary['failed']} failed, {summary['warned']} warned, "
-              f"{summary['errors']} errors")
+        print(
+            f"{layer}: {summary['passed']} passed, {summary['failed']} failed, {summary['warned']} warned, "
+            f"{summary['errors']} errors"
+        )
     sys.exit(0 if ok else 1)
 
 

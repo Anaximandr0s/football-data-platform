@@ -19,6 +19,7 @@ streaming job and the live page keep two replays of the same match apart with it
 Replaying twice doubles the bronze data (at-least-once delivery): Silver deduplicates.
 The process exits with an error if a message could not be delivered.
 """
+
 import argparse
 import datetime as dt
 import json
@@ -74,9 +75,15 @@ def main() -> None:
     producer = None
     if not a.dry_run:
         from confluent_kafka import Producer
-        producer = Producer({"bootstrap.servers": a.bootstrap, "linger.ms": 20,
-                             "enable.idempotence": True,
-                             "log_level": 3})   # librdkafka errors only (hides a harmless startup warning)
+
+        producer = Producer(
+            {
+                "bootstrap.servers": a.bootstrap,
+                "linger.ms": 20,
+                "enable.idempotence": True,
+                "log_level": 3,  # librdkafka errors only (hides a harmless startup warning)
+            }
+        )
 
     def on_delivery(err, _msg) -> None:
         if err is not None:
@@ -89,10 +96,11 @@ def main() -> None:
         value = json.dumps(rec, allow_nan=False)
         while True:
             try:
-                producer.produce(TOPICS[table], key=str(rec[KEYS[table]]), value=value, headers=headers,
-                                 on_delivery=on_delivery)
+                producer.produce(
+                    TOPICS[table], key=str(rec[KEYS[table]]), value=value, headers=headers, on_delivery=on_delivery
+                )
                 break
-            except BufferError:          # local queue full: let the client drain it
+            except BufferError:  # local queue full: let the client drain it
                 producer.poll(0.5)
         producer.poll(0)
 
@@ -104,15 +112,14 @@ def main() -> None:
     start_ts, last_ts = max(first, a.start), max(all_ts)
     t0 = time.perf_counter()
     for ts in range(start_ts, last_ts + 1):
-        delay = t0 + (ts - start_ts) / a.speed - time.perf_counter()   # absolute schedule: no drift
+        delay = t0 + (ts - start_ts) / a.speed - time.perf_counter()  # absolute schedule: no drift
         if delay > 0:
             time.sleep(delay)
         for table, source in live.items():
             for rec in source.get(ts, []):
                 send(table, rec)
         if ts % 300 == 0:
-            print(f"minute {ts // 60:>3} | " + " ".join(f"{k}={v}" for k, v in counts.items()),
-                  flush=True)
+            print(f"minute {ts // 60:>3} | " + " ".join(f"{k}={v}" for k, v in counts.items()), flush=True)
 
     left = producer.flush(60) if producer else 0
     print(f"done in {time.perf_counter() - t0:.1f}s | " + " ".join(f"{k}={v}" for k, v in counts.items()))

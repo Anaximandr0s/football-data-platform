@@ -5,6 +5,7 @@ This script is the router: it builds the menu for the view chosen on Home (fan o
 in st.session_state so they follow the visitor from page to page, and runs the page. A link can choose them:
 `/match_story?view=fan&match=m001` (the Control Center's buttons).
 """
+
 import duckdb
 import streamlit as st
 
@@ -14,15 +15,18 @@ from data import CREDIT, library, match_label, table
 
 st.set_page_config(page_title="MatchLens", page_icon=":material/sports_soccer:", layout="wide")
 sitemap.style()
-st.logo(theme.LOGO, size="large", link=None)       # one file (assets/matchlens-logo.svg), at the top of the sidebar
+st.logo(theme.LOGO, size="large", link=None)  # one file (assets/matchlens-logo.svg), at the top of the sidebar
 
 
 def match_choices() -> tuple[list[str], dict[str, str]]:
     """Match ids and their labels, from the library when this Gold file has it."""
     lib = library()
     if lib is not None and not lib.empty:
-        return list(lib.match_id), {r.match_id: f"{r.home_team_short} {r.home_score}-{r.away_score} {r.away_team_short}"
-                                    f" · {r.match_date:%d %b %Y}" for r in lib.itertuples()}
+        return list(lib.match_id), {
+            r.match_id: f"{r.home_team_short} {r.home_score}-{r.away_score} {r.away_team_short}"
+            f" · {r.match_date:%d %b %Y}"
+            for r in lib.itertuples()
+        }
     teams = table("gold_team_match_stats")
     ids = sorted(teams.match_id.unique())
     return ids, {m: match_label(teams, m) for m in ids}
@@ -46,17 +50,18 @@ def sidebar() -> None:
     # changes, and both must follow the visitor. The widgets only read them and write the new choice back.
     view = st.session_state.get("view")
     if view:
-        picked = st.sidebar.segmented_control("View", list(sitemap.VIEWS), default=view,
-                                              format_func=lambda v: v.capitalize())
+        picked = st.sidebar.segmented_control(
+            "View", list(sitemap.VIEWS), default=view, format_func=lambda v: v.capitalize()
+        )
         if picked and picked != view:
             st.session_state["view"] = picked
-            current = navigation.url_path or "home"          # the default page has an empty URL path
+            current = navigation.url_path or "home"  # the default page has an empty URL path
             if current not in {p.key for pages in sitemap.menu(picked).values() for p in pages}:
-                st.session_state["go_to"] = sitemap.FIRST_PAGE[picked]   # this page is not in that view
-            st.rerun()          # the menu depends on the view
+                st.session_state["go_to"] = sitemap.FIRST_PAGE[picked]  # this page is not in that view
+            st.rerun()  # the menu depends on the view
     try:
         ids, labels = match_choices()
-    except duckdb.Error:      # no Gold file yet: every page says what to run
+    except duckdb.Error:  # no Gold file yet: every page says what to run
         return
     if not ids:
         return
@@ -67,11 +72,15 @@ def sidebar() -> None:
 
 
 apply_link()
-pages = {section: [st.Page(f"sections/{p.key}.py", title=p.title, icon=p.icon, url_path=p.key, default=p.key == "home")
-                   for p in specs]
-         for section, specs in sitemap.menu(st.session_state.get("view")).items()}
+pages = {
+    section: [
+        st.Page(f"sections/{p.key}.py", title=p.title, icon=p.icon, url_path=p.key, default=p.key == "home")
+        for p in specs
+    ]
+    for section, specs in sitemap.menu(st.session_state.get("view")).items()
+}
 navigation = st.navigation(pages)
 if "go_to" in st.session_state:
     st.switch_page(st.session_state.pop("go_to"))
-sidebar()   # drawn on every page: a widget that is not drawn loses its value, and the match must follow the visitor
+sidebar()  # drawn on every page: a widget that is not drawn loses its value, and the match must follow the visitor
 navigation.run()

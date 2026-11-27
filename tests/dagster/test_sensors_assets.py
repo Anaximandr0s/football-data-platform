@@ -1,4 +1,5 @@
 """The final-whistle sensor on a fake Kafka, the run log, and each pipeline step with its command replaced."""
+
 import json
 import subprocess
 import sys
@@ -54,7 +55,7 @@ class FakeKafka:
     def consume(self, n, timeout):
         out = []
         for topic, start in self.position.items():
-            out += self.log[topic][start:start + n]
+            out += self.log[topic][start : start + n]
             self.position[topic] = start + len(out)
         return out
 
@@ -71,13 +72,14 @@ def sensors(defs, tmp_path, monkeypatch):
 
 
 def test_the_final_whistle_starts_one_run_for_its_match_and_adds_the_partition(sensors, monkeypatch):
-    kafka = FakeKafka({"foot-matches": [{"match_id": "m001", "p2_end_ts": 9}],
-                       "foot-tracking": [{"ts": ts} for ts in range(10)]})
+    kafka = FakeKafka(
+        {"foot-matches": [{"match_id": "m001", "p2_end_ts": 9}], "foot-tracking": [{"ts": ts} for ts in range(10)]}
+    )
     monkeypatch.setattr(sensors, "Consumer", lambda _conf: kafka)
     instance = dg.DagsterInstance.ephemeral()
 
     first = sensors.replay_end(dg.build_sensor_context(instance=instance))
-    assert first.run_requests == []                       # first tick: an old replay is no final whistle
+    assert first.run_requests == []  # first tick: an old replay is no final whistle
     assert first.dynamic_partitions_requests[0].partition_keys == ["m001"]
 
     second = sensors.replay_end(dg.build_sensor_context(instance=instance, cursor=json.dumps({"0": 0})))
@@ -102,9 +104,11 @@ def test_every_finished_run_is_logged_once_with_the_asset_graph(defs, sensors, m
 
 
 def step_context(replay: str | None = M1):
-    return SimpleNamespace(partition_key="m001", run=SimpleNamespace(tags={"replay_id": replay} if replay else {},
-                                                                     run_id="r1"),
-                           log=dg.get_dagster_logger())
+    return SimpleNamespace(
+        partition_key="m001",
+        run=SimpleNamespace(tags={"replay_id": replay} if replay else {}, run_id="r1"),
+        log=dg.get_dagster_logger(),
+    )
 
 
 def test_a_command_that_fails_fails_the_step_with_its_report(defs):
@@ -124,6 +128,7 @@ def test_check_bronze_reads_the_runs_replay_and_tells_missing_from_crashed(defs,
     def fake_run(args, **_):
         asked.append(args)
         return subprocess.CompletedProcess(args, code, "report", "")
+
     monkeypatch.setattr(assets.subprocess, "run", fake_run)
     assert assets.check_bronze(step_context()) == (done, "report")
     assert asked[0][-4:] == ["--match", "m001", "--replay", M1]
@@ -173,10 +178,14 @@ def test_the_match_report_tells_the_match_as_gold_has_it(defs, monkeypatch, tmp_
 
     gold = tmp_path / "gold.duckdb"
     with duckdb.connect(str(gold)) as con:
-        con.execute("create table gold_match_library as select 'm001' match_id, 'BRI' home_team_short, "
-                    "'ADE' away_team_short, 2 home_score, 3 away_score, 0.76 tracked_share")
-        con.execute("create table gold_team_match_stats as select 'm001' match_id, 'HOME' team_id, 'BRI' team_short, "
-                    "2 score, 104.2 distance_km, 410 passes, 12 shots, 2 goals")
+        con.execute(
+            "create table gold_match_library as select 'm001' match_id, 'BRI' home_team_short, "
+            "'ADE' away_team_short, 2 home_score, 3 away_score, 0.76 tracked_share"
+        )
+        con.execute(
+            "create table gold_team_match_stats as select 'm001' match_id, 'HOME' team_id, 'BRI' team_short, "
+            "2 score, 104.2 distance_km, 410 passes, 12 shots, 2 goals"
+        )
     monkeypatch.setattr(assets, "GOLD_DB", gold)
     monkeypatch.setattr(assets, "REPORTS", tmp_path / "reports")
     step = assets.match_report.op.compute_fn.decorated_fn

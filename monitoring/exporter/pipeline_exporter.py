@@ -4,6 +4,7 @@ Sources: Dagster (GraphQL: runs, steps, last success per match), dbt (target/run
 with the dimension of each check from soda/dimensions.yml), the Spark streaming progress file, and Gold freshness per
 match with the Data quality page's own rule (quality.freshness). Pure functions turn each source into samples; only
 `fetch_runs`, `read_json` and `main` touch the network or the disk."""
+
 import json
 import logging
 import os
@@ -22,7 +23,7 @@ log = logging.getLogger("pipeline_exporter")
 
 ROOT = Path(os.getenv("PROJECT_ROOT", "/app"))
 DAGSTER_GRAPHQL = os.getenv("DAGSTER_GRAPHQL", "http://dagster-webserver:3000/graphql")
-WINDOW_S = 7 * 24 * 3600            # the Prometheus retention: runs older than this are not counted
+WINDOW_S = 7 * 24 * 3600  # the Prometheus retention: runs older than this are not counted
 RUNS_QUERY = """query ($after: Float) { runsOrError(filter: {createdAfter: $after}, limit: 500) {
   __typename ... on Runs { results { runId jobName status startTime endTime tags { key value }
   stepStats { stepKey status startTime endTime } } } ... on PythonError { message } } }"""
@@ -32,7 +33,7 @@ HELP = {
     "football_exporter_source_up": "1 when the exporter could read this source at the last scrape",
     "football_dagster_up": "1 when Dagster answered the last GraphQL query",
     "football_dagster_runs": "Dagster runs started in the last 7 days, by job, status and whether they were started "
-                             "on purpose for a test (tag purpose: damaged-data demo, benchmark)",
+    "on purpose for a test (tag purpose: damaged-data demo, benchmark)",
     "football_benchmark_scenario": "1 while this scenario of make benchmark runs (Grafana annotations)",
     "football_dagster_latest_run_failed": "1 when the latest finished run of this job and match failed",
     "football_dagster_step_duration_seconds": "Duration of each step in the latest run that finished it",
@@ -62,21 +63,32 @@ class Sample(NamedTuple):
 
 # ---------------------------------------------------------------- Dagster
 
+
 def runs_from_graphql(results: list[dict]) -> list[dict]:
     """GraphQL runs in the shape Dagster writes to data/pipeline/runs.json (football_platform.sensors.run_entry), so
     quality.freshness reads both the same way."""
     out = []
     for r in results:
         tags = {t["key"]: t["value"] for t in r["tags"]}
-        steps = [{"step": s["stepKey"], "status": s["status"], "start": s["startTime"], "end": s["endTime"]}
-                 for s in r["stepStats"]]
+        steps = [
+            {"step": s["stepKey"], "status": s["status"], "start": s["startTime"], "end": s["endTime"]}
+            for s in r["stepStats"]
+        ]
         starts = [s["start"] for s in steps if s["start"]]
-        out.append({"run_id": r["runId"], "job": r["jobName"], "status": r["status"],
-                    "match_id": tags.get("dagster/partition"),
-                    "replay_id": tags.get("replay_id") or (tags.get("dagster/run_key")
-                                                           if tags.get("dagster/sensor_name") else None),
-                    "started": min(starts, default=r["startTime"]), "ended": r["endTime"], "steps": steps,
-                    "purpose": tags.get("purpose", "")})
+        out.append(
+            {
+                "run_id": r["runId"],
+                "job": r["jobName"],
+                "status": r["status"],
+                "match_id": tags.get("dagster/partition"),
+                "replay_id": tags.get("replay_id")
+                or (tags.get("dagster/run_key") if tags.get("dagster/sensor_name") else None),
+                "started": min(starts, default=r["startTime"]),
+                "ended": r["endTime"],
+                "steps": steps,
+                "purpose": tags.get("purpose", ""),
+            }
+        )
     return out
 
 
@@ -86,26 +98,41 @@ def dagster_samples(runs: list[dict], now: float) -> list[Sample]:
     for r in runs:
         key = (r["job"], r["status"], "true" if r.get("purpose") else "false")
         counts[key] = counts.get(key, 0) + 1
-    out += [Sample("football_dagster_runs", {"dagster_job": j, "status": s, "on_purpose": p}, n)
-            for (j, s, p), n in sorted(counts.items())]
+    out += [
+        Sample("football_dagster_runs", {"dagster_job": j, "status": s, "on_purpose": p}, n)
+        for (j, s, p), n in sorted(counts.items())
+    ]
 
     done = sorted((r for r in runs if r["status"] in FINISHED and r["ended"]), key=lambda r: r["ended"])
-    latest = {(r["job"], r["match_id"] or ""): r for r in done}          # the last one wins
-    out += [Sample("football_dagster_latest_run_failed", {"dagster_job": j, "match_id": m, "run_id": r["run_id"]},
-                   float(r["status"] == "FAILURE")) for (j, m), r in sorted(latest.items())]
+    latest = {(r["job"], r["match_id"] or ""): r for r in done}  # the last one wins
+    out += [
+        Sample(
+            "football_dagster_latest_run_failed",
+            {"dagster_job": j, "match_id": m, "run_id": r["run_id"]},
+            float(r["status"] == "FAILURE"),
+        )
+        for (j, m), r in sorted(latest.items())
+    ]
 
     steps = {}
     for r in done:
         for s in r["steps"]:
             if s["start"] and s["end"]:
                 steps[(r["job"], s["step"])] = s["end"] - s["start"]
-    out += [Sample("football_dagster_step_duration_seconds", {"dagster_job": j, "step": s}, d)
-            for (j, s), d in sorted(steps.items())]
+    out += [
+        Sample("football_dagster_step_duration_seconds", {"dagster_job": j, "step": s}, d)
+        for (j, s), d in sorted(steps.items())
+    ]
 
-    success = {r["match_id"]: r["ended"] for r in done
-               if r["job"] == "match_pipeline" and r["status"] == "SUCCESS" and r["match_id"]}
-    out += [Sample("football_dagster_last_success_timestamp_seconds", {"match_id": m}, t)
-            for m, t in sorted(success.items())]
+    success = {
+        r["match_id"]: r["ended"]
+        for r in done
+        if r["job"] == "match_pipeline" and r["status"] == "SUCCESS" and r["match_id"]
+    }
+    out += [
+        Sample("football_dagster_last_success_timestamp_seconds", {"match_id": m}, t)
+        for m, t in sorted(success.items())
+    ]
     return out
 
 
@@ -118,16 +145,20 @@ def freshness_samples(runs: list[dict], now: float) -> list[Sample]:
         _, seconds, replay = quality.freshness(runs, match)
         labels = {"match_id": match, "replay_id": replay}
         if seconds is not None:
-            out += [Sample("football_gold_freshness_seconds", labels, seconds),
-                    Sample("football_gold_waiting_seconds", labels, 0.0)]
+            out += [
+                Sample("football_gold_freshness_seconds", labels, seconds),
+                Sample("football_gold_waiting_seconds", labels, 0.0),
+            ]
         else:
-            whistle = max((r for r in runs if r["match_id"] == match and r.get("replay_id")),
-                          key=lambda r: r["replay_id"])["started"]
+            whistle = max(
+                (r for r in runs if r["match_id"] == match and r.get("replay_id")), key=lambda r: r["replay_id"]
+            )["started"]
             out.append(Sample("football_gold_waiting_seconds", labels, now - whistle))
     return out
 
 
 # ---------------------------------------------------------------- dbt and Soda
+
 
 def dbt_test_name(unique_id: str) -> str:
     """test.football.not_null_gold_shots_match_id.5f3a -> not_null_gold_shots_match_id"""
@@ -143,8 +174,11 @@ def dbt_samples(run_results: dict | None, written_at: float | None) -> list[Samp
     for t in tests:
         counts[t["status"]] = counts.get(t["status"], 0) + 1
     out = [Sample("football_dbt_tests", {"status": s}, n) for s, n in sorted(counts.items())]
-    out += [Sample("football_dbt_test_failed", {"test": dbt_test_name(t["unique_id"])}, 1.0)
-            for t in tests if t["status"] != "pass"]
+    out += [
+        Sample("football_dbt_test_failed", {"test": dbt_test_name(t["unique_id"])}, 1.0)
+        for t in tests
+        if t["status"] != "pass"
+    ]
     if written_at:
         out.append(Sample("football_dbt_results_timestamp_seconds", {}, written_at))
     return out
@@ -157,8 +191,13 @@ def soda_samples(results: dict[str, dict], mapping: dict, written_at: dict[str, 
     for (layer, dim, result), n in checks.groupby(["layer", "dimension", "result"]).size().items():
         out.append(Sample("football_soda_checks", {"layer": layer, "dimension": dim, "result": result}, float(n)))
     for c in quality.failed(checks).itertuples():
-        out.append(Sample("football_soda_check_failed", {"layer": c.layer, "dimension": c.dimension,
-                                                         "table": c.table, "check": c.check}, 1.0))
+        out.append(
+            Sample(
+                "football_soda_check_failed",
+                {"layer": c.layer, "dimension": c.dimension, "table": c.table, "check": c.check},
+                1.0,
+            )
+        )
     out += [Sample("football_soda_results_timestamp_seconds", {"layer": layer}, t) for layer, t in written_at.items()]
     return out
 
@@ -175,22 +214,28 @@ def newest_soda_files(folder: Path) -> dict[str, Path]:
 
 # ---------------------------------------------------------------- Spark streaming
 
+
 def spark_samples(progress: dict | None) -> list[Sample]:
     out = []
     for query, q in sorted((progress or {}).items()):
         labels = {"query": query}
-        out += [Sample("football_spark_query_reported_timestamp_seconds", labels, q["reported_at"]),
-                Sample("football_spark_query_running", labels, float(q.get("running", False)))]
-        for key, name, scale in (("offsets_behind_latest", "football_spark_offsets_behind_latest", 1),
-                                 ("input_rows_per_second", "football_spark_input_rows_per_second", 1),
-                                 ("processed_rows_per_second", "football_spark_processed_rows_per_second", 1),
-                                 ("batch_duration_ms", "football_spark_batch_duration_seconds", 1000)):
+        out += [
+            Sample("football_spark_query_reported_timestamp_seconds", labels, q["reported_at"]),
+            Sample("football_spark_query_running", labels, float(q.get("running", False))),
+        ]
+        for key, name, scale in (
+            ("offsets_behind_latest", "football_spark_offsets_behind_latest", 1),
+            ("input_rows_per_second", "football_spark_input_rows_per_second", 1),
+            ("processed_rows_per_second", "football_spark_processed_rows_per_second", 1),
+            ("batch_duration_ms", "football_spark_batch_duration_seconds", 1000),
+        ):
             if q.get(key) is not None:
                 out.append(Sample(name, labels, q[key] / scale))
     return out
 
 
 # ---------------------------------------------------------------- the edges: network, disk, HTTP
+
 
 def fetch_runs(url: str, now: float) -> list[dict]:
     body = json.dumps({"query": RUNS_QUERY, "variables": {"after": now - WINDOW_S}}).encode()
@@ -209,7 +254,7 @@ def read_json(path: Path) -> dict | None:
 def dagster_source(now: float) -> list[Sample]:
     try:
         runs = fetch_runs(DAGSTER_GRAPHQL, now)
-    except (OSError, KeyError, RuntimeError) as exc:      # Dagster stopped or restarting: said by football_dagster_up
+    except (OSError, KeyError, RuntimeError) as exc:  # Dagster stopped or restarting: said by football_dagster_up
         log.warning("dagster: %s", exc)
         return [Sample("football_dagster_up", {}, 0.0)]
     return [Sample("football_dagster_up", {}, 1.0), *dagster_samples(runs, now), *freshness_samples(runs, now)]
@@ -223,8 +268,11 @@ def dbt_source(now: float) -> list[Sample]:
 def soda_source(now: float) -> list[Sample]:
     files = newest_soda_files(ROOT / "data" / "soda")
     mapping = yaml.safe_load((ROOT / "soda" / "dimensions.yml").read_text(encoding="utf-8")) or {}
-    return soda_samples({layer: read_json(p) for layer, p in files.items()}, mapping,
-                        {layer: p.stat().st_mtime for layer, p in files.items()})
+    return soda_samples(
+        {layer: read_json(p) for layer, p in files.items()},
+        mapping,
+        {layer: p.stat().st_mtime for layer, p in files.items()},
+    )
 
 
 def spark_source(now: float) -> list[Sample]:
@@ -232,12 +280,17 @@ def spark_source(now: float) -> list[Sample]:
 
 
 def benchmark_source(now: float) -> list[Sample]:
-    current = read_json(ROOT / "data" / "benchmark" / "current.json")       # written by scripts/benchmark.py
+    current = read_json(ROOT / "data" / "benchmark" / "current.json")  # written by scripts/benchmark.py
     return [Sample("football_benchmark_scenario", {"scenario": current["scenario"]}, 1.0)] if current else []
 
 
-SOURCES = {"dagster": dagster_source, "dbt": dbt_source, "soda": soda_source, "spark": spark_source,
-           "benchmark": benchmark_source}
+SOURCES = {
+    "dagster": dagster_source,
+    "dbt": dbt_source,
+    "soda": soda_source,
+    "spark": spark_source,
+    "benchmark": benchmark_source,
+}
 
 
 def collect_samples(now: float) -> list[Sample]:

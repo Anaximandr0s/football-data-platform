@@ -8,6 +8,7 @@ Data: SkillCorner open data (MIT licence).
 Pin the ids you really use (a random pick differs from one machine to another).
 Tracking files are Git LFS (~100 MB), so they come from media.githubusercontent.com.
 """
+
 import argparse
 import json
 import os

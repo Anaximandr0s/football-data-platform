@@ -1,4 +1,5 @@
 """The Replay page run headless on the tiny Gold file (the playing itself runs in the browser)."""
+
 from pathlib import Path
 
 import pytest
@@ -14,7 +15,7 @@ def test_replay_page_opens_on_the_first_second_with_its_panel(app_env):
     assert not at.exception
     text = " ".join(m.value for m in at.markdown)
     assert "AT 00:00" in text and "Every 5 minutes" in text and "Space control" in text
-    assert at.session_state["replay_sent"]                       # the whole match went to the browser once
+    assert at.session_state["replay_sent"]  # the whole match went to the browser once
     again = at.run()
     assert not again.exception and at.session_state["replay_sent"]
 

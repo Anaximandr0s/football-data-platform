@@ -2,13 +2,14 @@
 
 Values come from the environment. A `.env` file at the repository root is read automatically.
 """
+
 import os
 import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-RAW_DIR = ROOT / "data" / "raw" / "skillcorner"   # downloaded files (git-ignored)
-PREPARED_DIR = ROOT / "data" / "prepared"          # output of ingest_foot (git-ignored)
+RAW_DIR = ROOT / "data" / "raw" / "skillcorner"  # downloaded files (git-ignored)
+PREPARED_DIR = ROOT / "data" / "prepared"  # output of ingest_foot (git-ignored)
 
 
 def load_env() -> None:
@@ -43,8 +44,13 @@ TOPICS = {
 # table -> message key (all rows of one player share a partition, so their order is kept)
 # Kafka header carried by every message of one replay: "<match_id>-<UTC start, YYYYMMDDTHHMMSSZ>"
 REPLAY_HEADER = "replay_id"
-KEYS = {"tracking": "player_id", "events": "match_id", "ball": "match_id",
-        "players": "player_id", "matches": "match_id"}
+KEYS = {
+    "tracking": "player_id",
+    "events": "match_id",
+    "ball": "match_id",
+    "players": "player_id",
+    "matches": "match_id",
+}
 
 # --- MinIO (S3 API) ---
 S3_ENDPOINT = os.getenv("MINIO_ENDPOINT", f"http://localhost:{os.getenv('MINIO_API_PORT', '9000')}")

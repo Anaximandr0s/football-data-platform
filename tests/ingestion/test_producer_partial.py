@@ -1,4 +1,5 @@
 """A replay started after the first second of the match is partial: its id says so, before anything is sent."""
+
 import subprocess
 import sys
 
@@ -10,8 +11,13 @@ from ingestion.config import PREPARED_DIR, ROOT
 
 def replay_id_of(*args) -> str:
     """The first line the producer prints; it is stopped right after (a dry run still waits in real time)."""
-    proc = subprocess.Popen([sys.executable, "-m", "ingestion.producer_foot", "--match", "m001", "--dry-run", *args],
-                            cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+    proc = subprocess.Popen(
+        [sys.executable, "-m", "ingestion.producer_foot", "--match", "m001", "--dry-run", *args],
+        cwd=ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+    )
     try:
         return next(line.strip().split("=", 1)[1] for line in proc.stdout if line.startswith("replay_id="))
     finally:

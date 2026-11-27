@@ -1,5 +1,6 @@
 """Live match: the match being replayed into Kafka (`make replay`), redrawn about once per second.
 A click on a player shows his stats so far, with the formulas of Gold (playerstats.py)."""
+
 import time
 
 import pandas as pd
@@ -22,14 +23,20 @@ if feed is None:
     st.error("The live page reads Kafka: set KAFKA_BOOTSTRAP (kafka:9092 inside Docker, localhost:29092 outside).")
     st.stop()
 
-STATUS_TEXT = {"gap": "No tracking: camera off the pitch",
-               "stalled": "No data for a while: is the replay still running?",
-               "waiting": "Waiting for the first positions of this replay"}
+STATUS_TEXT = {
+    "gap": "No tracking: camera off the pitch",
+    "stalled": "No data for a while: is the replay still running?",
+    "waiting": "Waiting for the first positions of this replay",
+}
 
 
 def colors_of(state: live.MatchState) -> dict[str, str]:
-    teams = pd.DataFrame([{"match_id": state.match_id, "team_id": t, "team_color": state.info.get(f"{t.lower()}_color")}
-                          for t in ("HOME", "AWAY")])
+    teams = pd.DataFrame(
+        [
+            {"match_id": state.match_id, "team_id": t, "team_color": state.info.get(f"{t.lower()}_color")}
+            for t in ("HOME", "AWAY")
+        ]
+    )
     return viz.team_colors(teams, state.match_id)
 
 
@@ -38,20 +45,32 @@ def player_panel(state: live.MatchState, player_id: str, colors: dict[str, str],
     info = state.players.get(player_id, {})
     team = info.get("team_id", "HOME")
     stats = live.player_stats(state, player_id)
-    st.markdown(f"<div class='ml-kicker'>SELECTED PLAYER</div>"
-                f"<h3 style='margin:.1rem 0 .4rem 0'>#{info.get('shirt_number', '')} {info.get('short_name', player_id)}</h3>"
-                f"<div class='ml-meta'>{live.team_name(state, team, names)} · {info.get('position', '')}</div>",
-                unsafe_allow_html=True)
+    st.markdown(
+        f"<div class='ml-kicker'>SELECTED PLAYER</div>"
+        f"<h3 style='margin:.1rem 0 .4rem 0'>#{info.get('shirt_number', '')} {info.get('short_name', player_id)}</h3>"
+        f"<div class='ml-meta'>{live.team_name(state, team, names)} · {info.get('position', '')}</div>",
+        unsafe_allow_html=True,
+    )
     top = "not yet" if stats.top_speed_kmh is None else f"about {stats.top_speed_kmh:.0f} km/h"
-    st.markdown("<div class='ml-stats'>"
-                f"<div><span>Distance</span><b>{stats.distance_m / 1000:.2f} km</b></div>"
-                f"<div><span>Top speed</span><b>{top}</b></div>"
-                f"<div><span>Sprints</span><b>{stats.sprint_count}</b></div></div>", unsafe_allow_html=True)
-    pitch.show(key="live_heat", players={}, colors=colors, clickable=False,
-               heat={"nx": 6, "ny": 4, "cells": playerstats.heat_cells(stats.zones), "color": colors[team]},
-               arrows={"home": "right"})
-    st.caption(f"So far: {stats.tracked_seconds / 60:.0f} tracked minutes. Heatmap with HOME attacking to the right; "
-               "top speed is the best speed held over two consecutive seconds the camera saw.")
+    st.markdown(
+        "<div class='ml-stats'>"
+        f"<div><span>Distance</span><b>{stats.distance_m / 1000:.2f} km</b></div>"
+        f"<div><span>Top speed</span><b>{top}</b></div>"
+        f"<div><span>Sprints</span><b>{stats.sprint_count}</b></div></div>",
+        unsafe_allow_html=True,
+    )
+    pitch.show(
+        key="live_heat",
+        players={},
+        colors=colors,
+        clickable=False,
+        heat={"nx": 6, "ny": 4, "cells": playerstats.heat_cells(stats.zones), "color": colors[team]},
+        arrows={"home": "right"},
+    )
+    st.caption(
+        f"So far: {stats.tracked_seconds / 60:.0f} tracked minutes. Heatmap with HOME attacking to the right; "
+        "top speed is the best speed held over two consecutive seconds the camera saw."
+    )
     st.button("Close", key="live_close", on_click=lambda: st.session_state.pop("live_player", None))
 
 
@@ -71,22 +90,33 @@ def five_minutes(state: live.MatchState, stats: list[dict], names: dict | None) 
         h, a = pair.get("HOME", {}), pair.get("AWAY", {})
         poss = "-" if h.get("possession_greyed", True) else f"{h['possession_share']:.0%} - {a['possession_share']:.0%}"
         press = ["-" if r.get("ppp_greyed", True) else f"{r['ppp']:.2f}" for r in (h, a)]
-        table.append({"minutes": f"{h.get('window_label', a.get('window_label'))}'",
-                      "status": "complete" if h.get("complete") else "in progress",
-                      f"possession {home} - {away}": poss, f"{home} pressing per opp. pass": press[0],
-                      f"{away} pressing per opp. pass": press[1]})
+        table.append(
+            {
+                "minutes": f"{h.get('window_label', a.get('window_label'))}'",
+                "status": "complete" if h.get("complete") else "in progress",
+                f"possession {home} - {away}": poss,
+                f"{home} pressing per opp. pass": press[0],
+                f"{away} pressing per opp. pass": press[1],
+            }
+        )
     st.dataframe(pd.DataFrame(table), hide_index=True, width="stretch")
     latest = max(windows)
     players = [r for r in stats if r.get("kind") == "player" and r["window_index"] == latest and r["tracked_seconds"]]
     best = sorted(players, key=lambda r: -r["distance_m"] / (r["tracked_seconds"] / 60))[:3]
     if best:
         label = next(iter(windows[latest].values()))["window_label"]
-        st.caption(f"Most ground covered in {label}': " + ", ".join(
-            f"{state.players.get(r['player_id'], {}).get('short_name', r['player_id'])} "
-            f"{r['distance_m'] / (r['tracked_seconds'] / 60):.0f} m/min"
-            for r in best))
-    st.caption("Complete: tracking has passed the end of the window by 10 s of match time. \"-\": under the thresholds "
-               "of Gold (60 seconds with a known owner, 10 opponent passes).")
+        st.caption(
+            f"Most ground covered in {label}': "
+            + ", ".join(
+                f"{state.players.get(r['player_id'], {}).get('short_name', r['player_id'])} "
+                f"{r['distance_m'] / (r['tracked_seconds'] / 60):.0f} m/min"
+                for r in best
+            )
+        )
+    st.caption(
+        'Complete: tracking has passed the end of the window by 10 s of match time. "-": under the thresholds '
+        "of Gold (60 seconds with a known owner, 10 opponent passes)."
+    )
 
 
 def possession_bar(state: live.MatchState, colors: dict[str, str], names: dict | None) -> None:
@@ -96,8 +126,10 @@ def possession_bar(state: live.MatchState, colors: dict[str, str], names: dict |
         return
     home, away, seconds = share
     owner = live.current_owner(state)
-    st.markdown(viz.possession_bar(home, colors, {t: live.team_name(state, t, names) for t in ("HOME", "AWAY")}),
-                unsafe_allow_html=True)
+    st.markdown(
+        viz.possession_bar(home, colors, {t: live.team_name(state, t, names) for t in ("HOME", "AWAY")}),
+        unsafe_allow_html=True,
+    )
     now = f" · now: {live.team_name(state, owner, names)}" if owner else " · now: ball dead or contested"
     st.caption(f"Possession {home:.0%} - {away:.0%} over {seconds // 60} min with a known owner{now}")
 
@@ -114,43 +146,70 @@ def live_view() -> None:
         st.page_link("sections/replay.py", label="Watch a stored match in Replay", icon=":material/replay:")
         st.caption("A match goes live when it is replayed into Kafka: `make replay MATCH=m001 SPEED=5`.")
         return
-    st.markdown("<div class='ml-kicker'>NOW PLAYING</div>" + "".join(
-        cards.badge(f"{live.team_name(states[m], 'HOME', fan_names(m))} {live.score(states[m])[0]} - "
-                    f"{live.score(states[m])[1]} {live.team_name(states[m], 'AWAY', fan_names(m))}", "gold")
-        for m in playing), unsafe_allow_html=True)
-    chosen = st.session_state.get("match_id")          # the sidebar match opens directly when it is playing
-    match = st.selectbox("Match", playing, index=playing.index(chosen) if chosen in playing else 0,
-                         format_func=lambda m: f"{live.team_name(states[m], 'HOME', fan_names(m))} v "
-                                               f"{live.team_name(states[m], 'AWAY', fan_names(m))}")
+    st.markdown(
+        "<div class='ml-kicker'>NOW PLAYING</div>"
+        + "".join(
+            cards.badge(
+                f"{live.team_name(states[m], 'HOME', fan_names(m))} {live.score(states[m])[0]} - "
+                f"{live.score(states[m])[1]} {live.team_name(states[m], 'AWAY', fan_names(m))}",
+                "gold",
+            )
+            for m in playing
+        ),
+        unsafe_allow_html=True,
+    )
+    chosen = st.session_state.get("match_id")  # the sidebar match opens directly when it is playing
+    match = st.selectbox(
+        "Match",
+        playing,
+        index=playing.index(chosen) if chosen in playing else 0,
+        format_func=lambda m: (
+            f"{live.team_name(states[m], 'HOME', fan_names(m))} v {live.team_name(states[m], 'AWAY', fan_names(m))}"
+        ),
+    )
     state = states[match]
     status, colors = live.status(state, now_ms), colors_of(state)
     home_goals, away_goals = live.score(state)
     now_ts = live.clock(state, now_ms)
 
     names = fan_names(match)
-    st.markdown(f"<h2 style='text-align:center;margin:0'>{live.team_name(state, 'HOME', names)} {home_goals} - "
-                f"{away_goals} {live.team_name(state, 'AWAY', names)}</h2>", unsafe_allow_html=True)
+    st.markdown(
+        f"<h2 style='text-align:center;margin:0'>{live.team_name(state, 'HOME', names)} {home_goals} - "
+        f"{away_goals} {live.team_name(state, 'AWAY', names)}</h2>",
+        unsafe_allow_html=True,
+    )
     period = "Full time" if status == "full_time" else f"Period {state.period}" if state.period else ""
     message = STATUS_TEXT.get(status)
-    st.markdown(f"<p style='text-align:center;font-size:1.3rem'>{clock.running(now_ts, None, *live.bounds(state)) if now_ts is not None else '--:--'}"
-                f" · {period}{' · ' + message if message else ''}</p>", unsafe_allow_html=True)
+    st.markdown(
+        f"<p style='text-align:center;font-size:1.3rem'>{clock.running(now_ts, None, *live.bounds(state)) if now_ts is not None else '--:--'}"
+        f" · {period}{' · ' + message if message else ''}</p>",
+        unsafe_allow_html=True,
+    )
 
     left, right = st.columns([3, 1])
     with left:
         frame = live.silver_frame(state)
         selected = st.session_state.get("live_player", {}).get(match)
         clicked = pitch.show(
-            key="live_pitch", colors=colors, selected=selected, message=message,
-            players={pid: [p.get("team_id"), p.get("shirt_number"), p.get("short_name"), p.get("position") == "GK"]
-                     for pid, p in state.players.items()},
+            key="live_pitch",
+            colors=colors,
+            selected=selected,
+            message=message,
+            players={
+                pid: [p.get("team_id"), p.get("shirt_number"), p.get("short_name"), p.get("position") == "GK"]
+                for pid, p in state.players.items()
+            },
             frame=pitch.frame_list(*frame) if frame and status != "gap" else None,
-            arrows={"home": "right", "names": {t: live.team_name(state, t, names) for t in ("HOME", "AWAY")}})
+            arrows={"home": "right", "names": {t: live.team_name(state, t, names) for t in ("HOME", "AWAY")}},
+        )
         if clicked:
             st.session_state["live_player"] = {**st.session_state.get("live_player", {}), match: clicked}
             selected = clicked
-        st.caption(f"Click a player for his stats so far. {live.team_name(state, 'HOME', names)} attacks to the right in "
-                   "both halves (arrows: direction of attack), as on every pitch of the site. Lighter dots are positions "
-                   "estimated by SkillCorner, not seen by the camera.")
+        st.caption(
+            f"Click a player for his stats so far. {live.team_name(state, 'HOME', names)} attacks to the right in "
+            "both halves (arrows: direction of attack), as on every pitch of the site. Lighter dots are positions "
+            "estimated by SkillCorner, not seen by the camera."
+        )
     with right:
         if selected and selected in state.players:
             player_panel(state, selected, colors, names)
@@ -159,12 +218,21 @@ def live_view() -> None:
         st.markdown("**Last event**")
         st.write(live.event_line(state, names) or "Nothing yet")
         st.markdown("**Team shape now** (outfield players, C1)")
-        shape = live.team_shape(state, {pid: (x, y) for pid, (x, y, _) in frame[2].items()}) \
-            if frame and status == "live" else {}
+        shape = (
+            live.team_shape(state, {pid: (x, y) for pid, (x, y, _) in frame[2].items()})
+            if frame and status == "live"
+            else {}
+        )
         if shape:
-            st.dataframe(pd.DataFrame([{"team": live.team_name(state, t, names), "width (m)": w, "length (m)": ln}
-                                       for t, (w, ln) in shape.items()]).rename(columns={"length (m)": "outfield block length (m)"}),
-                         hide_index=True)
+            st.dataframe(
+                pd.DataFrame(
+                    [
+                        {"team": live.team_name(state, t, names), "width (m)": w, "length (m)": ln}
+                        for t, (w, ln) in shape.items()
+                    ]
+                ).rename(columns={"length (m)": "outfield block length (m)"}),
+                hide_index=True,
+            )
         else:
             st.caption("Shown while positions arrive.")
     with st.container(border=True):

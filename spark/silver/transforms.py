@@ -6,6 +6,7 @@ several matches because all joins and windows use match_id.
 Order inside `clean_tracking`:
 dedup -> sort -> team -> flip -> clip (+ was_corrected) -> speed / sprint -> gap flag.
 """
+
 from pyspark.sql import DataFrame, Window
 from pyspark.sql import functions as F
 
@@ -25,8 +26,7 @@ from spark.silver.config import (
 
 def speeds_over_max(bronze_tracking: DataFrame) -> int:
     """Player-seconds of bronze faster than MAX_SPEED_KMH, counted once per key: each replay of a match copies them."""
-    return (bronze_tracking.filter(F.col("speed_kmh") > MAX_SPEED_KMH)
-            .select(*KEYS["tracking"]).distinct().count())
+    return bronze_tracking.filter(F.col("speed_kmh") > MAX_SPEED_KMH).select(*KEYS["tracking"]).distinct().count()
 
 
 def dedup(df: DataFrame, keys: list[str]) -> DataFrame:
@@ -60,8 +60,9 @@ def _mirror(df: DataFrame, flip: F.Column, x_cols: list[str], y_cols: list[str])
     return d.drop("_flip")
 
 
-def normalise_direction(df: DataFrame, matches: DataFrame, x_cols: list[str], y_cols: list[str],
-                        period_col: str = "period") -> DataFrame:
+def normalise_direction(
+    df: DataFrame, matches: DataFrame, x_cols: list[str], y_cols: list[str], period_col: str = "period"
+) -> DataFrame:
     """Mirror the pitch in the periods where HOME attacks toward x = 0, so HOME attacks toward x = 105
     in both halves. Applies to every row of the period, both teams. Rows of a match absent from
     `matches` are left as they are."""
@@ -102,8 +103,9 @@ def clean_tracking(tracking: DataFrame, players: DataFrame, matches: DataFrame) 
 
     # 4. direction, then 5. clip
     t = normalise_direction(t, matches, ["x"], ["y"])
-    t = (t.withColumn("x", F.round(F.least(F.greatest(F.col("x"), F.lit(0.0)), F.lit(PITCH_L)), DECIMALS))
-          .withColumn("y", F.round(F.least(F.greatest(F.col("y"), F.lit(0.0)), F.lit(PITCH_W)), DECIMALS)))
+    t = t.withColumn("x", F.round(F.least(F.greatest(F.col("x"), F.lit(0.0)), F.lit(PITCH_L)), DECIMALS)).withColumn(
+        "y", F.round(F.least(F.greatest(F.col("y"), F.lit(0.0)), F.lit(PITCH_W)), DECIMALS)
+    )
 
     # 6. speed: bronze value kept (null stays null, never 0), except above MAX_SPEED_KMH: no player runs that fast,
     # it is a jump from a position SkillCorner estimated (m003: 4 seconds of 43-52 km/h), so it becomes null and adds
@@ -118,19 +120,36 @@ def clean_tracking(tracking: DataFrame, players: DataFrame, matches: DataFrame) 
     w = Window.partitionBy("match_id", "player_id").orderBy("ts")
     t = t.withColumn("is_after_gap", F.coalesce(F.col("ts") - F.lag("ts").over(w) > 1, F.lit(False)))
 
-    return (t.withColumn("period", F.col("period").cast("int"))
-             .select("match_id", "player_id", "team_id", "period", "ts", "x", "y", "speed_kmh", "speed_rejected",
-                     "is_sprint", "was_corrected", "is_after_gap", "is_detected")
-             .orderBy("player_id", "ts"))
+    return (
+        t.withColumn("period", F.col("period").cast("int"))
+        .select(
+            "match_id",
+            "player_id",
+            "team_id",
+            "period",
+            "ts",
+            "x",
+            "y",
+            "speed_kmh",
+            "speed_rejected",
+            "is_sprint",
+            "was_corrected",
+            "is_after_gap",
+            "is_detected",
+        )
+        .orderBy("player_id", "ts")
+    )
 
 
 def clean_ball(ball: DataFrame, matches: DataFrame) -> DataFrame:
     """silver.ball: one row per second with a ball position, direction normalised.
     Not clipped: the ball really leaves the pitch (throw-ins, goal kicks)."""
     b = normalise_direction(dedup(ball, KEYS["ball"]), matches, ["x"], ["y"])
-    return (b.withColumn("period", F.col("period").cast("int"))
-             .select("match_id", "ts", "period", "x", "y", "z", "possession")
-             .orderBy("ts"))
+    return (
+        b.withColumn("period", F.col("period").cast("int"))
+        .select("match_id", "ts", "period", "x", "y", "z", "possession")
+        .orderBy("ts")
+    )
 
 
 EVENT_DIRECTIONS = ("guide", "per_team")
@@ -155,8 +174,31 @@ def clean_events(events: DataFrame, matches: DataFrame, direction: str = "per_te
         e = normalise_direction(e, matches, x_cols, y_cols)
     else:
         e = _mirror(e, F.col("team_id") == "AWAY", x_cols, y_cols)
-    return (e.withColumn("period", F.col("period").cast("int"))
-             .select("match_id", "event_id", "ts", "period", "player_id", "receiver_id", "team_id",
-                     "type", "x_start", "y_start", "x_end", "y_end", "outcome", "phase", "phase_against",
-                     "xthreat", "dangerous", "speed_band", "subtype", "lead_to_shot", "targeted", "received")
-             .orderBy("ts", "event_id"))
+    return (
+        e.withColumn("period", F.col("period").cast("int"))
+        .select(
+            "match_id",
+            "event_id",
+            "ts",
+            "period",
+            "player_id",
+            "receiver_id",
+            "team_id",
+            "type",
+            "x_start",
+            "y_start",
+            "x_end",
+            "y_end",
+            "outcome",
+            "phase",
+            "phase_against",
+            "xthreat",
+            "dangerous",
+            "speed_band",
+            "subtype",
+            "lead_to_shot",
+            "targeted",
+            "received",
+        )
+        .orderBy("ts", "event_id")
+    )

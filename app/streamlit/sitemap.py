@@ -1,5 +1,6 @@
 """The MatchLens site map (docs/product.md, section 8): every page, the question it answers, and the menu a visitor
 sees for the view chosen on Home. Pure data and functions, except `header`, `coming_soon` and `style`, which draw."""
+
 from dataclasses import dataclass
 
 import streamlit as st
@@ -7,54 +8,131 @@ import streamlit as st
 import theme
 
 VIEWS = {"fan": "FAN VIEW", "coach": "COACH VIEW"}
-FIRST_PAGE = {"fan": "sections/match_story.py", "coach": "sections/team_analysis.py"}   # where a view opens
+FIRST_PAGE = {"fan": "sections/match_story.py", "coach": "sections/team_analysis.py"}  # where a view opens
 SECTIONS = ("", "LIVE", "MATCHES", "FAN VIEW", "COACH VIEW", "BEHIND THE DATA")
 
 
 @dataclass(frozen=True)
 class PageSpec:
-    key: str        # file sections/<key>.py and URL path
+    key: str  # file sections/<key>.py and URL path
     title: str
     icon: str
     section: str
     question: str
     persona: str
-    ready: bool     # False: the page says "coming soon" and the step that builds it
+    ready: bool  # False: the page says "coming soon" and the step that builds it
 
 
 PAGES = (
     PageSpec("home", "Home", ":material/sports_soccer:", "", "Who am I, and which match do I look at?", "both", True),
-    PageSpec("live_match", "Live match", ":material/sensors:", "LIVE",
-             "What is happening right now, and how is this player doing so far?", "both", True),
-    PageSpec("match_library", "Match library", ":material/video_library:", "MATCHES",
-             "Which matches are stored, and how did they end?", "both", True),
-    PageSpec("replay", "Replay", ":material/replay:", "MATCHES",
-             "What did a stored match look like at any moment?", "both", True),
-    PageSpec("compare_matches", "Compare matches", ":material/compare_arrows:", "MATCHES",
-             "Is this how a team usually plays?", "both", True),
-    PageSpec("match_story", "Match story", ":material/auto_stories:", "FAN VIEW",
-             "How did the match go, and why did it end this way?", "fans", True),
+    PageSpec(
+        "live_match",
+        "Live match",
+        ":material/sensors:",
+        "LIVE",
+        "What is happening right now, and how is this player doing so far?",
+        "both",
+        True,
+    ),
+    PageSpec(
+        "match_library",
+        "Match library",
+        ":material/video_library:",
+        "MATCHES",
+        "Which matches are stored, and how did they end?",
+        "both",
+        True,
+    ),
+    PageSpec(
+        "replay",
+        "Replay",
+        ":material/replay:",
+        "MATCHES",
+        "What did a stored match look like at any moment?",
+        "both",
+        True,
+    ),
+    PageSpec(
+        "compare_matches",
+        "Compare matches",
+        ":material/compare_arrows:",
+        "MATCHES",
+        "Is this how a team usually plays?",
+        "both",
+        True,
+    ),
+    PageSpec(
+        "match_story",
+        "Match story",
+        ":material/auto_stories:",
+        "FAN VIEW",
+        "How did the match go, and why did it end this way?",
+        "fans",
+        True,
+    ),
     PageSpec("squad", "Squad", ":material/groups:", "FAN VIEW", "Who played?", "fans", True),
     PageSpec("player", "Player page", ":material/person:", "FAN VIEW", "How did this player play?", "fans", True),
-    PageSpec("team_analysis", "Team analysis", ":material/strategy:", "COACH VIEW",
-             "How does the team organise, press and attack?", "coaches", True),
-    PageSpec("physical_fatigue", "Physical & fatigue", ":material/directions_run:", "COACH VIEW",
-             "Who ran how much, and who faded?", "coaches", True),
-    PageSpec("event_explorer", "Event explorer", ":material/scatter_plot:", "COACH VIEW",
-             "Which actions happened where, by whom, and how dangerous were they?", "coaches", True),
-    PageSpec("player", "Player page", ":material/person:", "COACH VIEW", "What exactly did this player do?",
-             "coaches", True),
-    PageSpec("data_quality", "Data quality", ":material/verified:", "BEHIND THE DATA", "Can I trust these numbers?",
-             "everyone", True),
-    PageSpec("pipeline_lineage", "Pipeline & lineage", ":material/account_tree:", "BEHIND THE DATA",
-             "How does a number get from the camera to the screen?", "everyone", True),
-    PageSpec("sources_limits", "Sources & limits", ":material/menu_book:", "BEHIND THE DATA",
-             "Where does the data come from, and what can it not tell?", "everyone", True),
+    PageSpec(
+        "team_analysis",
+        "Team analysis",
+        ":material/strategy:",
+        "COACH VIEW",
+        "How does the team organise, press and attack?",
+        "coaches",
+        True,
+    ),
+    PageSpec(
+        "physical_fatigue",
+        "Physical & fatigue",
+        ":material/directions_run:",
+        "COACH VIEW",
+        "Who ran how much, and who faded?",
+        "coaches",
+        True,
+    ),
+    PageSpec(
+        "event_explorer",
+        "Event explorer",
+        ":material/scatter_plot:",
+        "COACH VIEW",
+        "Which actions happened where, by whom, and how dangerous were they?",
+        "coaches",
+        True,
+    ),
+    PageSpec(
+        "player", "Player page", ":material/person:", "COACH VIEW", "What exactly did this player do?", "coaches", True
+    ),
+    PageSpec(
+        "data_quality",
+        "Data quality",
+        ":material/verified:",
+        "BEHIND THE DATA",
+        "Can I trust these numbers?",
+        "everyone",
+        True,
+    ),
+    PageSpec(
+        "pipeline_lineage",
+        "Pipeline & lineage",
+        ":material/account_tree:",
+        "BEHIND THE DATA",
+        "How does a number get from the camera to the screen?",
+        "everyone",
+        True,
+    ),
+    PageSpec(
+        "sources_limits",
+        "Sources & limits",
+        ":material/menu_book:",
+        "BEHIND THE DATA",
+        "Where does the data come from, and what can it not tell?",
+        "everyone",
+        True,
+    ),
 )
 
 # what is still missing on a page that exists, and the build step of docs/product.md section 12 that adds it
-COMING = {
-}
+COMING = {}
 
 
 def menu(view: str | None) -> dict[str, list[PageSpec]]:
@@ -81,9 +159,11 @@ def header(key: str) -> PageSpec:
 def coming_soon(key: str) -> None:
     """A page that is not built yet: its question, what it will show and when."""
     what, step = COMING[key]
-    st.markdown(f"<div class='ml-soon'><span class='ml-badge'>Coming soon</span><p>It will show {what}.</p>"
-                f"<p class='ml-step'>Build step {step} of docs/product.md, section 12.</p></div>",
-                unsafe_allow_html=True)
+    st.markdown(
+        f"<div class='ml-soon'><span class='ml-badge'>Coming soon</span><p>It will show {what}.</p>"
+        f"<p class='ml-step'>Build step {step} of docs/product.md, section 12.</p></div>",
+        unsafe_allow_html=True,
+    )
 
 
 def still_to_come(key: str) -> None:
@@ -96,7 +176,8 @@ def style() -> None:
     """One look for every page, light or dark (.streamlit/config.toml): text keeps the theme's colour, lines and
     backgrounds are grey tints, fills come from theme.py. Glossary terms (glossary.term) are underlined with dots."""
     soft, line = "rgba(127,127,127,.08)", "rgba(127,127,127,.35)"
-    st.markdown(f"""<style>
+    st.markdown(
+        f"""<style>
     .ml-kicker {{font-size:.8rem; letter-spacing:.16em; font-weight:800; opacity:{theme.MUTED_OPACITY};}}
     .ml-question {{font-size:1.2rem; opacity:{theme.MUTED_OPACITY}; margin-top:-.6rem;}}
     .ml-soon {{border:1px dashed {line}; border-radius:12px; padding:1.1rem 1.3rem; background:{soft};}}
@@ -137,4 +218,6 @@ def style() -> None:
     .ml-term {{text-decoration:underline dotted; text-underline-offset:3px; cursor:help;}}
     /* the chosen pill: the dark green of the buttons is too dark as text on the dark page, the page's text is not */
     button[data-variant='segmented_control'][aria-checked='true'] {{color:inherit !important; font-weight:700;}}
-    </style>""", unsafe_allow_html=True)
+    </style>""",
+        unsafe_allow_html=True,
+    )

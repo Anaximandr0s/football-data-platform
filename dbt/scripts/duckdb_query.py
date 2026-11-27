@@ -6,6 +6,7 @@
 Runs in the `duckdb` service (same image as dbt), or locally: python dbt/scripts/duckdb_query.py "select 1".
 The file is written by `make gold` (dbt build); it is opened read-only so it can never be damaged from here.
 """
+
 import os
 import sys
 from pathlib import Path
