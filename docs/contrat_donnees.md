@@ -13,7 +13,7 @@ and warn the Silver owner. Last update: 2026-11-18 (a replay started after kick-
 - Three raw files are used per match: `<id>_match.json` (lineups, teams, league, score, periods, pitch),
   `<id>_tracking_extrapolated.jsonl` (10 frames per second: ball and players),
   `<id>_dynamic_events.csv` (300+ columns, 4 event families).
-- Names of players, teams and league are kept as in the source (school project, permission to display them).
+- Names of players, teams and league are kept as in the source (SkillCorner open data, MIT licence).
   Player photos are not used. Players get match-local technical ids `H01..` / `A01..`; teams are keyed `HOME` / `AWAY`.
 - `ingestion/ingest_foot.py` converts the raw files into 5 Parquet tables in `data/prepared/<match_id>/` plus a
   `manifest.json` (counts and quality indicators). `ingestion/producer_foot.py` replays them into Kafka.
@@ -604,7 +604,7 @@ number, and every tracked second of `gold_match_library` present.
 | Width, outfield block length HOME / AWAY (m) | 38.1, 30.2 / 41.7, 32.2 | 39.0, 32.9 / 34.3, 29.2 | 37.4, 30.7 / 37.8, 31.1 | 38.2, 32.7 / 40.0, 33.0 |
 
 Windows: 20 football windows of 5 minutes and 8 of 15 minutes per match (section 10.2). The external check of goal
-minutes and possession is in [`requirements-coverage.md`](requirements-coverage.md).
+minutes and possession is in [`external_checks.yml`](external_checks.yml).
 
 ## 11. Quality gates
 

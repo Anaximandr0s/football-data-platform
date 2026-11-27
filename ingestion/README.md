@@ -30,9 +30,8 @@ Support modules (no command to run):
 | `schemas.py` | the data contract in code: schema of every table, bronze schema, Parquet writer |
 | `skillcorner.py` | the only file that knows the SkillCorner format (parsers). Transforms, never writes |
 
-The professor's brief names `ingest_foot.py` ("generates players, tracking, about 1,600 actions") and `producer_foot.py`
-("replays the match"). We keep both names and roles, but `ingest_foot.py` converts real open data instead of
-generating a match (see `docs/data-sources.md`).
+`ingest_foot.py` converts real open data rather than generating a synthetic match (see `docs/data-sources.md`);
+`producer_foot.py` replays it into Kafka.
 
 ## Run it
 

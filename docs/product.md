@@ -98,8 +98,7 @@ F5 uses detected positions only because a speed joins two positions one second a
 in m001 and m002 (up to 39.2 km/h) had an estimated position at one end; with both ends detected the fastest second is
 33.0 km/h in m001 and 31.7 km/h in m002. Both ends detected was not enough: m003 had one second at 39.5 km/h (T. Okamoto),
 impossible for a player. Since 2026-11-17 the speed must be held over two consecutive detected seconds: the fastest is
-then 33.1 km/h over the four matches, and no player is above 36 km/h (10 fastest per match before and after:
-`requirements-coverage.md`). The other Gold tables keep `max_speed_kmh`, the raw fastest second, which the app does not
+then 33.1 km/h over the four matches, and no player is above 36 km/h. The other Gold tables keep `max_speed_kmh`, the raw fastest second, which the app does not
 show as a top speed.
 
 F7 states differences, not causes: the sentences say "had more", never "won because". F8 compares ranks, not raw
@@ -381,7 +380,7 @@ In this order. Each step is one branch, merged before the next starts; "check" i
 
 | # | Step | What you will see | How you check it |
 |---|---|---|---|
-| 1 | Gold metrics (current, merged) | 15 Gold tables answering sections 3, 4 and 8.1 | `make gold` and `make soda` green; the independent pandas recomputations in `requirements-coverage.md` |
+| 1 | Gold metrics (current, merged) | 15 Gold tables answering sections 3, 4 and 8.1 | `make gold` and `make soda` green |
 | 2 | Site skeleton | one app with the sections Home, LIVE, MATCHES, FAN VIEW or COACH VIEW (the one chosen), BEHIND THE DATA; existing pages moved to their place (section 8.3), new pages "coming soon" with their question; Home with a text logo, the Fan / Coach choice and a match chooser; the chosen view and match follow you from page to page; `gold_match_library` and the Match library page | headless page tests (`streamlit.testing`): every page renders without error, the chosen match and persona are kept, each page shows its question; you click through every page in a browser |
 | 3 | Player pages + pitch component | first, a full match (22 players and the ball, 4,428 s) in the pitch component inside the 1 s Live refresh; then the pitch component (section 8.2) on the Player page with heatmap, shots and passes layers; Squad as cards; a click on a card or a dot opens the Player page, fan or coach mode | Python tests of the data sent to each layer (counts equal Gold); one browser test (Playwright) that clicks a player and checks the page that opens; you click three players |
 | 4 | Fan pages | Match story (goals on the timeline, momentum, possession per 5 min with greyed windows, 3 key differences as sentences) and the finished Squad | page tests that read the numbers shown and compare them with Gold; screenshots of m001 and m002 |

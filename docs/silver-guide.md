@@ -98,5 +98,5 @@ teams (HOME vs AWAY, and m001 vs m002 for FOO-09: the same home club plays both 
 ## 8. Rules
 
 Change a table or column only through a pull request that updates both `ingestion/schemas.py` and
-[`contrat_donnees.md`](contrat_donnees.md) and names the person to warn. Ask the ingestion owner if a
-bronze column is missing: adding one is cheap now and expensive later.
+[`contrat_donnees.md`](contrat_donnees.md). If a
+bronze column is missing, add it: adding one is cheap now and expensive later.

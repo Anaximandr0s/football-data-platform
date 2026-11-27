@@ -202,7 +202,7 @@ needs a persistent player id (listed as a possible extension in the README).
 
 Done in `dbt/`: decisions (section 10) · staging models · the six Gold tables · reconciliation tests · Parquet export to
 `s3://gold` · Docker services and `make gold` / `make gold-sql`. To do: run it on the stack (`make up`, `make silver`,
-`make gold`) and keep the proof in `docs/requirements-coverage.md` · Soda checks on Silver and Gold (`soda/`) · Dagster
+`make gold`) · Soda checks on Silver and Gold (`soda/`) · Dagster
 wiring · the Streamlit pages that read these tables.
 
 Done = `dbt build` passes on m001 and m002 on the real stack, the m001 table of section 6 holds, the Gold tables are in the

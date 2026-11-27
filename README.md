@@ -4,8 +4,7 @@ A data platform for a club that follows a match live and analyses it afterwards.
 (22 players tracked every second, about 1,800 game actions) is replayed into Kafka at speed x1 to x60,
 stored in a bronze / silver / gold lakehouse and shown in a Streamlit app.
 
-> Team: **@Anaximandr0s** (ingestion, infrastructure) · **@abdejali** (Silver, Gold)
-> Course: Projets fil rouge · 100 % open source · data: [SkillCorner open data](https://github.com/SkillCorner/opendata) (MIT licence)
+> 100 % open source · data: [SkillCorner open data](https://github.com/SkillCorner/opendata) (MIT licence)
 
 ## Architecture
 
@@ -39,8 +38,6 @@ Details: [`docs/architecture.md`](docs/architecture.md). The ingestion part: [`i
 | Streaming stats (optional) | Spark Structured Streaming: 5- and 15-minute windows to the topic `foot-live-stats`, shown on Live; equal to Gold after a full replay ([`spark/streaming/live_stats.py`](spark/streaming/live_stats.py)) | done |
 | Orchestration | Dagster: the end of a replay runs bronze check -> Silver -> Soda -> Gold -> Soda -> report for its match; a failed check blocks what follows ([`dagster/README.md`](dagster/README.md)) | done |
 | Presentation | Streamlit + mplsoccer dashboard on Gold (live pitch page still to do) | code and tests done, to run on the stack ([`app/streamlit/README.md`](app/streamlit/README.md)) |
-
-Requirement by requirement: [`docs/requirements-coverage.md`](docs/requirements-coverage.md).
 
 ## Quick start
 
@@ -134,3 +131,7 @@ Troubleshooting:
 MinIO (AGPLv3) · Apache Kafka, Kafka UI (Apache-2.0) · Spark, Iceberg, Dagster, dbt-core, DuckDB,
 Soda Core, Streamlit, mplsoccer (Apache-2.0 / MIT). Verify licences when adding a tool.
 Tracking and event data: SkillCorner open data (MIT). Credit SkillCorner in the app and the report.
+
+---
+
+Made with love by [@Anaximandr0s](https://github.com/Anaximandr0s) and [@Et-taky](https://github.com/Et-taky).
